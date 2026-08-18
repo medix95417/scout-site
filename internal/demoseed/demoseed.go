@@ -586,7 +586,10 @@ func addFamilyMember(ctx context.Context, pool *pgxpool.Pool, familyID, firstNam
 // in (confirmed, with a fresh batch of backup codes), rather than one
 // hand-assembled to look that way.
 func enrollTOTP(ctx context.Context, pool *pgxpool.Pool, userID string) (secret string, backupCodes []string, err error) {
-	secret, err = auth.BeginTOTPEnrollment(ctx, pool, userID)
+	// A fresh demo login has no prior confirmed enrollment, so
+	// BeginTOTPEnrollment's step-up password check never triggers here —
+	// an empty currentPassword and a User stub carrying just the ID is enough.
+	secret, err = auth.BeginTOTPEnrollment(ctx, pool, auth.User{ID: userID}, "")
 	if err != nil {
 		return "", nil, fmt.Errorf("beginning enrollment: %w", err)
 	}

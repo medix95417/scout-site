@@ -149,7 +149,15 @@ func (h *Handlers) TwoFactorEnroll(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	if _, err := auth.BeginTOTPEnrollment(r.Context(), h.Pool, user.ID); err != nil {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if _, err := auth.BeginTOTPEnrollment(r.Context(), h.Pool, user, r.FormValue("password")); err != nil {
+		if errors.Is(err, auth.ErrInvalidCredentials) {
+			h.renderTwoFactorSettings(w, r, user.ID, "That password didn't match — re-enter your current password to re-enroll.")
+			return
+		}
 		log.Printf("web: beginning two-factor enrollment: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

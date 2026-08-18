@@ -91,22 +91,27 @@ func PendingTOTPSecret(ctx context.Context, pool *pgxpool.Pool, userID string) (
 
 // BeginTOTPEnrollment generates a new random TOTP secret for a user and
 // stores it unconfirmed, replacing any previous unconfirmed (or
-// confirmed — see the doc note below) secret. Returns the secret so the
-// caller can show it (grouped via twofactor.FormatSecretForDisplay) and
-// the otpauth:// URI for enrollment.
+// confirmed — see the step-up check below) secret. Returns the secret so
+// the caller can show it (grouped via twofactor.FormatSecretForDisplay)
+// and the otpauth:// URI for enrollment.
 //
-// Re-enrolling over an already-*confirmed* credential is allowed here
-// deliberately kept simple for this pass: anyone with a valid, logged-in
-// session for this account can start over (e.g. after losing their
-// device). That session already required the account's password to
-// create, which is the same bar every other sensitive action in this
-// codebase (e.g. a leader resetting a family's password from
-// /admin/roster) is held to — but unlike those, this one can silently
-// turn a Treasurer/super_admin login's two-factor protection back off
-// mid-enrollment if it's abandoned. Worth hardening later (e.g. requiring
-// the current TOTP code or a fresh password entry to re-enroll) if this
-// account tier ever needs a stronger bar than "has an active session."
-func BeginTOTPEnrollment(ctx context.Context, pool *pgxpool.Pool, userID string) (secret string, err error) {
+// Re-enrolling over an already-*confirmed* credential requires currentPassword
+// to verify against the account's stored hash first (step-up
+// authentication) — without this, anyone who merely holds a valid,
+// logged-in session (e.g. a stolen session cookie, or a shared/unlocked
+// device) could silently swap out a Treasurer/super_admin login's
+// two-factor credential, defeating the entire point of requiring a second
+// factor. Pass an empty currentPassword for first-time enrollment
+// (nothing confirmed yet to protect, so nothing to step up past).
+func BeginTOTPEnrollment(ctx context.Context, pool *pgxpool.Pool, user User, currentPassword string) (secret string, err error) {
+	_, confirmed, err := TOTPStatus(ctx, pool, user.ID)
+	if err != nil {
+		return "", err
+	}
+	if confirmed && !VerifyPassword(user, currentPassword) {
+		return "", ErrInvalidCredentials
+	}
+
 	secret, err = twofactor.GenerateSecret()
 	if err != nil {
 		return "", err
@@ -116,7 +121,7 @@ func BeginTOTPEnrollment(ctx context.Context, pool *pgxpool.Pool, userID string)
 		INSERT INTO totp_credentials (user_id, secret, confirmed_at)
 		VALUES ($1, $2, NULL)
 		ON CONFLICT (user_id) DO UPDATE SET secret = $2, confirmed_at = NULL
-	`, userID, secret)
+	`, user.ID, secret)
 	if err != nil {
 		return "", err
 	}

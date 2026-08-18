@@ -107,6 +107,15 @@ func HashPassword(plaintext string) (string, error) {
 	return string(hash), nil
 }
 
+// VerifyPassword checks a plaintext password against a user's stored
+// bcrypt hash — the step-up check for sensitive in-session actions (e.g.
+// re-enrolling two-factor over an already-confirmed credential, see
+// BeginTOTPEnrollment) where "has a still-valid session" alone isn't
+// treated as a strong enough bar.
+func VerifyPassword(u User, plaintext string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(plaintext)) == nil
+}
+
 // User is the minimal shape auth needs; the family package owns the fuller
 // record. Kept separate so this package doesn't import family (avoids an
 // import cycle now that family will need auth for password verification

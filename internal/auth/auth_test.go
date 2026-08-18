@@ -37,6 +37,24 @@ func TestHashPassword_ValidBcryptHash(t *testing.T) {
 	}
 }
 
+func TestVerifyPassword(t *testing.T) {
+	hash, err := HashPassword("correct horse battery staple")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	u := User{PasswordHash: hash}
+
+	if !VerifyPassword(u, "correct horse battery staple") {
+		t.Error("VerifyPassword rejected the correct password")
+	}
+	if VerifyPassword(u, "wrong password") {
+		t.Error("VerifyPassword accepted an incorrect password")
+	}
+	if VerifyPassword(u, "") {
+		t.Error("VerifyPassword accepted an empty password")
+	}
+}
+
 func TestHashPassword_SaltsDifferently(t *testing.T) {
 	h1, err := HashPassword("same-password")
 	if err != nil {

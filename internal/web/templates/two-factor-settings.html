@@ -11,8 +11,10 @@
       <p class="text-xs text-gray-600 mb-3">
         If you lose your authenticator device, use one of the backup codes you saved at setup, or re-enroll below (this replaces your current setup and backup codes).
       </p>
-      <form method="post" action="/settings/2fa/enroll" class="inline">
+      <form method="post" action="/settings/2fa/enroll" class="space-y-2 mb-3">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label class="block text-sm font-medium" for="reenroll-password">Confirm your current password to re-enroll</label>
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="password" id="reenroll-password" name="password" autocomplete="current-password" required>
         <button type="submit" class="rounded-md border border-gray-300 px-4 py-2 text-sm hover:bg-white">
           Re-enroll (new device)
         </button>
