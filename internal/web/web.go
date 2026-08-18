@@ -557,11 +557,24 @@ func (h *Handlers) HomeContentSave(w http.ResponseWriter, r *http.Request) {
 
 // --- Login / logout -----------------------------------------------------
 
+// sanitizeNextPath restricts a post-login redirect target to a same-site
+// relative path, never an absolute URL — otherwise a crafted
+// /login?next=https://evil.example.com/... link would have a successful,
+// legitimate login silently hand the visitor off to an attacker-controlled
+// page (a phishing pivot that abuses trust in the real login flow). "//" is
+// rejected too, since browsers treat a scheme-relative URL as absolute.
+func sanitizeNextPath(next string) string {
+	if next == "" || next[0] != '/' || strings.HasPrefix(next, "//") {
+		return "/"
+	}
+	return next
+}
+
 func (h *Handlers) LoginForm(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		baseData
 		Next string
-	}{baseData: h.base(r, "Log in"), Next: r.URL.Query().Get("next")}
+	}{baseData: h.base(r, "Log in"), Next: sanitizeNextPath(r.URL.Query().Get("next"))}
 	h.render(w, h.login, data)
 }
 
@@ -572,10 +585,7 @@ func (h *Handlers) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	email := r.FormValue("email")
 	password := r.FormValue("password")
-	next := r.FormValue("next")
-	if next == "" {
-		next = "/"
-	}
+	next := sanitizeNextPath(r.FormValue("next"))
 
 	user, err := auth.Authenticate(r.Context(), h.Pool, email, password)
 	if err != nil {
@@ -644,6 +654,11 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) Roster(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
+	if _, loggedIn := auth.UserFromContext(r.Context()); !loggedIn {
+		http.Redirect(w, r, "/login?next=/roster", http.StatusSeeOther)
+		return
+	}
+
 	roster, err := family.RosterForUnit(r.Context(), h.Pool, unit.ID)
 	if err != nil {
 		log.Printf("web: loading roster: %v", err)
