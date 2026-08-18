@@ -1,0 +1,23 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-6">Photo Galleries — {{.Unit.Name}}</h1>
+
+  {{if .Items}}
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+      {{range .Items}}
+        <a href="/gallery/{{.ID}}" class="block rounded-lg border border-gray-200 bg-white overflow-hidden hover:border-gray-300">
+          {{if .CoverURL}}
+            <img src="{{.CoverURL}}" alt="" class="h-40 w-full object-cover">
+          {{else}}
+            <div class="h-40 w-full bg-gray-100"></div>
+          {{end}}
+          <div class="p-3">
+            <div class="text-xs text-gray-400 mb-1">{{.PostedOn}}</div>
+            <h2 class="font-semibold" style="color: var(--unit-color);">{{.Title}}</h2>
+          </div>
+        </a>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="text-sm text-gray-500">No photo galleries posted yet.</p>
+  {{end}}
+{{end}}

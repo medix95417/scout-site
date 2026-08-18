@@ -1,0 +1,74 @@
+{{define "content"}}
+  <p class="mb-4"><a href="/treasury" class="text-sm underline" style="color: var(--unit-color);">&larr; Back to Treasury</a></p>
+  <h1 class="text-2xl font-bold mb-1">{{.Fundraiser.Name}}</h1>
+  <p class="text-sm text-gray-500 mb-6">
+    {{if eq .Fundraiser.AllocationMode "percentage"}}
+      {{.Fundraiser.AllocationPercent}}% of each Scout's attributed proceeds is credited to their individual account.
+    {{else}}
+      A fixed amount per item sold is credited to each Scout's individual account.
+    {{end}}
+  </p>
+
+  {{if .Fundraiser.NeedsCouncilConfirmation}}
+    <div class="mb-6 rounded-md bg-amber-50 border border-amber-300 px-4 py-3 text-sm text-amber-900 max-w-lg">
+      <p class="font-medium mb-1">Needs council confirmation</p>
+      <p class="mb-3">
+        BSA/IRS rules cap how much of a fundraiser's proceeds can be credited to individual Scout accounts before it
+        risks your unit's tax-exempt "private benefit" standing. Confirm the actual allowed amount with your council
+        or chartered organization, then set the real rule here.
+      </p>
+      <form method="post" action="/treasury/fundraisers/{{.Fundraiser.ID}}/confirm-cap" class="space-y-2">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="flex gap-4 text-xs">
+          <label class="flex items-center gap-1"><input type="radio" name="allocation_mode" value="percentage" {{if eq .Fundraiser.AllocationMode "percentage"}}checked{{end}}> Percentage</label>
+          <label class="flex items-center gap-1"><input type="radio" name="allocation_mode" value="fixed_per_item" {{if eq .Fundraiser.AllocationMode "fixed_per_item"}}checked{{end}}> Fixed per item</label>
+        </div>
+        <input class="w-full rounded-md border border-amber-300 px-3 py-2 text-sm" type="text" name="allocation_percent" placeholder="Percent, e.g. 10 (if Percentage chosen)">
+        <input class="w-full rounded-md border border-amber-300 px-3 py-2 text-sm" type="text" name="allocation_fixed_amount" placeholder="$ per item, e.g. 2.00 (if Fixed chosen)">
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">Confirm Council-Approved Rule</button>
+      </form>
+    </div>
+  {{end}}
+
+  <section class="rounded-lg border border-gray-200 bg-white p-4 mb-8 max-w-sm">
+    <h2 class="text-lg font-semibold mb-3">Record Proceeds for a Scout</h2>
+    {{if .Scouts}}
+      <form method="post" action="/treasury/fundraisers/{{.Fundraiser.ID}}/allocate" class="space-y-2">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <select name="member_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+          <option value="">Choose a Scout…</option>
+          {{range .Scouts}}<option value="{{.ID}}">{{.FirstName}} {{.LastName}}</option>{{end}}
+        </select>
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="gross_amount" placeholder="Total proceeds attributed to this Scout, e.g. 60.00" required>
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="quantity" placeholder="Items sold (only for fixed-per-item fundraisers)">
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--unit-color);">Credit Account</button>
+      </form>
+    {{else}}
+      <p class="text-sm text-gray-500">No Scouts on the roster yet.</p>
+    {{end}}
+  </section>
+
+  <h2 class="text-lg font-semibold mb-3">Allocations</h2>
+  {{if .Allocations}}
+    <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <thead class="bg-gray-100 text-left">
+        <tr>
+          <th class="px-4 py-2">Scout</th>
+          <th class="px-4 py-2 text-right">Gross Proceeds</th>
+          <th class="px-4 py-2 text-right">Credited</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Allocations}}
+          <tr class="border-t border-gray-100">
+            <td class="px-4 py-2">{{.MemberName}}</td>
+            <td class="px-4 py-2 text-right font-mono">{{.GrossAmountDisplay}}</td>
+            <td class="px-4 py-2 text-right font-mono">{{.CreditedDisplay}}</td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="text-sm text-gray-500">No allocations recorded yet.</p>
+  {{end}}
+{{end}}

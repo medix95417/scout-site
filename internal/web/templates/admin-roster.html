@@ -1,0 +1,128 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-2">Manage Roster — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-6">
+    {{if .Scope.UnitWide}}
+      You can manage the whole {{.Unit.Name}} roster.
+    {{else}}
+      You can manage members in your own {{.SubGroupNoun}} — other {{.SubGroupNoun}}s show up below but aren't editable from your account.
+    {{end}}
+  </p>
+
+  <div class="grid gap-6 sm:grid-cols-2 mb-10">
+    <!-- Add a new family -->
+    <section class="rounded-lg border border-gray-200 bg-white p-4">
+      <h2 class="text-lg font-semibold mb-3">Add a New Family</h2>
+      <form method="post" action="/admin/roster/families" class="space-y-2">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="family_name" placeholder="Family display name (e.g. The Smith Family)" required>
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Contact email (this becomes their login)" required>
+        <div class="flex gap-2">
+          <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="first_name" placeholder="First name" required>
+          <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="last_name" placeholder="Last name" required>
+        </div>
+        <p class="text-xs text-gray-500">The first family member is added as an adult — this is who's logging in.</p>
+        <div class="flex gap-2">
+          <select name="sub_group_id" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm">
+            {{if .Scope.UnitWide}}<option value="">No {{.SubGroupNoun}} yet</option>{{end}}
+            {{range .AddableSubGroups}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+          </select>
+          <select name="role" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+            {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+          </select>
+        </div>
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--unit-color);">
+          Create Family
+        </button>
+      </form>
+    </section>
+
+    <!-- Add a member to an existing family -->
+    <section class="rounded-lg border border-gray-200 bg-white p-4">
+      <h2 class="text-lg font-semibold mb-3">Add a Member to an Existing Family</h2>
+      {{if .Families}}
+        <form method="post" action="/admin/roster/members" class="space-y-2">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <select name="family_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+            <option value="">Choose a family…</option>
+            {{range .Families}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+          </select>
+          <div class="flex gap-2">
+            <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="first_name" placeholder="First name" required>
+            <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="last_name" placeholder="Last name" required>
+          </div>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1"><input type="radio" name="member_type" value="youth" checked> Youth</label>
+            <label class="flex items-center gap-1"><input type="radio" name="member_type" value="adult"> Adult</label>
+          </div>
+          <div class="flex gap-2">
+            <select name="sub_group_id" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm">
+              {{if .Scope.UnitWide}}<option value="">No {{.SubGroupNoun}} yet</option>{{end}}
+              {{range .AddableSubGroups}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+            </select>
+            <select name="role" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+              {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+            </select>
+          </div>
+          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--unit-color);">
+            Add Member
+          </button>
+        </form>
+      {{else}}
+        <p class="text-sm text-gray-500">No families exist yet — add one first.</p>
+      {{end}}
+    </section>
+  </div>
+
+  {{if .Scope.UnitWide}}
+    <section class="rounded-lg border border-gray-200 bg-white p-4 mb-10">
+      <h2 class="text-lg font-semibold mb-3">Dens &amp; Patrols</h2>
+      {{if .SubGroups}}
+        <ul class="flex flex-wrap gap-2 mb-3">
+          {{range .SubGroups}}<li class="rounded-full bg-gray-100 px-3 py-1 text-xs">{{.Name}}</li>{{end}}
+        </ul>
+      {{else}}
+        <p class="text-sm text-gray-500 mb-3">None set up yet.</p>
+      {{end}}
+      <form method="post" action="/admin/roster/sub-groups" class="flex gap-2">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. {{if eq .SubGroupNoun "patrol"}}Eagle Patrol{{else}}Bear Den 3{{end}}" required>
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm whitespace-nowrap" style="background-color: var(--unit-color);">
+          Add {{if eq .SubGroupNoun "patrol"}}Patrol{{else}}Den{{end}}
+        </button>
+      </form>
+    </section>
+  {{end}}
+
+  <h2 class="text-lg font-semibold mb-3">Current Roster</h2>
+  {{if .Roster}}
+    <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <thead class="bg-gray-100 text-left">
+        <tr>
+          <th class="px-4 py-2">Name</th>
+          <th class="px-4 py-2">Type</th>
+          <th class="px-4 py-2">{{.SubGroupNoun}}</th>
+          <th class="px-4 py-2">Roles</th>
+          <th class="px-4 py-2"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Roster}}
+          <tr class="border-t border-gray-100">
+            <td class="px-4 py-2">{{.FirstName}} {{.LastName}}</td>
+            <td class="px-4 py-2 capitalize">{{.MemberType}}</td>
+            <td class="px-4 py-2">{{if .SubGroupName}}{{.SubGroupName}}{{else}}—{{end}}</td>
+            <td class="px-4 py-2">{{range .Roles}}<span class="inline-block rounded-full bg-gray-100 px-2 py-0.5 mr-1 text-xs">{{.}}</span>{{end}}</td>
+            <td class="px-4 py-2 text-right whitespace-nowrap">
+              {{if .Editable}}
+                <a href="/admin/roster/members/{{.ID}}" class="text-xs underline" style="color: var(--unit-color);">Edit</a>
+                <a href="/admin/roster/members/{{.ID}}#password" class="text-xs underline ml-3" style="color: var(--unit-color);">Reset Password</a>
+              {{end}}
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="text-sm text-gray-500">No members recorded for this unit yet.</p>
+  {{end}}
+{{end}}

@@ -1,0 +1,52 @@
+{{define "content"}}
+  <p class="mb-4"><a href="/treasury" class="text-sm underline" style="color: var(--unit-color);">&larr; Back to Treasury</a></p>
+  <h1 class="text-2xl font-bold mb-1">{{.Account.Name}}</h1>
+  <p class="text-sm text-gray-500 mb-6 capitalize">{{.Account.AccountType}} · {{.Account.Status}}</p>
+
+  <div class="rounded-lg border border-gray-200 bg-white p-4 mb-6 max-w-xs">
+    <p class="text-xs text-gray-500 mb-1">Current balance</p>
+    <p class="text-2xl font-bold">{{.BalanceDisplay}}</p>
+  </div>
+
+  {{if .CanRequestTransfer}}
+    <section class="rounded-lg border border-gray-200 bg-white p-4 mb-8 max-w-sm">
+      <h2 class="text-lg font-semibold mb-3">Push Money to a Trip Fund</h2>
+      {{if .OpenTripFunds}}
+        <form method="post" action="/treasury/accounts/{{.Account.ID}}/transfer" class="space-y-2">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <select name="trip_fund_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+            <option value="">Choose a trip fund…</option>
+            {{range .OpenTripFunds}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+          </select>
+          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="amount" placeholder="Amount, e.g. 25.00" required>
+          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--unit-color);">
+            Submit for Treasurer Approval
+          </button>
+          <p class="text-xs text-gray-500">This won't move any money until a Treasurer approves it — you'll see it here as "pending" until then.</p>
+        </form>
+      {{else}}
+        <p class="text-sm text-gray-500">No open trip funds right now.</p>
+      {{end}}
+    </section>
+  {{end}}
+
+  <h2 class="text-lg font-semibold mb-3">Statement</h2>
+  {{if .Transactions}}
+    <ul class="space-y-2">
+      {{range .Transactions}}
+        <li class="rounded-md bg-white border border-gray-200 px-4 py-2 text-sm">
+          <div class="flex items-center justify-between">
+            <span class="font-medium">{{.Description}}</span>
+            <span class="text-xs rounded-full px-2 py-0.5
+              {{if eq .Status "posted"}}bg-green-100 text-green-800
+              {{else if eq .Status "pending_approval"}}bg-amber-100 text-amber-800
+              {{else}}bg-gray-100 text-gray-600{{end}}">{{.Status}}</span>
+          </div>
+          <div class="text-xs text-gray-500 mt-1">by {{.CreatedByName}}</div>
+        </li>
+      {{end}}
+    </ul>
+  {{else}}
+    <p class="text-sm text-gray-500">No activity yet.</p>
+  {{end}}
+{{end}}

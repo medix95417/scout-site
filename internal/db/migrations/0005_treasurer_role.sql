@@ -1,0 +1,13 @@
+-- 0005_treasurer_role.sql
+-- Phase 2: adds the Treasurer role. See scout-website-architecture-phase1.md
+-- Section 4 — role_assignments was deliberately built generic in Phase 1 so
+-- a new leadership role is just a new enum value here, no schema change.
+--
+-- This migration ONLY adds the enum value and nothing else. Postgres does
+-- not allow a newly-added enum value to be referenced by other statements
+-- in the same transaction that added it, and this project's migration
+-- runner (internal/db/db.go) applies each numbered file inside its own
+-- transaction — so anything that needs to literally write 'treasurer' into
+-- a column has to live in a later migration file (0006_ledger.sql), not
+-- appended here.
+ALTER TYPE member_role ADD VALUE 'treasurer';

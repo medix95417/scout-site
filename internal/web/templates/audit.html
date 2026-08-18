@@ -1,0 +1,69 @@
+{{define "content"}}
+  <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+    <h1 class="text-2xl font-bold">Activity Log — {{.Unit.Name}}</h1>
+    <a href="/audit/export.csv?{{.ExportQueryString}}" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+      Export CSV
+    </a>
+  </div>
+  <p class="text-sm text-gray-500 mb-4">Every change of consequence — who did what, and when. Filter by date, function, or person, then export exactly what you're viewing.</p>
+
+  <form method="get" action="/audit" class="mb-6 rounded-lg border border-gray-200 bg-white p-4 flex flex-wrap items-end gap-3">
+    <div>
+      <label class="block text-xs text-gray-500 mb-1" for="from">From</label>
+      <input type="date" id="from" name="from" value="{{.From}}" class="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1" for="to">To</label>
+      <input type="date" id="to" name="to" value="{{.To}}" class="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1" for="entity_type">Function</label>
+      <select id="entity_type" name="entity_type" class="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+        <option value="">All</option>
+        {{range .EntityTypes}}
+          <option value="{{.Value}}" {{if eq .Value $.EntityType}}selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1" for="actor_id">Person</label>
+      <select id="actor_id" name="actor_id" class="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+        <option value="">Anyone</option>
+        <option value="system" {{if eq $.ActorID "system"}}selected{{end}}>System</option>
+        {{range .Actors}}
+          <option value="{{.ID}}" {{if eq .ID $.ActorID}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </div>
+    <button type="submit" class="rounded-md px-4 py-1.5 text-white text-sm" style="background-color: var(--unit-color);">Filter</button>
+    {{if or .From .To .EntityType .ActorID}}
+      <a href="/audit" class="text-sm underline text-gray-500">Clear filters</a>
+    {{end}}
+  </form>
+
+  {{if .Entries}}
+    <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <thead class="bg-gray-100 text-left">
+        <tr>
+          <th class="px-4 py-2">When</th>
+          <th class="px-4 py-2">Who</th>
+          <th class="px-4 py-2">Action</th>
+          <th class="px-4 py-2">Function</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Entries}}
+          <tr class="border-t border-gray-100">
+            <td class="px-4 py-2 whitespace-nowrap">{{.OccurredAt}}</td>
+            <td class="px-4 py-2">{{.ActorName}}</td>
+            <td class="px-4 py-2">{{.Action}}</td>
+            <td class="px-4 py-2 text-gray-500">{{.EntityLabel}}</td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <p class="text-xs text-gray-400 mt-2">Showing up to the {{len .Entries}} most recent matching entries — use the filters above (or the CSV export, which covers a larger range) to see more.</p>
+  {{else}}
+    <p class="text-sm text-gray-500">No activity recorded yet for this filter.</p>
+  {{end}}
+{{end}}
