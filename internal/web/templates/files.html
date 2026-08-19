@@ -5,7 +5,13 @@
     one or more calendar events — handy for the same permission slip or packing list attached to a recurring campout.
   </p>
 
-  {{if .CanManage}}
+  {{if not .StorageConfigured}}
+    <div class="mb-6 rounded-md bg-amber-50 border border-amber-300 px-4 py-3 text-sm text-amber-900 max-w-lg">
+      File storage isn't configured for this site yet{{if .CanManage}} — set <code>S3_ENDPOINT</code>, <code>S3_ACCESS_KEY</code>, and <code>S3_SECRET_KEY</code> (see DEPLOY.md) to enable uploads{{else}}. Check back later{{end}}.
+    </div>
+  {{end}}
+
+  {{if and .CanManage .StorageConfigured}}
     <section class="rounded-lg border border-gray-200 bg-white p-4 mb-8 max-w-lg">
       <h2 class="text-lg font-semibold mb-3">Upload a file</h2>
       <form method="post" action="/files/upload" enctype="multipart/form-data" class="space-y-3">

@@ -56,10 +56,13 @@ type Config struct {
 	ReminderWindow time.Duration
 
 	// S3* configure the S3-compatible object store backing the file
-	// library and event photos (see internal/storage). Defaults target
-	// docker-compose.yml's bundled MinIO service, so file storage works
-	// out of the box; point these at a real bucket (AWS S3, R2, etc.)
-	// instead by overriding the env vars.
+	// library and event photos (see internal/storage) — a self-hosted
+	// MinIO you run separately, AWS S3, Cloudflare R2, or anything else
+	// speaking the S3 API. S3Endpoint empty (the default) means file
+	// storage is unconfigured: the rest of the site still runs, only the
+	// file library/event photos degrade with a clear error, same as
+	// SMTPHost empty above. Set S3_ENDPOINT/S3_ACCESS_KEY/S3_SECRET_KEY
+	// (see docker-compose.yml and .env.example) for uploads to work.
 	S3Endpoint  string
 	S3AccessKey string
 	S3SecretKey string
@@ -83,9 +86,12 @@ func Load() (Config, error) {
 		SMTPFrom:     getenv("SMTP_FROM", ""),
 		SMTPTLSMode:  getenv("SMTP_TLS_MODE", "starttls"),
 
-		S3Endpoint:  getenv("S3_ENDPOINT", "minio:9000"),
-		S3AccessKey: getenv("S3_ACCESS_KEY", "scoutsite"),
-		S3SecretKey: getenv("S3_SECRET_KEY", "scoutsite-dev-key"),
+		// Empty S3Endpoint is the safe default — it means "storage
+		// unconfigured," not "try to reach some placeholder host." See
+		// storage.New's doc comment.
+		S3Endpoint:  getenv("S3_ENDPOINT", ""),
+		S3AccessKey: getenv("S3_ACCESS_KEY", ""),
+		S3SecretKey: getenv("S3_SECRET_KEY", ""),
 		S3Bucket:    getenv("S3_BUCKET", "scoutsite-files"),
 		S3UseSSL:    getenv("S3_USE_SSL", "false") == "true",
 	}

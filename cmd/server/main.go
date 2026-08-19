@@ -161,6 +161,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("storage: %v", err)
 	}
+	if store == nil {
+		log.Println("file storage is not configured (no S3_ENDPOINT environment variable) — the file library and event photos will report a clear error instead of failing to start")
+	}
 
 	handlers, err := web.New(pool, cfg.CookieDomain, secureCookie, mail, store)
 	if err != nil {

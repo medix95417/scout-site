@@ -33,9 +33,9 @@ type File struct {
 }
 
 // NewStorageKey generates a collision-proof object key for a new upload,
-// namespaced by unit so two units' files (and MinIO's single shared
-// bucket in the default docker-compose setup) never collide. The original
-// filename is preserved as a suffix purely so a key is human-recognizable
+// namespaced by unit so two units' files never collide even though they
+// share one bucket. The original filename is preserved as a suffix purely
+// so a key is human-recognizable
 // in the bucket browser — nothing parses it back out; the database row is
 // the source of truth for Filename.
 func NewStorageKey(unitID, filename string) string {

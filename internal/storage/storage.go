@@ -20,12 +20,10 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// Config points at an S3-compatible endpoint and bucket. Defaults (see
-// internal/config) target the docker-compose MinIO service, so a fresh
-// deploy has working file storage with no extra setup — the same
-// "one build" bar the rest of this app's infrastructure holds itself to.
-// Pointing at a real cloud bucket instead (AWS S3, R2, etc.) is just a
-// matter of overriding these env vars.
+// Config points at an S3-compatible endpoint and bucket — a self-hosted
+// MinIO you run separately, AWS S3, Cloudflare R2, or anything else
+// speaking the S3 API. Endpoint empty means storage is unconfigured (see
+// New).
 type Config struct {
 	Endpoint  string
 	AccessKey string
@@ -40,27 +38,31 @@ type Store struct {
 	bucket string
 }
 
-// New connects to the configured S3-compatible endpoint and ensures the
-// bucket exists, creating it if this is the first run.
-func New(ctx context.Context, cfg Config) (*Store, error) {
+// New builds a client for the configured S3-compatible endpoint. Returns a
+// nil Store (and no error) when cfg.Endpoint is empty — file storage is
+// optional, same as internal/mailer degrades gracefully when SMTP isn't
+// configured: the rest of the site should keep working even if an operator
+// hasn't set up (or has temporarily lost) their S3 bucket. Callers must
+// check for a nil Store the same way they already check mailer.Enabled.
+//
+// Deliberately does NOT verify connectivity or that the bucket exists —
+// unlike the bundled-MinIO setup this once had, the bucket now lives in a
+// service this app doesn't manage, so auto-creating it isn't appropriate
+// (and often isn't even permitted by a real cloud provider's IAM policy).
+// Create the bucket yourself before expecting uploads to work; a
+// misconfigured or unreachable endpoint surfaces as a clear per-request
+// error from Put/Get/Delete, not a startup crash.
+func New(_ context.Context, cfg Config) (*Store, error) {
+	if cfg.Endpoint == "" {
+		return nil, nil
+	}
 	client, err := minio.New(cfg.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
 		Secure: cfg.UseSSL,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("storage: connecting to %s: %w", cfg.Endpoint, err)
+		return nil, fmt.Errorf("storage: configuring client for %s: %w", cfg.Endpoint, err)
 	}
-
-	exists, err := client.BucketExists(ctx, cfg.Bucket)
-	if err != nil {
-		return nil, fmt.Errorf("storage: checking bucket %q: %w", cfg.Bucket, err)
-	}
-	if !exists {
-		if err := client.MakeBucket(ctx, cfg.Bucket, minio.MakeBucketOptions{}); err != nil {
-			return nil, fmt.Errorf("storage: creating bucket %q: %w", cfg.Bucket, err)
-		}
-	}
-
 	return &Store{client: client, bucket: cfg.Bucket}, nil
 }
 
