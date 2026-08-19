@@ -94,7 +94,7 @@ wipe the database and start completely fresh next time).
 ## Optional: local Go build (only if you already have Go installed)
 
 Skip this whole section unless you specifically want a faster edit/test
-loop outside Docker, or already have Go 1.24+ on your machine. It is not
+loop outside Docker, or already have Go 1.25+ on your machine. It is not
 required to run or test the site.
 
 ```bash
