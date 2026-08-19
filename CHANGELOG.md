@@ -22,6 +22,62 @@ tagged commit with an accurate date.
 
 Nothing yet.
 
+## [1.6.0] — 2026-08-19
+
+**Hamburger nav.** The header's nav had grown to too many always-visible
+links. It's now a single dropdown (`<details>`/`<summary>`, no JS
+framework needed), with admin-only links grouped under their own
+"Admin" section — same permission gates as before, just organized
+instead of sprawled across the top of every page.
+
+**Version number in the footer.** The footer used to read "part of the
+47-Yonkers Scouting sites (Phase 1 & 2)," which stopped being accurate
+after Phase 3. It now shows the actual build version (`internal/version`,
+kept in sync with this changelog by hand — see that package's doc
+comment for why it's a plain constant rather than something injected at
+build time).
+
+**File library and event photos.** A new `/files` page (any logged-in
+member can view; uploading/deleting/linking requires the same
+`CanEditUnitContent` role that gates `/admin/home`) stores general
+documents (packing lists, forms, handbooks) and event photos, and lets a
+file be linked to one or more calendar events — the same permission slip
+or packing list can be attached to several events, e.g. a recurring
+campout, instead of re-uploading it each time. `/calendar` shows each
+event's linked photos/documents inline, with photos rendered as
+thumbnails.
+
+Actual file bytes live in S3-compatible object storage
+(`internal/storage`, via `minio-go`), not the database — Postgres only
+stores metadata and a storage key (`0012_files.sql`'s `files` and
+`event_files` tables). `docker-compose.yml` now bundles a MinIO service
+as the default backing store, so file uploads work out of the box with
+no extra setup; pointing at a real cloud bucket (AWS S3, Cloudflare R2,
+etc.) instead is just a matter of overriding the `S3_*` environment
+variables (see `.env.example`).
+
+Getting real file uploads working also required fixing a CSRF
+middleware gap: `r.ParseForm()` (what the middleware used to validate
+`csrf_token`) never parses `multipart/form-data` bodies, so every file
+upload would have failed CSRF validation regardless of how correct its
+token was. The middleware now calls `r.ParseMultipartForm` instead,
+which handles both body types, plus a `http.MaxBytesReader` cap (25 MB
+per request) applied before parsing.
+
+- **Migration:** `0012_files.sql` — applies automatically on next server
+  start.
+- **Deploy note:** `docker-compose.yml`'s `app` service now depends on a
+  new `minio` service and expects `S3_ENDPOINT`/`S3_ACCESS_KEY`/
+  `S3_SECRET_KEY`/`S3_BUCKET`/`S3_USE_SSL` — already updated if you're
+  pulling this compose file fresh, with working local-dev defaults. On a
+  VPS, set real `S3_ACCESS_KEY`/`S3_SECRET_KEY` values in `.env` (see
+  DEPLOY.md's "Configure the environment" and "Security checklist").
+  Back up the new `minio_data` volume alongside the database (see
+  DEPLOY.md "Ongoing operations").
+- **CI note:** `go.mod`'s `go` directive moved to `1.25.0` (a transitive
+  dependency of the new S3 client requires it) — `.github/workflows/ci.yml`
+  now installs Go 1.25 instead of 1.24.
+
 ## [1.5.0] — 2026-08-19
 
 Six Phase 3 items from `README.md`'s "Not in Phase 1" list, plus a

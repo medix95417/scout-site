@@ -31,6 +31,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/demoseed"
 	"github.com/47-yonkers/scout-site/internal/mailer"
 	"github.com/47-yonkers/scout-site/internal/reminders"
+	"github.com/47-yonkers/scout-site/internal/storage"
 	"github.com/47-yonkers/scout-site/internal/units"
 	"github.com/47-yonkers/scout-site/internal/web"
 )
@@ -150,7 +151,18 @@ func main() {
 	// whether a cookie domain is set, since local dev leaves it empty.
 	secureCookie := cfg.CookieDomain != ""
 
-	handlers, err := web.New(pool, cfg.CookieDomain, secureCookie, mail)
+	store, err := storage.New(ctx, storage.Config{
+		Endpoint:  cfg.S3Endpoint,
+		AccessKey: cfg.S3AccessKey,
+		SecretKey: cfg.S3SecretKey,
+		Bucket:    cfg.S3Bucket,
+		UseSSL:    cfg.S3UseSSL,
+	})
+	if err != nil {
+		log.Fatalf("storage: %v", err)
+	}
+
+	handlers, err := web.New(pool, cfg.CookieDomain, secureCookie, mail, store)
 	if err != nil {
 		log.Fatalf("web: %v", err)
 	}

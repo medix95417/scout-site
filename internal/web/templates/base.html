@@ -19,42 +19,80 @@
   <header class="text-white" style="background-color: var(--unit-color);">
     <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
       <a href="/" class="text-lg font-semibold">{{.Unit.Name}}</a>
-      <nav class="flex gap-4 text-sm">
-        <a href="/calendar" class="hover:underline">Calendar</a>
-        <a href="/news" class="hover:underline">News</a>
-        <a href="/gallery" class="hover:underline">Gallery</a>
-        {{if .LoggedIn}}
-          <a href="/roster" class="hover:underline">Roster</a>
-          <a href="/advancement" class="hover:underline">Advancement</a>
-          <a href="/accounts" class="hover:underline">My Accounts</a>
-          {{if .CanEditContent}}
-            <a href="/admin/roster" class="hover:underline">Manage Roster</a>
-            <a href="/admin/advancement" class="hover:underline">Manage Advancement</a>
-            <a href="/admin/home" class="hover:underline">Edit Homepage</a>
-            <a href="/admin/news" class="hover:underline">Manage News</a>
-            <a href="/admin/gallery" class="hover:underline">Manage Gallery</a>
-            <a href="/admin/newsletters" class="hover:underline">Newsletters</a>
+
+      <!-- A <details>/<summary> disclosure needs no JS to open/close —
+           see menu.js below for the small enhancement that auto-closes it
+           on an outside click or after following a link, which <details>
+           doesn't do on its own. -->
+      <details id="site-menu" class="relative">
+        <summary class="list-none cursor-pointer select-none rounded-md p-2 hover:bg-black/10 flex items-center" aria-label="Menu">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </summary>
+        <nav class="absolute right-0 mt-2 w-64 max-w-[90vw] rounded-md bg-white text-gray-900 shadow-lg ring-1 ring-black/10 py-2 text-sm z-50">
+          <a href="/calendar" class="block px-4 py-2 hover:bg-gray-100">Calendar</a>
+          <a href="/news" class="block px-4 py-2 hover:bg-gray-100">News</a>
+          <a href="/gallery" class="block px-4 py-2 hover:bg-gray-100">Gallery</a>
+          {{if .LoggedIn}}
+            <div class="border-t border-gray-100 my-1"></div>
+            <a href="/roster" class="block px-4 py-2 hover:bg-gray-100">Roster</a>
+            <a href="/advancement" class="block px-4 py-2 hover:bg-gray-100">Advancement</a>
+            <a href="/files" class="block px-4 py-2 hover:bg-gray-100">Files</a>
+            <a href="/accounts" class="block px-4 py-2 hover:bg-gray-100">My Accounts</a>
+            {{if or .CanEditContent .CanManageLedger .IsSuperAdmin}}
+              <div class="border-t border-gray-100 my-1"></div>
+              <div class="px-4 pt-1 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">Admin</div>
+              {{if .CanEditContent}}
+                <a href="/admin/roster" class="block px-4 py-2 hover:bg-gray-100">Manage Roster</a>
+                <a href="/admin/advancement" class="block px-4 py-2 hover:bg-gray-100">Manage Advancement</a>
+                <a href="/admin/home" class="block px-4 py-2 hover:bg-gray-100">Edit Homepage</a>
+                <a href="/admin/news" class="block px-4 py-2 hover:bg-gray-100">Manage News</a>
+                <a href="/admin/gallery" class="block px-4 py-2 hover:bg-gray-100">Manage Gallery</a>
+                <a href="/admin/newsletters" class="block px-4 py-2 hover:bg-gray-100">Newsletters</a>
+              {{end}}
+              {{if .CanManageLedger}}
+                <a href="/treasury" class="block px-4 py-2 hover:bg-gray-100">Treasury</a>
+              {{end}}
+              {{if or .CanEditContent .CanManageLedger}}
+                <a href="/audit" class="block px-4 py-2 hover:bg-gray-100">Activity Log</a>
+              {{end}}
+              {{if .IsSuperAdmin}}
+                <a href="/admin/settings" class="block px-4 py-2 hover:bg-gray-100">Site Settings</a>
+              {{end}}
+            {{end}}
+            <div class="border-t border-gray-100 my-1"></div>
+            <a href="/settings/2fa" class="block px-4 py-2 hover:bg-gray-100">Security</a>
+            <form method="post" action="/logout">
+              <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+              <button type="submit" class="block w-full text-left px-4 py-2 hover:bg-gray-100">Log out</button>
+            </form>
+          {{else}}
+            <div class="border-t border-gray-100 my-1"></div>
+            <a href="/login" class="block px-4 py-2 hover:bg-gray-100">Log in</a>
           {{end}}
-          {{if .CanManageLedger}}
-            <a href="/treasury" class="hover:underline">Treasury</a>
-          {{end}}
-          {{if or .CanEditContent .CanManageLedger}}
-            <a href="/audit" class="hover:underline">Activity Log</a>
-          {{end}}
-          {{if .IsSuperAdmin}}
-            <a href="/admin/settings" class="hover:underline">Site Settings</a>
-          {{end}}
-          <a href="/settings/2fa" class="hover:underline">Security</a>
-          <form method="post" action="/logout" class="inline">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <button type="submit" class="hover:underline">Log out</button>
-          </form>
-        {{else}}
-          <a href="/login" class="hover:underline">Log in</a>
-        {{end}}
-      </nav>
+        </nav>
+      </details>
     </div>
   </header>
+  <script>
+    // Closes the <details> menu on an outside click or after following a
+    // link/submitting a form inside it — <details> has no built-in way to
+    // do either, and leaving it open until the hamburger is clicked again
+    // is a worse experience than this ~10 lines fixes.
+    (function () {
+      var menu = document.getElementById('site-menu');
+      if (!menu) return;
+      document.addEventListener('click', function (e) {
+        if (menu.open && !menu.contains(e.target)) menu.open = false;
+      });
+      menu.querySelectorAll('a, button').forEach(function (el) {
+        el.addEventListener('click', function () { menu.open = false; });
+      });
+    })();
+  </script>
 
   <main class="max-w-4xl mx-auto px-4 py-8">
     {{if .NeedsTwoFactorSetup}}
@@ -72,7 +110,7 @@
   </main>
 
   <footer class="max-w-4xl mx-auto px-4 py-8 text-xs text-gray-400">
-    {{.Unit.Name}} — part of the 47-Yonkers Scouting sites (Phase 1 &amp; 2)
+    {{.Unit.Name}} — v{{.Version}}
   </footer>
 </body>
 </html>

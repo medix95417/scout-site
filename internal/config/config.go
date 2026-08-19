@@ -54,6 +54,17 @@ type Config struct {
 	// ReminderWindow is how far ahead of an event's start time
 	// -send-event-reminders looks when deciding a reminder is due.
 	ReminderWindow time.Duration
+
+	// S3* configure the S3-compatible object store backing the file
+	// library and event photos (see internal/storage). Defaults target
+	// docker-compose.yml's bundled MinIO service, so file storage works
+	// out of the box; point these at a real bucket (AWS S3, R2, etc.)
+	// instead by overriding the env vars.
+	S3Endpoint  string
+	S3AccessKey string
+	S3SecretKey string
+	S3Bucket    string
+	S3UseSSL    bool
 }
 
 // Load reads configuration from the environment, applying sane local-dev
@@ -71,6 +82,12 @@ func Load() (Config, error) {
 		SMTPPassword: getenv("SMTP_PASSWORD", ""),
 		SMTPFrom:     getenv("SMTP_FROM", ""),
 		SMTPTLSMode:  getenv("SMTP_TLS_MODE", "starttls"),
+
+		S3Endpoint:  getenv("S3_ENDPOINT", "minio:9000"),
+		S3AccessKey: getenv("S3_ACCESS_KEY", "scoutsite"),
+		S3SecretKey: getenv("S3_SECRET_KEY", "scoutsite-dev-key"),
+		S3Bucket:    getenv("S3_BUCKET", "scoutsite-files"),
+		S3UseSSL:    getenv("S3_USE_SSL", "false") == "true",
 	}
 
 	if cfg.SessionSecret == "" {

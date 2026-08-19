@@ -175,6 +175,15 @@ logs). No architecture change is needed for this move — see
   have some. Real photos will always look better than stock ones, and
   relying on a third party to keep hosting an image indefinitely isn't
   something you want on a site you're running long-term.
+- Files (`/files`): a general document library (packing lists, forms,
+  handbooks) plus event photos, stored in S3-compatible object storage
+  (`internal/storage` — a bundled MinIO service by default, see
+  `docker-compose.yml` and `.env.example`). Any logged-in member can view
+  and download; uploading, deleting, and linking a file to one or more
+  calendar events requires the same leader role that edits the homepage.
+  A file can be linked to several events at once (the same packing list
+  attached to a recurring campout, say), and `/calendar` shows each
+  event's linked photos/documents inline.
 - Activity log: every create/approve/reject/content-edit is recorded
   (`/audit`, leaders only).
 - Email (optional — see `.env.example` and DEPLOY.md "Configure the
@@ -303,7 +312,7 @@ this configuration; see `SECURITY_AUDIT.md`.
 ## Versioning
 
 Changes are tracked in `CHANGELOG.md` and tagged in git as `vX.Y.Z`
-(current version: **v1.4.0**). Each delivery from here forward gets its
+(current version: **v1.6.0**). Each delivery from here forward gets its
 own commit and tag — see `CHANGELOG.md` for the full history and how
 version numbers are chosen.
 

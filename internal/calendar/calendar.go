@@ -163,6 +163,20 @@ func ListForRangePublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID s
 	`, unitID, rangeStart, rangeEnd)
 }
 
+// ListAllForUnit returns every published event for a unit, most recent
+// first — used by the file library (internal/web/files.go) to populate its
+// "link this file to events" picker, which needs to reach past events too
+// (attaching trip photos after the fact), not just ListUpcomingForUnit's
+// forward-looking list.
+func ListAllForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Event, error) {
+	return queryEvents(ctx, pool, `
+		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text
+		FROM events
+		WHERE unit_id = $1 AND status = 'published'
+		ORDER BY starts_at DESC
+	`, unitID)
+}
+
 // GetEvent looks up a single event, scoped to a unit — used by the
 // permission-slip page (internal/web/permission_slip.go) to resolve which
 // event a slip is being attached to/viewed for. Deliberately not

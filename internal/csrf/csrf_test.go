@@ -1,6 +1,8 @@
 package csrf
 
 import (
+	"bytes"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -85,6 +87,67 @@ func TestMiddleware_POSTWithMatchingTokenAccepted(t *testing.T) {
 
 	if postRec.Code != http.StatusOK {
 		t.Errorf("POST with a matching csrf_token should be accepted, got status %d", postRec.Code)
+	}
+}
+
+func TestMiddleware_MultipartPOSTWithMatchingTokenAccepted(t *testing.T) {
+	h := handlerUnderTest()
+
+	getReq := httptest.NewRequest(http.MethodGet, "/", nil)
+	getRec := httptest.NewRecorder()
+	h.ServeHTTP(getRec, getReq)
+	cookie := getRec.Result().Cookies()[0]
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if err := mw.WriteField("csrf_token", cookie.Value); err != nil {
+		t.Fatal(err)
+	}
+	fw, err := mw.CreateFormFile("file", "test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	postReq := httptest.NewRequest(http.MethodPost, "/", &body)
+	postReq.Header.Set("Content-Type", mw.FormDataContentType())
+	postReq.AddCookie(cookie)
+	postRec := httptest.NewRecorder()
+	h.ServeHTTP(postRec, postReq)
+
+	if postRec.Code != http.StatusOK {
+		t.Errorf("multipart POST with a matching csrf_token should be accepted, got status %d", postRec.Code)
+	}
+}
+
+func TestMiddleware_MultipartPOSTWithoutTokenRejected(t *testing.T) {
+	h := handlerUnderTest()
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fw, err := mw.CreateFormFile("file", "test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	postReq := httptest.NewRequest(http.MethodPost, "/", &body)
+	postReq.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("multipart POST without a csrf_token should be rejected, got status %d", rec.Code)
 	}
 }
 

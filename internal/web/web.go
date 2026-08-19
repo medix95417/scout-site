@@ -22,10 +22,13 @@ import (
 	"github.com/47-yonkers/scout-site/internal/content"
 	"github.com/47-yonkers/scout-site/internal/csrf"
 	"github.com/47-yonkers/scout-site/internal/family"
+	"github.com/47-yonkers/scout-site/internal/files"
 	"github.com/47-yonkers/scout-site/internal/mailer"
 	"github.com/47-yonkers/scout-site/internal/roster"
 	"github.com/47-yonkers/scout-site/internal/settings"
+	"github.com/47-yonkers/scout-site/internal/storage"
 	"github.com/47-yonkers/scout-site/internal/units"
+	"github.com/47-yonkers/scout-site/internal/version"
 )
 
 //go:embed all:templates
@@ -44,6 +47,7 @@ type Handlers struct {
 	CookieDomain string
 	SecureCookie bool // set true when serving over HTTPS (production); false for local http://
 	Mailer       *mailer.Mailer
+	Storage      *storage.Store
 
 	home                 *template.Template
 	login                *template.Template
@@ -82,6 +86,8 @@ type Handlers struct {
 
 	advancement      *template.Template
 	advancementAdmin *template.Template
+
+	fileLibrary *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -93,12 +99,12 @@ var templateFuncs = template.FuncMap{
 }
 
 // New parses templates and returns a ready-to-use Handlers.
-func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *mailer.Mailer) (*Handlers, error) {
+func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *mailer.Mailer, store *storage.Store) (*Handlers, error) {
 	parse := func(page string) (*template.Template, error) {
 		return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/"+page)
 	}
 
-	h := &Handlers{Pool: pool, CookieDomain: cookieDomain, SecureCookie: secureCookie, Mailer: mail}
+	h := &Handlers{Pool: pool, CookieDomain: cookieDomain, SecureCookie: secureCookie, Mailer: mail, Storage: store}
 
 	var err error
 	if h.home, err = parse("home.html"); err != nil {
@@ -195,6 +201,9 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 		return nil, err
 	}
 	if h.advancementAdmin, err = parse("admin-advancement.html"); err != nil {
+		return nil, err
+	}
+	if h.fileLibrary, err = parse("files.html"); err != nil {
 		return nil, err
 	}
 	return h, nil
@@ -296,6 +305,13 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/newsletters/{id}/edit", h.AdminNewsletterEdit)
 	mux.HandleFunc("POST /admin/newsletters/{id}", h.AdminNewsletterUpdate)
 	mux.HandleFunc("POST /admin/newsletters/{id}/send", h.AdminNewsletterSend)
+
+	// File library and event photos (internal/web/files.go).
+	mux.HandleFunc("GET /files", h.FileLibrary)
+	mux.HandleFunc("POST /files/upload", h.FileUpload)
+	mux.HandleFunc("GET /files/{id}/download", h.FileDownload)
+	mux.HandleFunc("POST /files/{id}/delete", h.FileDelete)
+	mux.HandleFunc("POST /files/{id}/link", h.FileSetEventLinks)
 }
 
 // baseData is embedded in every page's template data.
@@ -309,6 +325,7 @@ type baseData struct {
 	PageTitle           string
 	Flash               string
 	CSRFToken           string // embedded as a hidden field in every <form method="post"> — see internal/csrf
+	Version             string // this build's release version — see internal/version, shown in base.html's footer
 }
 
 // rolesFor resolves the current login's roles in a unit. A family-wide
@@ -379,7 +396,7 @@ func isAccountOwner(ctx context.Context, pool *pgxpool.Pool, user auth.User, mem
 func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
-	data := baseData{Unit: unit, LoggedIn: loggedIn, PageTitle: pageTitle, CSRFToken: csrf.TokenFromContext(r.Context())}
+	data := baseData{Unit: unit, LoggedIn: loggedIn, PageTitle: pageTitle, CSRFToken: csrf.TokenFromContext(r.Context()), Version: version.Version}
 	if loggedIn {
 		roles, err := h.rolesFor(r.Context(), user, unit.ID)
 		if err != nil {
@@ -732,6 +749,13 @@ type pendingApprovalView struct {
 	SubmittedByName string
 }
 
+// eventView is a calendar.Event decorated with whatever files/photos are
+// linked to it — the calendar page's event list shows both inline.
+type eventView struct {
+	calendar.Event
+	Files []files.File
+}
+
 // parseMonthParam resolves the year/month a calendar page should show from
 // its ?month=YYYY-MM query param, defaulting to the current month when the
 // param is absent or malformed — a bad/garbled query string should show
@@ -779,7 +803,16 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 	}
 	monthGrid := calendar.BuildMonthGrid(monthEvents, year, month, today)
 
-	var canCreate, requiresApproval, canApprove bool
+	eventIDs := make([]string, len(events))
+	for i, e := range events {
+		eventIDs[i] = e.ID
+	}
+	filesByEvent, err := files.ListForEvents(r.Context(), h.Pool, eventIDs)
+	if err != nil {
+		log.Printf("web: loading files linked to events: %v", err)
+	}
+
+	var canCreate, requiresApproval, canApprove, canManageFiles bool
 	var pendingViews []pendingApprovalView
 
 	if loggedIn {
@@ -790,6 +823,7 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		canCreate = units.CanEditUnitContent(roles) || units.CanSubmitForApproval(roles)
 		requiresApproval = !units.CanEditUnitContent(roles) && units.CanSubmitForApproval(roles)
 		canApprove = units.CanApprove(roles)
+		canManageFiles = units.CanEditUnitContent(roles)
 
 		if canApprove {
 			pending, err := approval.PendingForUnit(r.Context(), h.Pool, unit.ID)
@@ -800,17 +834,24 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	eventViews := make([]eventView, len(events))
+	for i, e := range events {
+		eventViews[i] = eventView{Event: e, Files: filesByEvent[e.ID]}
+	}
+
 	data := struct {
 		baseData
-		Events           []calendar.Event
+		Events           []eventView
 		Month            calendar.MonthGrid
 		CanCreate        bool
 		RequiresApproval bool
 		PendingApprovals []pendingApprovalView
+		CanManageFiles   bool
 	}{
 		baseData:         h.base(r, "Calendar"),
-		Events:           events,
+		Events:           eventViews,
 		Month:            monthGrid,
+		CanManageFiles:   canManageFiles,
 		CanCreate:        canCreate,
 		RequiresApproval: requiresApproval,
 		PendingApprovals: pendingViews,
