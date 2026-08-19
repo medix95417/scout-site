@@ -37,7 +37,19 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://scoutsite:${POSTGRES_PASSWORD:-scoutsite}@db:5432/scoutsite?sslmode=disable
+      # Passed as separate pieces, not a pre-built DATABASE_URL — a
+      # POSTGRES_PASSWORD generated with `openssl rand -base64 N` can
+      # contain a "/", which breaks a hand-spliced postgres:// URL's
+      # parsing (docker-compose does no URL-escaping on substitution).
+      # internal/config.Load builds the connection string itself via
+      # net/url, which escapes correctly no matter what character ends up
+      # in the password.
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      DB_USER: "scoutsite"
+      DB_NAME: "scoutsite"
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-scoutsite}
+      DB_SSLMODE: "disable"
       LISTEN_ADDR: ":8080"
       SESSION_SECRET: ${SESSION_SECRET}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}

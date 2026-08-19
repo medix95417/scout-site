@@ -20,7 +20,20 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
-Nothing yet.
+**Fix:** a `POSTGRES_PASSWORD` containing a `/` (a character `openssl rand
+-base64 N` can and does produce) broke the database connection entirely —
+docker-compose.yml spliced the raw password into a `postgres://` URL with
+no escaping, which pgx's URL parser then rejected (`invalid port ...
+after host`). The `app` container crash-looped on startup as a result,
+which is also why Caddy's reverse proxy logged `dial tcp: lookup app ...
+server misbehaving` and returned 502s to every visitor — Docker's
+embedded DNS had nothing to resolve `app` to. The database connection
+string is now built by the app itself (`internal/config.resolveDatabaseURL`)
+from separate `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME`/
+`DB_SSLMODE` values via `net/url`, which escapes correctly regardless of
+what characters end up in the password. An explicit `DATABASE_URL`
+environment variable still overrides this entirely, for anyone pointing
+at an external managed Postgres.
 
 ## [1.4.0] — 2026-08-18
 
