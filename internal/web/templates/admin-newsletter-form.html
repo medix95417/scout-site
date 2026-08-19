@@ -1,0 +1,60 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-2">{{if .IsEdit}}Edit{{else}}New{{end}} Newsletter — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-6">
+    {{if .IsEdit}}
+      {{if eq .Newsletter.Status "sent"}}
+        Already sent — no further changes are possible.
+      {{else}}
+        Saves as a draft. Nobody sees it until you send it from the
+        <a href="/admin/newsletters" class="underline" style="color: var(--unit-color);">Newsletters list</a>.
+      {{end}}
+    {{else}}
+      Saves as a draft — you'll send it from the Newsletters list once it's ready.
+    {{end}}
+  </p>
+
+  <form method="post" action="{{if .IsEdit}}/admin/newsletters/{{.Newsletter.ID}}{{else}}/admin/newsletters{{end}}" class="space-y-4 max-w-2xl">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="subject">Subject</label>
+      <input
+        id="subject" name="subject" type="text" required
+        value="{{.Newsletter.Subject}}"
+        {{if eq .Newsletter.Status "sent"}}disabled{{end}}
+        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+      >
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="body">Body</label>
+      <p class="text-xs text-gray-500 mb-2">Plain text — line breaks are preserved, but no HTML.</p>
+      <textarea
+        id="body" name="body" rows="12"
+        placeholder="Hi families,&#10;&#10;A few updates for this month..."
+        {{if eq .Newsletter.Status "sent"}}disabled{{end}}
+        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
+      >{{.Newsletter.Body}}</textarea>
+    </div>
+
+    {{if ne .Newsletter.Status "sent"}}
+      <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+        Save Draft
+      </button>
+    {{end}}
+    <a href="/admin/newsletters" class="text-sm underline ml-2">Cancel</a>
+  </form>
+
+  {{if .IsEdit}}
+    {{if eq .Newsletter.Status "draft"}}
+      <form method="post" action="/admin/newsletters/{{.Newsletter.ID}}/send" class="mt-6 max-w-2xl"
+            onsubmit="return confirm('Send this newsletter to every family on the roster now? This can\'t be undone.');">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: #b91c1c;">
+          Send Now
+        </button>
+        <p class="text-xs text-gray-500 mt-2">Emails every family currently on the roster, once. Can't be undone or edited afterward.</p>
+      </form>
+    {{end}}
+  {{end}}
+{{end}}

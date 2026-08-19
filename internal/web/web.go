@@ -71,6 +71,9 @@ type Handlers struct {
 	galleryDetailTmpl    *template.Template
 	adminContentListTmpl *template.Template
 	adminContentFormTmpl *template.Template
+
+	newsletterList *template.Template
+	newsletterForm *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -165,6 +168,12 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.adminContentFormTmpl, err = parse("admin-content-form.html"); err != nil {
 		return nil, err
 	}
+	if h.newsletterList, err = parse("admin-newsletter-list.html"); err != nil {
+		return nil, err
+	}
+	if h.newsletterForm, err = parse("admin-newsletter-form.html"); err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
@@ -247,6 +256,13 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/gallery/{id}/edit", h.AdminGalleryEdit)
 	mux.HandleFunc("POST /admin/gallery/{id}", h.AdminGalleryUpdate)
 	mux.HandleFunc("POST /admin/gallery/{id}/publish", h.AdminGalleryPublishToggle)
+
+	mux.HandleFunc("GET /admin/newsletters", h.AdminNewsletterList)
+	mux.HandleFunc("GET /admin/newsletters/new", h.AdminNewsletterNew)
+	mux.HandleFunc("POST /admin/newsletters", h.AdminNewsletterCreate)
+	mux.HandleFunc("GET /admin/newsletters/{id}/edit", h.AdminNewsletterEdit)
+	mux.HandleFunc("POST /admin/newsletters/{id}", h.AdminNewsletterUpdate)
+	mux.HandleFunc("POST /admin/newsletters/{id}/send", h.AdminNewsletterSend)
 }
 
 // baseData is embedded in every page's template data.
