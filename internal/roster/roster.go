@@ -107,6 +107,20 @@ func FamilyEmail(ctx context.Context, pool *pgxpool.Pool, familyID string) (stri
 	return email, err
 }
 
+// FamilyIDForEmail looks up the family a login email already belongs to,
+// if any — used by the Scoutbook CSV import (see internal/web/roster_import.go)
+// to decide whether a row's family already exists (add the row's members
+// to it) or needs to be created from scratch, the same "email already
+// registered" check CreateFamilyWithMember makes, just queryable ahead of
+// time instead of only as a creation-time error.
+func FamilyIDForEmail(ctx context.Context, pool *pgxpool.Pool, email string) (familyID string, found bool, err error) {
+	err = pool.QueryRow(ctx, `SELECT family_id FROM users WHERE email = $1`, auth.NormalizeEmail(email)).Scan(&familyID)
+	if err != nil {
+		return "", false, nil //nolint:nilerr // "no login with that email yet" is a normal, expected outcome
+	}
+	return familyID, true, nil
+}
+
 // MemberLoginEmail looks up one member's individual login email, if they
 // have one — for the "here's the account we just created/reset"
 // confirmation screen when acting on an individual Scout login rather than

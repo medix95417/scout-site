@@ -341,6 +341,10 @@ func writeLedgerError(w http.ResponseWriter, err error) {
 		http.Error(w, "insufficient balance for this transfer", http.StatusBadRequest)
 	case errors.Is(err, ledger.ErrTripFundExists):
 		http.Error(w, "a trip fund already exists for this event", http.StatusBadRequest)
+	case errors.Is(err, ledger.ErrAccountBalanceNotZero):
+		http.Error(w, "this trip fund still has a balance — move it out (refund or transfer) before closing", http.StatusBadRequest)
+	case errors.Is(err, ledger.ErrNotATripFund):
+		http.Error(w, "only trip funds can be closed this way", http.StatusBadRequest)
 	default:
 		log.Printf("web: ledger error: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -372,6 +376,24 @@ func (h *Handlers) TreasuryCreateTripFund(w http.ResponseWriter, r *http.Request
 	}
 
 	http.Redirect(w, r, "/treasury", http.StatusSeeOther)
+}
+
+// TreasuryCloseTripFund closes a trip fund whose balance has already been
+// zeroed out — see internal/ledger.CloseTripFund's doc comment for why
+// closing requires that rather than sweeping or stranding a remainder.
+func (h *Handlers) TreasuryCloseTripFund(w http.ResponseWriter, r *http.Request) {
+	unit, actor, ok := h.requireTreasurer(w, r, "/treasury")
+	if !ok {
+		return
+	}
+
+	accountID := r.PathValue("id")
+	if _, err := ledger.CloseTripFund(r.Context(), h.Pool, unit.ID, accountID, actor.ID); err != nil {
+		writeLedgerError(w, err)
+		return
+	}
+
+	http.Redirect(w, r, "/treasury/accounts/"+accountID, http.StatusSeeOther)
 }
 
 // TreasuryDecideTransfer approves or rejects a pending trip-fund push
@@ -493,6 +515,8 @@ func (h *Handlers) TreasuryAccountView(w http.ResponseWriter, r *http.Request) {
 		Transactions       []transactionView
 		CanRequestTransfer bool
 		OpenTripFunds      []ledger.AccountWithBalance
+		CanCloseTripFund   bool
+		TripFundHasBalance bool
 	}{
 		baseData:           h.base(r, account.Name),
 		Account:            account,
@@ -500,6 +524,8 @@ func (h *Handlers) TreasuryAccountView(w http.ResponseWriter, r *http.Request) {
 		Transactions:       transactions,
 		CanRequestTransfer: account.AccountType == "scout_individual" && (isOwner || canManage),
 		OpenTripFunds:      openTripFunds,
+		CanCloseTripFund:   canManage && account.AccountType == "trip_fund" && account.Status == "open" && balance == 0,
+		TripFundHasBalance: canManage && account.AccountType == "trip_fund" && account.Status == "open" && balance != 0,
 	}
 	h.render(w, h.treasuryAccount, data)
 }
@@ -622,8 +648,15 @@ func (h *Handlers) TreasuryFundraiserView(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	h.renderFundraiser(w, r, unit, r.PathValue("id"), nil)
+}
 
-	fundraiserID := r.PathValue("id")
+// renderFundraiser loads a fundraiser's full view (allocations, roster
+// Scouts for the single-row form) and renders it — shared by the plain GET
+// view and TreasuryAllocateFundraiserBulk, so a bulk paste's results page
+// is just this same view with a BulkImportResult attached, already
+// reflecting whatever rows the import actually credited.
+func (h *Handlers) renderFundraiser(w http.ResponseWriter, r *http.Request, unit units.Unit, fundraiserID string, bulkResult *bulkImportResult) {
 	f, err := ledger.GetFundraiser(r.Context(), h.Pool, fundraiserID)
 	if err != nil || f.UnitID != unit.ID {
 		http.NotFound(w, r)
@@ -682,11 +715,13 @@ func (h *Handlers) TreasuryFundraiserView(w http.ResponseWriter, r *http.Request
 		Fundraiser  ledger.Fundraiser
 		Allocations []allocationView
 		Scouts      []family.RosterEntry
+		BulkResult  *bulkImportResult
 	}{
 		baseData:    h.base(r, f.Name),
 		Fundraiser:  f,
 		Allocations: allocationViews,
 		Scouts:      scouts,
+		BulkResult:  bulkResult,
 	}
 	h.render(w, h.treasuryFundraiser, data)
 }
@@ -739,6 +774,161 @@ func (h *Handlers) TreasuryAllocateFundraiser(w http.ResponseWriter, r *http.Req
 	}
 
 	http.Redirect(w, r, "/treasury/fundraisers/"+fundraiserID, http.StatusSeeOther)
+}
+
+// bulkImportRow is one line of a pasted bulk-allocation import and its
+// outcome, for the results list rendered alongside the fundraiser page —
+// see TreasuryAllocateFundraiserBulk.
+type bulkImportRow struct {
+	Line            int
+	Input           string
+	Credited        bool
+	MemberName      string
+	CreditedDisplay string
+	Reason          string // populated when Credited is false
+}
+
+type bulkImportResult struct {
+	Rows      []bulkImportRow
+	Succeeded int
+	Skipped   int
+}
+
+// splitBulkRow splits one pasted row into fields. Pasting from a
+// spreadsheet (Excel, Google Sheets) produces tab-separated rows; typing
+// or pasting from an actual .csv file produces comma-separated ones — a
+// row is treated as whichever it contains, tab taking precedence since a
+// Scout's name is vanishingly unlikely to contain a literal tab character
+// but could in principle contain a comma (e.g. a suffix like "Jr.,").
+func splitBulkRow(line string) []string {
+	if strings.Contains(line, "\t") {
+		return strings.Split(line, "\t")
+	}
+	return strings.Split(line, ",")
+}
+
+// TreasuryAllocateFundraiserBulk credits many Scouts' fundraiser proceeds
+// from one pasted block of rows (first name, last name, gross amount, and
+// — for a fixed_per_item fundraiser — a quantity), instead of the
+// one-Scout-at-a-time form above. Each row is matched against the unit's
+// youth roster by exact (case-insensitive) first+last name; a row with no
+// match, an ambiguous match (two Scouts share a name — resolved manually
+// via the single-row form instead of guessing), or any other problem is
+// skipped and reported rather than blocking the rows that are fine. An
+// optional header row (its amount column isn't a valid number) is
+// detected and skipped silently.
+func (h *Handlers) TreasuryAllocateFundraiserBulk(w http.ResponseWriter, r *http.Request) {
+	unit, actor, ok := h.requireTreasurer(w, r, r.URL.Path)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	fundraiserID := r.PathValue("id")
+	f, err := ledger.GetFundraiser(r.Context(), h.Pool, fundraiserID)
+	if err != nil || f.UnitID != unit.ID {
+		http.NotFound(w, r)
+		return
+	}
+
+	roster, err := family.RosterForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading roster: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	byName := map[string][]family.RosterEntry{}
+	for _, m := range roster {
+		if m.MemberType != "youth" {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(m.FirstName) + " " + strings.TrimSpace(m.LastName))
+		byName[key] = append(byName[key], m)
+	}
+
+	result := &bulkImportResult{}
+	sawFirstLine := false
+	lineNum := 0
+	for _, rawLine := range strings.Split(r.FormValue("bulk_rows"), "\n") {
+		line := strings.TrimSpace(strings.TrimSuffix(rawLine, "\r"))
+		if line == "" {
+			continue
+		}
+
+		fields := splitBulkRow(line)
+		var firstName, lastName, grossRaw, quantityRaw string
+		if len(fields) > 0 {
+			firstName = strings.TrimSpace(fields[0])
+		}
+		if len(fields) > 1 {
+			lastName = strings.TrimSpace(fields[1])
+		}
+		if len(fields) > 2 {
+			grossRaw = strings.TrimSpace(fields[2])
+		}
+		if len(fields) > 3 {
+			quantityRaw = strings.TrimSpace(fields[3])
+		}
+
+		if !sawFirstLine {
+			sawFirstLine = true
+			if _, err := parseDollarsToCents(grossRaw); err != nil {
+				continue // looks like a header row — skip it silently
+			}
+		}
+		lineNum++
+
+		if len(fields) < 3 {
+			result.Rows = append(result.Rows, bulkImportRow{Line: lineNum, Input: line, Reason: "expected at least first name, last name, and gross amount"})
+			result.Skipped++
+			continue
+		}
+
+		grossCents, err := parseDollarsToCents(grossRaw)
+		if err != nil || grossCents <= 0 {
+			result.Rows = append(result.Rows, bulkImportRow{Line: lineNum, Input: line, Reason: fmt.Sprintf("%q isn't a valid, positive dollar amount", grossRaw)})
+			result.Skipped++
+			continue
+		}
+
+		matches := byName[strings.ToLower(firstName+" "+lastName)]
+		if len(matches) == 0 {
+			result.Rows = append(result.Rows, bulkImportRow{Line: lineNum, Input: line, Reason: fmt.Sprintf("no Scout on the roster named %q %q", firstName, lastName)})
+			result.Skipped++
+			continue
+		}
+		if len(matches) > 1 {
+			result.Rows = append(result.Rows, bulkImportRow{Line: lineNum, Input: line, Reason: fmt.Sprintf("%d Scouts on the roster are named %q %q — enter this one manually above", len(matches), firstName, lastName)})
+			result.Skipped++
+			continue
+		}
+		member := matches[0]
+
+		if f.AllocationMode == "fixed_per_item" && quantityRaw == "" {
+			result.Rows = append(result.Rows, bulkImportRow{Line: lineNum, Input: line, Reason: "this fundraiser is fixed-per-item — a quantity column is required"})
+			result.Skipped++
+			continue
+		}
+
+		memberName := member.FirstName + " " + member.LastName
+		alloc, err := ledger.RecordFundraiserAllocation(r.Context(), h.Pool, fundraiserID, member.ID, memberName, grossCents, quantityRaw, actor.ID)
+		if err != nil {
+			result.Rows = append(result.Rows, bulkImportRow{Line: lineNum, Input: line, Reason: err.Error()})
+			result.Skipped++
+			continue
+		}
+
+		result.Rows = append(result.Rows, bulkImportRow{
+			Line: lineNum, Input: line, Credited: true,
+			MemberName: memberName, CreditedDisplay: formatCents(alloc.CreditedCents),
+		})
+		result.Succeeded++
+	}
+
+	h.renderFundraiser(w, r, unit, fundraiserID, result)
 }
 
 func (h *Handlers) TreasuryConfirmFundraiserCap(w http.ResponseWriter, r *http.Request) {

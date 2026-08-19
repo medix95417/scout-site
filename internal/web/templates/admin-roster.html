@@ -1,11 +1,14 @@
 {{define "content"}}
   <h1 class="text-2xl font-bold mb-2">Manage Roster — {{.Unit.Name}}</h1>
-  <p class="text-sm text-gray-600 mb-6">
+  <p class="text-sm text-gray-600 mb-2">
     {{if .Scope.UnitWide}}
       You can manage the whole {{.Unit.Name}} roster.
     {{else}}
       You can manage members in your own {{.SubGroupNoun}} — other {{.SubGroupNoun}}s show up below but aren't editable from your account.
     {{end}}
+  </p>
+  <p class="text-sm mb-6">
+    <a href="/admin/roster/import" class="underline" style="color: var(--unit-color);">Import roster from a spreadsheet or Scoutbook export &rarr;</a>
   </p>
 
   <div class="grid gap-6 sm:grid-cols-2 mb-10">

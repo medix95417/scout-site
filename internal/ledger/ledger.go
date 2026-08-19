@@ -145,6 +145,17 @@ var (
 	// event already has a trip fund (one trip fund per event, enforced by
 	// a unique index in 0006_ledger.sql).
 	ErrTripFundExists = errors.New("ledger: a trip fund already exists for this event")
+
+	// ErrAccountBalanceNotZero is returned by CloseTripFund when the fund
+	// still has a nonzero balance — see that function's doc comment for
+	// why closing requires zeroing it out first rather than sweeping or
+	// stranding the remainder automatically.
+	ErrAccountBalanceNotZero = errors.New("ledger: account balance must be zero before it can be closed")
+
+	// ErrNotATripFund is returned by CloseTripFund when the given account
+	// isn't a trip_fund account — closing is trip-fund-specific, unlike
+	// ErrAccountClosed/ErrAccountNotFound which apply to any account type.
+	ErrNotATripFund = errors.New("ledger: not a trip fund account")
 )
 
 // EnsureUnitGeneralAccount returns a unit's single general-fund account,
@@ -304,6 +315,55 @@ func CreateTripFund(ctx context.Context, pool *pgxpool.Pool, unitID, eventID, na
 		EntityID:   a.ID,
 		ActorID:    &createdBy,
 		Action:     "create_trip_fund",
+		After:      a,
+	})
+	return a, nil
+}
+
+// CloseTripFund marks a trip-fund account closed — Treasurer-only, per
+// units.CanManageLedger. Requires the account's current balance to
+// already be exactly zero: the Treasurer must move out (refund,
+// transfer, or otherwise post) any remaining money themselves first,
+// using the ordinary transaction/transfer paths, rather than this
+// function silently sweeping or stranding a remainder as a side effect
+// of closing. Once closed, insertTransaction's status check rejects any
+// further posting to the account (see ErrAccountClosed).
+func CloseTripFund(ctx context.Context, pool *pgxpool.Pool, unitID, accountID, closedBy string) (Account, error) {
+	a, err := GetAccount(ctx, pool, accountID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Account{}, ErrAccountNotFound
+		}
+		return Account{}, err
+	}
+	if a.UnitID != unitID {
+		return Account{}, ErrAccountNotFound
+	}
+	if a.AccountType != "trip_fund" {
+		return Account{}, ErrNotATripFund
+	}
+	if a.Status != "open" {
+		return Account{}, ErrAccountClosed
+	}
+
+	balance, err := BalanceForAccount(ctx, pool, accountID)
+	if err != nil {
+		return Account{}, err
+	}
+	if balance != 0 {
+		return Account{}, ErrAccountBalanceNotZero
+	}
+
+	if _, err := pool.Exec(ctx, `UPDATE ledger_accounts SET status = 'closed' WHERE id = $1`, accountID); err != nil {
+		return Account{}, err
+	}
+	a.Status = "closed"
+
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "ledger_account",
+		EntityID:   a.ID,
+		ActorID:    &closedBy,
+		Action:     "close_trip_fund",
 		After:      a,
 	})
 	return a, nil

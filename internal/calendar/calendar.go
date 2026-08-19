@@ -163,6 +163,24 @@ func ListForRangePublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID s
 	`, unitID, rangeStart, rangeEnd)
 }
 
+// GetEvent looks up a single event, scoped to a unit — used by the
+// permission-slip page (internal/web/permission_slip.go) to resolve which
+// event a slip is being attached to/viewed for. Deliberately not
+// restricted to status = 'published': a leader composing a permission
+// slip for an event still pending approval, or reviewing one on a
+// rejected event, should still be able to reach it.
+func GetEvent(ctx context.Context, pool *pgxpool.Pool, eventID, unitID string) (Event, bool, error) {
+	var e Event
+	err := pool.QueryRow(ctx, `
+		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text
+		FROM events WHERE id = $1 AND unit_id = $2
+	`, eventID, unitID).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status)
+	if err != nil {
+		return Event{}, false, nil //nolint:nilerr // "no such event in this unit" is a normal, expected outcome
+	}
+	return e, true, nil
+}
+
 func queryEvents(ctx context.Context, pool *pgxpool.Pool, sql string, args ...any) ([]Event, error) {
 	rows, err := pool.Query(ctx, sql, args...)
 	if err != nil {

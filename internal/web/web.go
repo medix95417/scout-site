@@ -71,6 +71,17 @@ type Handlers struct {
 	galleryDetailTmpl    *template.Template
 	adminContentListTmpl *template.Template
 	adminContentFormTmpl *template.Template
+
+	newsletterList *template.Template
+	newsletterForm *template.Template
+
+	rosterImport        *template.Template
+	rosterImportResults *template.Template
+
+	permissionSlip *template.Template
+
+	advancement      *template.Template
+	advancementAdmin *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -165,6 +176,27 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.adminContentFormTmpl, err = parse("admin-content-form.html"); err != nil {
 		return nil, err
 	}
+	if h.newsletterList, err = parse("admin-newsletter-list.html"); err != nil {
+		return nil, err
+	}
+	if h.newsletterForm, err = parse("admin-newsletter-form.html"); err != nil {
+		return nil, err
+	}
+	if h.rosterImport, err = parse("admin-roster-import.html"); err != nil {
+		return nil, err
+	}
+	if h.rosterImportResults, err = parse("admin-roster-import-results.html"); err != nil {
+		return nil, err
+	}
+	if h.permissionSlip, err = parse("permission-slip.html"); err != nil {
+		return nil, err
+	}
+	if h.advancement, err = parse("advancement.html"); err != nil {
+		return nil, err
+	}
+	if h.advancementAdmin, err = parse("admin-advancement.html"); err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
@@ -180,10 +212,18 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /reset-password", h.ResetPasswordForm)
 	mux.HandleFunc("POST /reset-password", h.ResetPasswordSubmit)
 	mux.HandleFunc("GET /roster", h.Roster)
+	mux.HandleFunc("GET /advancement", h.Advancement)
+	mux.HandleFunc("GET /admin/advancement", h.AdminAdvancementList)
+	mux.HandleFunc("POST /admin/advancement", h.AdminAdvancementCreate)
+	mux.HandleFunc("POST /admin/advancement/bulk", h.AdminAdvancementBulkImport)
+	mux.HandleFunc("POST /admin/advancement/{id}/delete", h.AdminAdvancementDelete)
 	mux.HandleFunc("GET /calendar", h.Calendar)
 	mux.HandleFunc("POST /calendar", h.CalendarCreate)
 	mux.HandleFunc("POST /calendar/{id}/rsvp", h.CalendarRSVP)
 	mux.HandleFunc("POST /calendar/approvals/{id}/decide", h.ApprovalDecide)
+	mux.HandleFunc("GET /calendar/{id}/permission-slip", h.PermissionSlipView)
+	mux.HandleFunc("POST /calendar/{id}/permission-slip", h.PermissionSlipSave)
+	mux.HandleFunc("POST /calendar/{id}/permission-slip/sign", h.PermissionSlipSign)
 	mux.HandleFunc("GET /audit", h.AuditView)
 	mux.HandleFunc("GET /audit/export.csv", h.AuditExport)
 	mux.HandleFunc("GET /accounts", h.AccountsView)
@@ -200,6 +240,8 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/roster/members/{id}/login/reset-password", h.AdminRosterResetMemberLoginPassword)
 	mux.HandleFunc("POST /admin/roster/roles/{id}/delete", h.AdminRosterRemoveRole)
 	mux.HandleFunc("POST /admin/roster/sub-groups", h.AdminRosterCreateSubGroup)
+	mux.HandleFunc("GET /admin/roster/import", h.AdminRosterImportForm)
+	mux.HandleFunc("POST /admin/roster/import", h.AdminRosterImportApply)
 
 	// Phase 2: two-factor login (Treasurer/super_admin) and self-service enrollment.
 	mux.HandleFunc("GET /login/2fa", h.LoginTwoFactorForm)
@@ -213,12 +255,14 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /treasury", h.TreasuryDashboard)
 	mux.HandleFunc("POST /treasury/transactions", h.TreasuryPostTransaction)
 	mux.HandleFunc("POST /treasury/trip-funds", h.TreasuryCreateTripFund)
+	mux.HandleFunc("POST /treasury/accounts/{id}/close", h.TreasuryCloseTripFund)
 	mux.HandleFunc("POST /treasury/transfers/{id}/decide", h.TreasuryDecideTransfer)
 	mux.HandleFunc("GET /treasury/accounts/{id}", h.TreasuryAccountView)
 	mux.HandleFunc("POST /treasury/accounts/{id}/transfer", h.TreasuryRequestTransfer)
 	mux.HandleFunc("GET /treasury/fundraisers/{id}", h.TreasuryFundraiserView)
 	mux.HandleFunc("POST /treasury/fundraisers", h.TreasuryCreateFundraiser)
 	mux.HandleFunc("POST /treasury/fundraisers/{id}/allocate", h.TreasuryAllocateFundraiser)
+	mux.HandleFunc("POST /treasury/fundraisers/{id}/allocate-bulk", h.TreasuryAllocateFundraiserBulk)
 	mux.HandleFunc("POST /treasury/fundraisers/{id}/confirm-cap", h.TreasuryConfirmFundraiserCap)
 
 	// Site-wide settings — super_admin only.
@@ -245,6 +289,13 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/gallery/{id}/edit", h.AdminGalleryEdit)
 	mux.HandleFunc("POST /admin/gallery/{id}", h.AdminGalleryUpdate)
 	mux.HandleFunc("POST /admin/gallery/{id}/publish", h.AdminGalleryPublishToggle)
+
+	mux.HandleFunc("GET /admin/newsletters", h.AdminNewsletterList)
+	mux.HandleFunc("GET /admin/newsletters/new", h.AdminNewsletterNew)
+	mux.HandleFunc("POST /admin/newsletters", h.AdminNewsletterCreate)
+	mux.HandleFunc("GET /admin/newsletters/{id}/edit", h.AdminNewsletterEdit)
+	mux.HandleFunc("POST /admin/newsletters/{id}", h.AdminNewsletterUpdate)
+	mux.HandleFunc("POST /admin/newsletters/{id}/send", h.AdminNewsletterSend)
 }
 
 // baseData is embedded in every page's template data.
