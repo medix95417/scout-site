@@ -1,0 +1,29 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-2">Advancement — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-6">Every rank and merit badge earned, most recent first.</p>
+
+  {{if .Records}}
+    <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <thead class="bg-gray-100 text-left">
+        <tr>
+          <th class="px-4 py-2">Scout</th>
+          <th class="px-4 py-2">Type</th>
+          <th class="px-4 py-2">Name</th>
+          <th class="px-4 py-2">Earned</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Records}}
+          <tr class="border-t border-gray-100">
+            <td class="px-4 py-2">{{.MemberName}}</td>
+            <td class="px-4 py-2 capitalize">{{.RecordType}}</td>
+            <td class="px-4 py-2">{{.Name}}</td>
+            <td class="px-4 py-2">{{if .EarnedOn}}{{.EarnedOn}}{{else}}<span class="text-gray-400">unknown</span>{{end}}</td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="text-sm text-gray-500">No advancement recorded yet.</p>
+  {{end}}
+{{end}}

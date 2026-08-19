@@ -79,6 +79,9 @@ type Handlers struct {
 	rosterImportResults *template.Template
 
 	permissionSlip *template.Template
+
+	advancement      *template.Template
+	advancementAdmin *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -188,6 +191,12 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.permissionSlip, err = parse("permission-slip.html"); err != nil {
 		return nil, err
 	}
+	if h.advancement, err = parse("advancement.html"); err != nil {
+		return nil, err
+	}
+	if h.advancementAdmin, err = parse("admin-advancement.html"); err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
@@ -203,6 +212,11 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /reset-password", h.ResetPasswordForm)
 	mux.HandleFunc("POST /reset-password", h.ResetPasswordSubmit)
 	mux.HandleFunc("GET /roster", h.Roster)
+	mux.HandleFunc("GET /advancement", h.Advancement)
+	mux.HandleFunc("GET /admin/advancement", h.AdminAdvancementList)
+	mux.HandleFunc("POST /admin/advancement", h.AdminAdvancementCreate)
+	mux.HandleFunc("POST /admin/advancement/bulk", h.AdminAdvancementBulkImport)
+	mux.HandleFunc("POST /admin/advancement/{id}/delete", h.AdminAdvancementDelete)
 	mux.HandleFunc("GET /calendar", h.Calendar)
 	mux.HandleFunc("POST /calendar", h.CalendarCreate)
 	mux.HandleFunc("POST /calendar/{id}/rsvp", h.CalendarRSVP)
