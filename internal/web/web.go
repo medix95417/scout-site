@@ -220,6 +220,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /treasury/fundraisers/{id}", h.TreasuryFundraiserView)
 	mux.HandleFunc("POST /treasury/fundraisers", h.TreasuryCreateFundraiser)
 	mux.HandleFunc("POST /treasury/fundraisers/{id}/allocate", h.TreasuryAllocateFundraiser)
+	mux.HandleFunc("POST /treasury/fundraisers/{id}/allocate-bulk", h.TreasuryAllocateFundraiserBulk)
 	mux.HandleFunc("POST /treasury/fundraisers/{id}/confirm-cap", h.TreasuryConfirmFundraiserCap)
 
 	// Site-wide settings — super_admin only.

@@ -48,6 +48,49 @@
     {{end}}
   </section>
 
+  <section class="rounded-lg border border-gray-200 bg-white p-4 mb-8 max-w-lg">
+    <h2 class="text-lg font-semibold mb-2">Bulk Import from a Vendor Spreadsheet</h2>
+    <p class="text-xs text-gray-500 mb-2">
+      Paste rows copied from a spreadsheet or a .csv file — one Scout per line: first name, last name, gross proceeds
+      {{if eq .Fundraiser.AllocationMode "fixed_per_item"}}, and quantity sold{{else}} (a quantity column is ignored for this percentage-based fundraiser){{end}}.
+      An optional header row is detected and skipped automatically. Each Scout is matched by name against the roster —
+      rows that don't match (or match more than one Scout) are skipped and listed below so you can enter them manually above.
+    </p>
+    <form method="post" action="/treasury/fundraisers/{{.Fundraiser.ID}}/allocate-bulk" class="space-y-2">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <textarea
+        name="bulk_rows" rows="6" required
+        placeholder="{{if eq .Fundraiser.AllocationMode "fixed_per_item"}}Jamie,Rivera,60.00,20&#10;Alex,Chen,45.00,15{{else}}Jamie,Rivera,60.00&#10;Alex,Chen,45.00{{end}}"
+        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
+      ></textarea>
+      <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+        Import Rows
+      </button>
+    </form>
+
+    {{if .BulkResult}}
+      <div class="mt-4 pt-3 border-t border-gray-100">
+        <p class="text-sm font-medium mb-2">
+          {{.BulkResult.Succeeded}} credited, {{.BulkResult.Skipped}} skipped
+        </p>
+        {{if .BulkResult.Rows}}
+          <ul class="space-y-1 text-xs">
+            {{range .BulkResult.Rows}}
+              <li class="rounded px-2 py-1 {{if .Credited}}bg-green-50 text-green-900{{else}}bg-red-50 text-red-900{{end}}">
+                Line {{.Line}}:
+                {{if .Credited}}
+                  credited {{.CreditedDisplay}} to {{.MemberName}}
+                {{else}}
+                  skipped — {{.Reason}} ({{.Input}})
+                {{end}}
+              </li>
+            {{end}}
+          </ul>
+        {{end}}
+      </div>
+    {{end}}
+  </section>
+
   <h2 class="text-lg font-semibold mb-3">Allocations</h2>
   {{if .Allocations}}
     <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
