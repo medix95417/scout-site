@@ -6,6 +6,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -14,7 +15,8 @@ import (
 // Config holds everything the server needs to start.
 type Config struct {
 	// DatabaseURL is a standard Postgres connection string, e.g.
-	// postgres://user:pass@host:5432/scoutsite?sslmode=disable
+	// postgres://user:pass@host:5432/scoutsite?sslmode=disable — see
+	// resolveDatabaseURL for how this gets built.
 	DatabaseURL string
 
 	// ListenAddr is the host:port the HTTP server binds to.
@@ -58,7 +60,7 @@ type Config struct {
 // defaults so `go run ./cmd/server` works without a .env file present.
 func Load() (Config, error) {
 	cfg := Config{
-		DatabaseURL:   getenv("DATABASE_URL", "postgres://scoutsite:scoutsite@localhost:5432/scoutsite?sslmode=disable"),
+		DatabaseURL:   resolveDatabaseURL(),
 		ListenAddr:    getenv("LISTEN_ADDR", ":8080"),
 		CookieDomain:  getenv("COOKIE_DOMAIN", ""),
 		SessionSecret: getenv("SESSION_SECRET", ""),
@@ -93,4 +95,29 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// resolveDatabaseURL builds the Postgres connection string. DATABASE_URL,
+// if set, is used verbatim — the escape hatch for an external managed
+// Postgres (RDS, etc.) where a caller already has a complete, correct
+// URL. Otherwise it's built from DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/
+// DB_NAME/DB_SSLMODE (docker-compose.yml's app service sets these) via
+// net/url, which percent-encodes each piece correctly — unlike splicing
+// a raw password into a "postgres://user:PASSWORD@host/db" string by
+// hand, which breaks (silently produces an unparseable URL) the moment
+// the password contains a character like "/" that a generator such as
+// `openssl rand -base64 N` can and does produce. Local dev with no env
+// vars set at all still gets the same friendly default as before.
+func resolveDatabaseURL() string {
+	if v := os.Getenv("DATABASE_URL"); v != "" {
+		return v
+	}
+	u := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(getenv("DB_USER", "scoutsite"), getenv("DB_PASSWORD", "scoutsite")),
+		Host:     getenv("DB_HOST", "localhost") + ":" + getenv("DB_PORT", "5432"),
+		Path:     "/" + getenv("DB_NAME", "scoutsite"),
+		RawQuery: "sslmode=" + getenv("DB_SSLMODE", "disable"),
+	}
+	return u.String()
 }

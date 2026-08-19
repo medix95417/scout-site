@@ -143,7 +143,10 @@ Set these for production:
 
 - `SESSION_SECRET` — generate with `openssl rand -base64 32`.
 - `POSTGRES_PASSWORD` — generate with `openssl rand -base64 24`. Don't
-  leave this at the `scoutsite` default on a public server.
+  leave this at the `scoutsite` default on a public server. Any character
+  the generator produces is safe here — the app builds its own database
+  connection string with proper escaping rather than requiring a
+  URL-safe password.
 - `COOKIE_DOMAIN=.47-yonkers.org` — this is what makes single sign-on
   actually work across both subdomains (see
   `scout-website-architecture-phase1.md` Section 2). Leaving it blank

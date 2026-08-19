@@ -22,6 +22,77 @@ tagged commit with an accurate date.
 
 Nothing yet.
 
+## [1.5.0] — 2026-08-19
+
+Six Phase 3 items from `README.md`'s "Not in Phase 1" list, plus a
+production-outage fix.
+
+**Trip-fund closeout.** A Treasurer can now close a trip fund once its
+balance is exactly zero — they move any remainder out via the existing
+transaction/transfer paths first, rather than this silently sweeping or
+stranding money as a side effect of closing (`internal/ledger.CloseTripFund`).
+Once closed, further postings against it are rejected the same as any
+other closed account.
+
+**Bulk fundraiser proceeds import.** A Treasurer can paste rows copied
+from a vendor spreadsheet or `.csv` (name, gross amount, and quantity for
+fixed-per-item fundraisers) into `/treasury/fundraisers/{id}` instead of
+the one-Scout-at-a-time form. Rows are matched to the roster by name;
+unmatched/ambiguous/invalid rows are skipped and reported with a reason
+rather than blocking the rows that are fine.
+
+**Newsletter email.** A leader can draft, edit, and send a plain-text
+newsletter (`/admin/newsletters`) to every family currently on a unit's
+roster, via the existing SMTP mailer. One-way draft→sent transition — no
+re-editing or re-sending once it's gone out.
+
+**Scoutbook/spreadsheet roster CSV import.** A leader pastes rows
+exported from Scoutbook (or any spreadsheet) at `/admin/roster/import` to
+bulk-add families/members instead of one at a time. Header-driven column
+matching, groups rows into families by name, matches existing logins by
+email, and de-duplicates by name within a resolved family so re-running
+the same import is safe.
+
+**Digital permission slips / consent forms.** A leader attaches a
+consent form to a calendar event (`/calendar/{id}/permission-slip`); a
+parent/guardian signs it once per Scout of theirs attending — per
+participant, not per family, matching BSA consent norms — by typing
+their name. Leaders get a live compliance roster; editing a slip's text
+never invalidates signatures already collected.
+
+**Rank/badge advancement tracking.** `/advancement` (members-only) shows
+every family the unit's rank/badge history; `/admin/advancement` lets a
+leader record one earned rank/badge at a time or bulk-paste many at
+once. The `advancement_records` table has existed since the Phase 1
+schema (`0001_init.sql`) — this is the first thing to actually populate
+and display it.
+
+**Fix — production outage:** a `POSTGRES_PASSWORD` containing a `/` (a
+character `openssl rand -base64 N` can and does produce) broke the
+database connection entirely — `docker-compose.yml` spliced the raw
+password into a `postgres://` URL with no escaping, which pgx's URL
+parser then rejected (`invalid port ... after host`). The `app`
+container crash-looped on startup as a result, which is also why
+Caddy's reverse proxy logged `dial tcp: lookup app ... server
+misbehaving` and returned 502s to every visitor — Docker's embedded DNS
+had nothing to resolve `app` to. The database connection string is now
+built by the app itself (`internal/config.resolveDatabaseURL`) from
+separate `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME`/
+`DB_SSLMODE` values via `net/url`, which escapes correctly regardless of
+what characters end up in the password. An explicit `DATABASE_URL`
+environment variable still overrides this entirely, for anyone pointing
+at an external managed Postgres.
+
+- **Migration:** `0010_newsletters.sql`, `0011_permission_slips.sql` —
+  apply automatically on next server start, no manual step needed.
+  Advancement tracking needed no migration; `advancement_records` has
+  existed since `0001_init.sql`.
+- **Deploy note:** the `app` service in `docker-compose.yml` now expects
+  `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME`/`DB_SSLMODE`
+  instead of a pre-built `DATABASE_URL` — already updated if you're
+  pulling this compose file fresh; no `.env` changes needed since
+  `POSTGRES_PASSWORD` still flows through the same way.
+
 ## [1.4.0] — 2026-08-18
 
 **Individual Scout logins.** A login used to always represent a whole
