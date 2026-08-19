@@ -1,0 +1,35 @@
+{{define "content"}}
+  <p class="mb-4"><a href="/admin/roster" class="text-sm underline" style="color: var(--unit-color);">&larr; Back to Roster</a></p>
+  <h1 class="text-2xl font-bold mb-2">Import Results — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-6">{{.Applied}} applied, {{.Skipped}} skipped.</p>
+
+  {{range .Outcomes}}
+    {{if .TempPass}}
+      <div class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 max-w-lg">
+        <p class="text-sm font-medium text-amber-900 mb-2">New family login — line {{.Line}}</p>
+        <p class="text-xs text-gray-600 mb-3">{{.Detail}}. Share these directly — this password won't be shown again.</p>
+        <dl class="text-left bg-white rounded-md border border-gray-200 p-3">
+          <dt class="text-xs text-gray-500">Email</dt>
+          <dd class="font-mono text-sm mb-2">{{.Email}}</dd>
+          <dt class="text-xs text-gray-500">Temporary password</dt>
+          <dd class="font-mono text-base font-semibold">{{.TempPass}}</dd>
+        </dl>
+      </div>
+    {{end}}
+  {{end}}
+
+  <div class="space-y-1">
+    {{range .Outcomes}}
+      <div class="rounded px-3 py-2 text-sm {{if .Applied}}bg-green-50 text-green-900{{else}}bg-red-50 text-red-900{{end}}">
+        Line {{.Line}}:
+        {{if .Applied}}
+          {{.Detail}}
+        {{else}}
+          skipped — {{.Reason}}
+        {{end}}
+      </div>
+    {{end}}
+  </div>
+
+  <a href="/admin/roster/import" class="inline-block mt-6 text-sm underline" style="color: var(--unit-color);">Import more rows</a>
+{{end}}

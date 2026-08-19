@@ -74,6 +74,9 @@ type Handlers struct {
 
 	newsletterList *template.Template
 	newsletterForm *template.Template
+
+	rosterImport        *template.Template
+	rosterImportResults *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -174,6 +177,12 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.newsletterForm, err = parse("admin-newsletter-form.html"); err != nil {
 		return nil, err
 	}
+	if h.rosterImport, err = parse("admin-roster-import.html"); err != nil {
+		return nil, err
+	}
+	if h.rosterImportResults, err = parse("admin-roster-import-results.html"); err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
@@ -209,6 +218,8 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/roster/members/{id}/login/reset-password", h.AdminRosterResetMemberLoginPassword)
 	mux.HandleFunc("POST /admin/roster/roles/{id}/delete", h.AdminRosterRemoveRole)
 	mux.HandleFunc("POST /admin/roster/sub-groups", h.AdminRosterCreateSubGroup)
+	mux.HandleFunc("GET /admin/roster/import", h.AdminRosterImportForm)
+	mux.HandleFunc("POST /admin/roster/import", h.AdminRosterImportApply)
 
 	// Phase 2: two-factor login (Treasurer/super_admin) and self-service enrollment.
 	mux.HandleFunc("GET /login/2fa", h.LoginTwoFactorForm)

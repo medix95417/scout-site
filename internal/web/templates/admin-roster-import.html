@@ -1,0 +1,47 @@
+{{define "content"}}
+  <p class="mb-4"><a href="/admin/roster" class="text-sm underline" style="color: var(--unit-color);">&larr; Back to Roster</a></p>
+  <h1 class="text-2xl font-bold mb-2">Import Roster — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-4">
+    Export your roster from Scoutbook (or any spreadsheet), keep or rename the columns to match the names below, then
+    paste the whole thing here — header row included. One row per person.
+  </p>
+
+  <div class="rounded-lg border border-gray-200 bg-white p-4 mb-6 max-w-2xl text-sm">
+    <p class="font-medium mb-2">Recognized columns (case-insensitive; spaces/underscores don't matter):</p>
+    <ul class="list-disc list-inside space-y-1 text-gray-700">
+      <li><span class="font-mono">First Name</span>, <span class="font-mono">Last Name</span> — required</li>
+      <li><span class="font-mono">Member Type</span> — required: <span class="font-mono">adult</span>/<span class="font-mono">parent</span>/<span class="font-mono">leader</span>, or <span class="font-mono">youth</span>/<span class="font-mono">scout</span>/<span class="font-mono">child</span></li>
+      <li><span class="font-mono">Role</span> (or <span class="font-mono">Position</span>) — required, must be a role you're allowed to assign</li>
+      <li><span class="font-mono">Email</span> — required for the first adult in each new family (becomes their login); ignored otherwise</li>
+      <li><span class="font-mono">Family Name</span> (or <span class="font-mono">Family</span>/<span class="font-mono">Household</span>) — optional; rows sharing a family name are grouped into one family. Defaults to "&lt;Last Name&gt; Family" if left out</li>
+      <li><span class="font-mono">{{if eq .Unit.UnitType "troop"}}Patrol{{else}}Den{{end}}</span> (or <span class="font-mono">Sub Group</span>) — must already exist on this roster; import doesn't create new {{if eq .Unit.UnitType "troop"}}patrols{{else}}dens{{end}}</li>
+    </ul>
+    <p class="text-xs text-gray-500 mt-3">
+      A row whose email matches an existing login is added to that family. A family with no matching email and no
+      existing family becomes a brand-new login — the temporary password for each new family is shown once on the
+      results page, so don't navigate away before copying them down. Once a family is resolved (new or existing), a
+      row whose first+last name already matches someone in that family is treated as already on the roster — their
+      role is granted rather than creating a duplicate person, so re-running the same import is safe. This name
+      match only happens within one resolved family, though: two different people who happen to share a name in
+      different families are never confused for each other.
+    </p>
+  </div>
+
+  {{if .ParseError}}
+    <div class="mb-4 rounded-md bg-red-50 border border-red-300 px-4 py-2 text-red-900 text-sm max-w-2xl">
+      {{.ParseError}}
+    </div>
+  {{end}}
+
+  <form method="post" action="/admin/roster/import" class="max-w-2xl space-y-2">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <textarea
+      name="csv_rows" rows="10" required
+      placeholder="First Name,Last Name,Member Type,Email,Role,Family Name,{{if eq .Unit.UnitType "troop"}}Patrol{{else}}Den{{end}}&#10;Jamie,Rivera,adult,jamie.rivera@example.com,parent,Rivera Family,Eagle Patrol&#10;Sam,Rivera,youth,,scout,Rivera Family,Eagle Patrol"
+      class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
+    ></textarea>
+    <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+      Import
+    </button>
+  </form>
+{{end}}
