@@ -40,6 +40,19 @@ const CookieName = "scoutsite_csrf"
 // without a matching form submission from the same browser.
 const cookieLifetime = 180 * 24 * time.Hour
 
+// maxUploadMemory bounds how much of a multipart request body
+// ParseMultipartForm buffers in memory (anything past this spills to a
+// temp file on disk, which the net/http machinery cleans up).
+const maxUploadMemory = 10 << 20 // 10 MB
+
+// maxRequestBodySize caps every POST body this middleware parses,
+// multipart file uploads included — applied here (before ParseMultipartForm
+// ever reads the body) rather than per-route, since it's the one place
+// every POST request already passes through. 25 MB comfortably fits a
+// phone photo or a scanned form while still bounding how much a single
+// request can make the server buffer/spill to disk.
+const maxRequestBodySize = 25 << 20 // 25 MB
+
 type contextKey string
 
 const tokenContextKey contextKey = "csrf_token"
@@ -83,11 +96,27 @@ func Middleware(secureCookie bool) func(http.Handler) http.Handler {
 			}
 
 			if r.Method == http.MethodPost {
-				if err := r.ParseForm(); err != nil {
+				r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+
+				// r.ParseForm() only parses application/x-www-form-urlencoded
+				// bodies — for multipart/form-data (file uploads) it leaves
+				// PostForm empty without erroring, which would make every
+				// upload fail this check with "form session expired" no
+				// matter how valid the token. ParseMultipartForm handles
+				// both: it calls ParseForm internally for other content
+				// types, and for multipart parses the non-file fields into
+				// r.Form/r.PostForm too. maxUploadMemory bounds how much of
+				// a multipart body is buffered in memory before spilling to
+				// temp files on disk.
+				if err := r.ParseMultipartForm(maxUploadMemory); err != nil && err != http.ErrNotMultipart {
+					if err.Error() == "http: request body too large" {
+						http.Error(w, "that file is too large (25 MB max)", http.StatusRequestEntityTooLarge)
+						return
+					}
 					http.Error(w, "bad request", http.StatusBadRequest)
 					return
 				}
-				submitted := r.PostFormValue("csrf_token")
+				submitted := r.FormValue("csrf_token")
 				if submitted == "" || subtle.ConstantTimeCompare([]byte(submitted), []byte(token)) != 1 {
 					http.Error(w, "your form session expired or is invalid — please reload the page and try again", http.StatusForbidden)
 					return

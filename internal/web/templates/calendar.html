@@ -105,7 +105,24 @@
             <button name="response" value="maybe" class="text-xs rounded-full border px-2 py-1">Maybe</button>
             <button name="response" value="no" class="text-xs rounded-full border px-2 py-1">Can't make it</button>
             <a href="/calendar/{{.ID}}/permission-slip" class="text-xs underline ml-1" style="color: var(--unit-color);">Permission slip</a>
+            {{if $.CanManageFiles}}<a href="/files" class="text-xs underline ml-1" style="color: var(--unit-color);">Attach a file</a>{{end}}
           </form>
+
+          {{if .Files}}
+            <div class="mt-3 flex flex-wrap gap-2">
+              {{range .Files}}
+                {{if eq .Category "event_photo"}}
+                  <a href="/files/{{.ID}}/download" target="_blank" title="{{.Filename}}">
+                    <img src="/files/{{.ID}}/download" alt="{{.Filename}}" class="h-16 w-16 object-cover rounded-md border border-gray-200">
+                  </a>
+                {{else}}
+                  <a href="/files/{{.ID}}/download" target="_blank" class="text-xs underline rounded-full border px-2 py-1" style="color: var(--unit-color);">
+                    {{.Filename}}
+                  </a>
+                {{end}}
+              {{end}}
+            </div>
+          {{end}}
         </li>
       {{end}}
     </ul>
