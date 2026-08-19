@@ -26,6 +26,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/roster"
 	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/units"
+	"github.com/47-yonkers/scout-site/internal/version"
 )
 
 //go:embed all:templates
@@ -309,6 +310,7 @@ type baseData struct {
 	PageTitle           string
 	Flash               string
 	CSRFToken           string // embedded as a hidden field in every <form method="post"> — see internal/csrf
+	Version             string // this build's release version — see internal/version, shown in base.html's footer
 }
 
 // rolesFor resolves the current login's roles in a unit. A family-wide
@@ -379,7 +381,7 @@ func isAccountOwner(ctx context.Context, pool *pgxpool.Pool, user auth.User, mem
 func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
-	data := baseData{Unit: unit, LoggedIn: loggedIn, PageTitle: pageTitle, CSRFToken: csrf.TokenFromContext(r.Context())}
+	data := baseData{Unit: unit, LoggedIn: loggedIn, PageTitle: pageTitle, CSRFToken: csrf.TokenFromContext(r.Context()), Version: version.Version}
 	if loggedIn {
 		roles, err := h.rolesFor(r.Context(), user, unit.ID)
 		if err != nil {
