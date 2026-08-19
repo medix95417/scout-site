@@ -341,6 +341,10 @@ func writeLedgerError(w http.ResponseWriter, err error) {
 		http.Error(w, "insufficient balance for this transfer", http.StatusBadRequest)
 	case errors.Is(err, ledger.ErrTripFundExists):
 		http.Error(w, "a trip fund already exists for this event", http.StatusBadRequest)
+	case errors.Is(err, ledger.ErrAccountBalanceNotZero):
+		http.Error(w, "this trip fund still has a balance — move it out (refund or transfer) before closing", http.StatusBadRequest)
+	case errors.Is(err, ledger.ErrNotATripFund):
+		http.Error(w, "only trip funds can be closed this way", http.StatusBadRequest)
 	default:
 		log.Printf("web: ledger error: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -372,6 +376,24 @@ func (h *Handlers) TreasuryCreateTripFund(w http.ResponseWriter, r *http.Request
 	}
 
 	http.Redirect(w, r, "/treasury", http.StatusSeeOther)
+}
+
+// TreasuryCloseTripFund closes a trip fund whose balance has already been
+// zeroed out — see internal/ledger.CloseTripFund's doc comment for why
+// closing requires that rather than sweeping or stranding a remainder.
+func (h *Handlers) TreasuryCloseTripFund(w http.ResponseWriter, r *http.Request) {
+	unit, actor, ok := h.requireTreasurer(w, r, "/treasury")
+	if !ok {
+		return
+	}
+
+	accountID := r.PathValue("id")
+	if _, err := ledger.CloseTripFund(r.Context(), h.Pool, unit.ID, accountID, actor.ID); err != nil {
+		writeLedgerError(w, err)
+		return
+	}
+
+	http.Redirect(w, r, "/treasury/accounts/"+accountID, http.StatusSeeOther)
 }
 
 // TreasuryDecideTransfer approves or rejects a pending trip-fund push
@@ -493,6 +515,8 @@ func (h *Handlers) TreasuryAccountView(w http.ResponseWriter, r *http.Request) {
 		Transactions       []transactionView
 		CanRequestTransfer bool
 		OpenTripFunds      []ledger.AccountWithBalance
+		CanCloseTripFund   bool
+		TripFundHasBalance bool
 	}{
 		baseData:           h.base(r, account.Name),
 		Account:            account,
@@ -500,6 +524,8 @@ func (h *Handlers) TreasuryAccountView(w http.ResponseWriter, r *http.Request) {
 		Transactions:       transactions,
 		CanRequestTransfer: account.AccountType == "scout_individual" && (isOwner || canManage),
 		OpenTripFunds:      openTripFunds,
+		CanCloseTripFund:   canManage && account.AccountType == "trip_fund" && account.Status == "open" && balance == 0,
+		TripFundHasBalance: canManage && account.AccountType == "trip_fund" && account.Status == "open" && balance != 0,
 	}
 	h.render(w, h.treasuryAccount, data)
 }
