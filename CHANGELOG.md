@@ -22,6 +22,48 @@ tagged commit with an accurate date.
 
 Nothing yet.
 
+## [1.6.1] — 2026-08-19
+
+Two fixes to the file storage work in 1.6.0, found from a real deploy attempt.
+
+**Fix — deploy build failure.** `go.mod`'s `go` directive moved to
+`1.25.0` in 1.6.0 (a transitive dependency of the new S3 client
+requires it), and CI's Go install was updated to match — but the
+`Dockerfile`'s build stage was still `FROM golang:1.24-bookworm`, so
+`docker compose up -d --build` failed on every fresh deploy with `go.mod
+requires go >= 1.25.0`. CI didn't catch this since it only runs `go
+build ./...` against its own Go 1.25 install, not the Docker image.
+Dockerfile now builds `FROM golang:1.25-bookworm`, and switched from
+`go mod tidy` (re-resolves dependencies over the network on every
+build) to `go mod download` against the committed `go.sum` — reproducible,
+and a cacheable layer.
+
+**Fix — file storage no longer blocks the whole site from starting.**
+1.6.0 bundled a MinIO service in `docker-compose.yml` as the default
+object store, and the app required it to be reachable at startup
+(`log.Fatalf` on any connection error) — so if that dependency wasn't
+healthy yet (or, after removing the bundled service, wasn't configured
+at all), the `app` container never started and Caddy had nothing to
+proxy to: the site showed a blank page instead of a clear error. The
+bundled MinIO service is removed — `S3_ENDPOINT`/`S3_ACCESS_KEY`/
+`S3_SECRET_KEY` now point at a bucket you already run or manage (a
+self-hosted MinIO, AWS S3, Cloudflare R2, etc.), same as any other
+external S3-compatible store. More importantly, file storage now
+degrades gracefully exactly like `SMTP_HOST` already does: an empty
+`S3_ENDPOINT` (or one that's temporarily unreachable) no longer crashes
+the app at startup — the rest of the site works normally, and `/files`
+shows a clear "file storage isn't configured yet" notice instead of an
+error. `internal/storage.New` also no longer auto-creates the bucket at
+startup (that's no longer appropriate for a bucket this app doesn't
+own, and often isn't even permitted by a real cloud provider's IAM
+policy) — create it yourself before expecting uploads to work.
+
+- **Deploy note:** `docker-compose.yml` no longer has a `minio` service
+  or `minio_data` volume. If you were relying on the bundled MinIO,
+  stand up your own S3-compatible store and point `S3_ENDPOINT` at it
+  before `docker compose up -d --build` — see DEPLOY.md's "Configure the
+  environment."
+
 ## [1.6.0] — 2026-08-19
 
 **Hamburger nav.** The header's nav had grown to too many always-visible

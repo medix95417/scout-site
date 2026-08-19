@@ -168,13 +168,18 @@ Set these for production:
   `SMTP_PASSWORD` is the one exception: it's only ever read from this
   file, never from the database, so it still needs a restart to change
   (see README.md's "Also added post-Phase-2" section on why).
-- `S3_ACCESS_KEY` / `S3_SECRET_KEY` — generate with `openssl rand -base64 24`
-  each. These back the bundled `minio` service (file library + event
-  photos — see README.md "Files"); don't leave them at the local-dev
-  defaults on a public server, same reasoning as `POSTGRES_PASSWORD`
-  above. Leave `S3_ENDPOINT`/`S3_BUCKET`/`S3_USE_SSL` as-is unless you're
-  pointing at a real cloud bucket instead of the bundled MinIO (see
-  `.env.example`'s comment on that).
+- `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` — the file
+  library and event photos (see README.md "Files") need an S3-compatible
+  bucket you already run or manage — a self-hosted MinIO, AWS S3,
+  Cloudflare R2, etc. There's no bundled object-storage service in
+  `docker-compose.yml`; point `S3_ENDPOINT` at yours, and make sure the
+  bucket named by `S3_BUCKET` already exists (this app doesn't create it).
+  If `S3_ENDPOINT` is on the same Docker host, either publish its port to
+  the `app` container or put both on the same Docker network so the
+  hostname actually resolves. Leave `S3_ENDPOINT` blank to skip file
+  storage for now — the rest of the site works fine, and the file
+  library/event photos just show a clear "not configured yet" notice
+  instead of an error.
 
 Lock the file down since it now holds real secrets:
 
@@ -252,15 +257,13 @@ resulting file *off* this VPS somewhere (another machine, cloud storage,
 etc.). A backup that only lives on the same server it's backing up
 doesn't protect you if that server is lost.
 
-Uploaded files and event photos live separately, in the `minio` service's
-`minio_data` volume (Postgres only stores their metadata — see
-`internal/storage`) — back that up too, e.g.:
-
-```bash
-docker compose exec -T minio tar -cf - -C /data . > files-backup-$(date +%F).tar
-```
-
-Same rule applies: copy it off-server, not just onto this same disk.
+Uploaded files and event photos live separately, in whatever S3-compatible
+bucket you pointed `S3_ENDPOINT` at (Postgres only stores their metadata —
+see `internal/storage`). Back that bucket up the same way you'd back up
+any other data in it — how depends on what's serving it (your own MinIO
+instance, your cloud provider's own backup/versioning tools, etc.), so
+there's no one command to give here. Same rule applies regardless: don't
+rely on a single copy with no offsite backup.
 
 **Event reminder emails** — if you've configured `SMTP_HOST` (step 5),
 reminder emails don't send themselves; something needs to run the
@@ -342,7 +345,7 @@ docker compose down
 
 ## Security checklist
 
-- [ ] `.env` has a real `SESSION_SECRET`, `POSTGRES_PASSWORD`, `S3_ACCESS_KEY`, and `S3_SECRET_KEY` (not the local-dev defaults).
+- [ ] `.env` has a real `SESSION_SECRET` and `POSTGRES_PASSWORD` (not the local-dev defaults). If file storage is in use, `S3_ACCESS_KEY`/`S3_SECRET_KEY` are the real credentials for your bucket, not left blank.
 - [ ] `.env` is `chmod 600` and never committed to git (already in `.gitignore`).
 - [ ] `COOKIE_DOMAIN=.47-yonkers.org` is set.
 - [ ] `ufw` (or your firewall of choice) only allows SSH, 80, and 443 from the internet.

@@ -92,17 +92,25 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 
 	data := struct {
 		baseData
-		Files     []fileRow
-		Events    []calendar.Event
-		CanManage bool
+		Files             []fileRow
+		Events            []calendar.Event
+		CanManage         bool
+		StorageConfigured bool
 	}{
-		baseData:  h.base(r, "Files"),
-		Files:     rows,
-		Events:    events,
-		CanManage: canManage,
+		baseData:          h.base(r, "Files"),
+		Files:             rows,
+		Events:            events,
+		CanManage:         canManage,
+		StorageConfigured: h.Storage != nil,
 	}
 	h.render(w, h.fileLibrary, data)
 }
+
+// storageUnavailableMsg is shown instead of doing any actual storage I/O
+// when h.Storage is nil (no S3_ENDPOINT configured) — the rest of the site
+// keeps working (see internal/storage.New's doc comment); only these
+// upload/download/delete actions need to fail clearly instead of crashing.
+const storageUnavailableMsg = "File storage isn't configured for this site yet — an admin needs to set S3_ENDPOINT/S3_ACCESS_KEY/S3_SECRET_KEY (see DEPLOY.md)."
 
 func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
@@ -114,6 +122,10 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 	roles, err := h.rolesFor(r.Context(), user, unit.ID)
 	if err != nil || !units.CanEditUnitContent(roles) {
 		http.Error(w, "you don't have permission to upload files", http.StatusForbidden)
+		return
+	}
+	if h.Storage == nil {
+		http.Error(w, storageUnavailableMsg, http.StatusServiceUnavailable)
 		return
 	}
 
@@ -206,6 +218,10 @@ func (h *Handlers) FileDownload(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?next=/files", http.StatusSeeOther)
 		return
 	}
+	if h.Storage == nil {
+		http.Error(w, storageUnavailableMsg, http.StatusServiceUnavailable)
+		return
+	}
 
 	f, found, err := files.Get(r.Context(), h.Pool, r.PathValue("id"), unit.ID)
 	if err != nil {
@@ -263,12 +279,15 @@ func (h *Handlers) FileDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if err := h.Storage.Delete(r.Context(), f.StorageKey); err != nil {
-		// The metadata row is already gone — the file is effectively
-		// deleted from the site's point of view — so this only leaves an
-		// orphaned object in the bucket, logged for later cleanup rather
-		// than surfaced as a failure the leader can't do anything about.
-		log.Printf("web: deleting file object from storage: %v", err)
+	if h.Storage != nil {
+		if err := h.Storage.Delete(r.Context(), f.StorageKey); err != nil {
+			// The metadata row is already gone — the file is effectively
+			// deleted from the site's point of view — so this only leaves
+			// an orphaned object in the bucket, logged for later cleanup
+			// rather than surfaced as a failure the leader can't do
+			// anything about.
+			log.Printf("web: deleting file object from storage: %v", err)
+		}
 	}
 
 	http.Redirect(w, r, "/files", http.StatusSeeOther)
