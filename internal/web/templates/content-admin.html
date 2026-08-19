@@ -1,0 +1,56 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-2">Edit Homepage — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-6">
+    Changes save immediately and show up on the homepage right away — no
+    redeploy needed. Basic HTML (like <code>&lt;a&gt;</code> or
+    <code>&lt;strong&gt;</code>) is allowed since only leaders can edit this.
+  </p>
+
+  <div class="space-y-6">
+    {{range .Sections}}
+      <section class="rounded-lg border border-gray-200 bg-white p-4">
+        <h2 class="text-lg font-semibold mb-1">{{.Label}}</h2>
+        {{if .Help}}<p class="text-xs text-gray-500 mb-2">{{.Help}}</p>{{end}}
+        {{if not .Saved}}
+          {{if eq .Kind ""}}
+            <p class="text-xs text-amber-700 mb-2">
+              Not set yet — the placeholder below is what's currently showing on the live site.
+            </p>
+          {{else if and (eq .Kind "url") .Placeholder}}
+            <p class="text-xs text-amber-700 mb-2">
+              Not set yet — a stock photo is currently showing on the live site until you add your own.
+            </p>
+          {{end}}
+        {{end}}
+        {{if and (eq .Kind "url") (or .Body .Placeholder)}}
+          <img src="{{if .Body}}{{.Body}}{{else}}{{.Placeholder}}{{end}}" alt=""
+               class="mb-2 h-28 w-full max-w-xs rounded-md border border-gray-200 object-cover">
+        {{end}}
+        <form method="post" action="/admin/home/{{.Slug}}" class="space-y-2">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          {{if eq .Kind "url"}}
+            <input
+              type="url"
+              name="body"
+              value="{{.Body}}"
+              class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              placeholder="https://…"
+            >
+          {{else}}
+            <textarea
+              name="body"
+              rows="4"
+              class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              placeholder="{{.Placeholder}}"
+            >{{.Body}}</textarea>
+          {{end}}
+          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+            Save
+          </button>
+        </form>
+      </section>
+    {{end}}
+  </div>
+
+  <p class="mt-6 text-sm"><a href="/" class="underline" style="color: var(--unit-color);">&larr; Back to homepage</a></p>
+{{end}}

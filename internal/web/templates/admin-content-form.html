@@ -1,0 +1,54 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-2">{{if .IsEdit}}Edit{{else}}New{{end}} {{.Kind.Label}} — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-6">
+    {{if .IsEdit}}
+      Saving keeps its current {{if eq .Post.Status "published"}}published{{else}}draft{{end}} state — use the
+      {{if eq .Post.Status "published"}}Unpublish{{else}}Publish{{end}} button on the
+      <a href="{{.Kind.BasePath}}" class="underline" style="color: var(--unit-color);">{{.Kind.LabelPlural}} list</a> to change that.
+    {{else}}
+      Saves as a draft — nothing families see until you publish it from the {{.Kind.LabelPlural}} list.
+    {{end}}
+  </p>
+
+  <form method="post" action="{{if .IsEdit}}{{.Kind.BasePath}}/{{.Post.ID}}{{else}}{{.Kind.BasePath}}{{end}}" class="space-y-4 max-w-2xl">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="title">Title</label>
+      <input
+        id="title" name="title" type="text" required
+        value="{{.Post.Title}}"
+        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+      >
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="body">{{.Kind.BodyLabel}}</label>
+      <p class="text-xs text-gray-500 mb-2">{{.Kind.BodyHelp}}</p>
+      <textarea
+        id="body" name="body" rows="8"
+        placeholder="{{.Kind.BodyPlaceholder}}"
+        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
+      >{{.Post.Body}}</textarea>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1">Visibility</label>
+      <div class="flex gap-4 text-sm">
+        <label class="flex items-center gap-2">
+          <input type="radio" name="visibility" value="members" {{if ne .Post.Visibility "public"}}checked{{end}}>
+          Members only — signed-in families
+        </label>
+        <label class="flex items-center gap-2">
+          <input type="radio" name="visibility" value="public" {{if eq .Post.Visibility "public"}}checked{{end}}>
+          Public — visible to anyone, even signed out
+        </label>
+      </div>
+    </div>
+
+    <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+      Save
+    </button>
+    <a href="{{.Kind.BasePath}}" class="text-sm underline ml-2">Cancel</a>
+  </form>
+{{end}}

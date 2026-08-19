@@ -1,0 +1,107 @@
+{{define "content"}}
+  <p class="mb-4"><a href="/admin/roster" class="text-sm underline" style="color: var(--unit-color);">&larr; Back to roster</a></p>
+  <h1 class="text-2xl font-bold mb-1">{{.Member.FirstName}} {{.Member.LastName}}</h1>
+  <p class="text-sm text-gray-500 mb-6">{{.Member.FamilyName}}</p>
+
+  <div class="grid gap-6 sm:grid-cols-2">
+    <section class="rounded-lg border border-gray-200 bg-white p-4">
+      <h2 class="text-lg font-semibold mb-3">Details</h2>
+      <form method="post" action="/admin/roster/members/{{.Member.ID}}" class="space-y-2">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="flex gap-2">
+          <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="first_name" value="{{.Member.FirstName}}" required>
+          <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="last_name" value="{{.Member.LastName}}" required>
+        </div>
+        <div class="flex gap-4 text-sm">
+          <label class="flex items-center gap-1"><input type="radio" name="member_type" value="youth" {{if eq .Member.MemberType "youth"}}checked{{end}}> Youth</label>
+          <label class="flex items-center gap-1"><input type="radio" name="member_type" value="adult" {{if eq .Member.MemberType "adult"}}checked{{end}}> Adult</label>
+        </div>
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+          Save
+        </button>
+      </form>
+
+      <div id="password" class="mt-4 pt-4 border-t border-gray-100">
+        {{if eq .Member.MemberType "adult"}}
+          <p class="text-xs text-gray-500 mb-2">
+            If this family is locked out of their shared login, generate a new temporary password for it. You'll
+            see it once — share it with them directly. A family member can also reset this themselves anytime from
+            <a href="/forgot-password" class="underline" style="color: var(--unit-color);">Forgot your password?</a>
+            on the login page, if they still have access to their email.
+          </p>
+          <form method="post" action="/admin/roster/members/{{.Member.ID}}/reset-password">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <button type="submit" class="rounded-md border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50">
+              Reset Family's Shared Login Password
+            </button>
+          </form>
+        {{end}}
+
+        <div class="{{if eq .Member.MemberType "adult"}}mt-4 pt-4 border-t border-gray-100{{end}}">
+          <h3 class="text-sm font-semibold mb-2">Individual Login</h3>
+          {{if .HasIndividualLogin}}
+            <p class="text-xs text-gray-500 mb-2">
+              {{.Member.FirstName}} has their own login (<span class="font-mono">{{.IndividualLoginEmail}}</span>),
+              separate from the family's shared one — it sees only their own stuff (their own account balance,
+              RSVPs, and any roles they personally hold), not whatever the family login can otherwise do.
+            </p>
+            <form method="post" action="/admin/roster/members/{{.Member.ID}}/login/reset-password">
+              <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+              <button type="submit" class="rounded-md border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50">
+                Reset Individual Login Password
+              </button>
+            </form>
+          {{else}}
+            <p class="text-xs text-gray-500 mb-2">
+              {{.Member.FirstName}} doesn't have their own login yet — they can only be reached through the
+              family's shared login. Give them one (useful for a Scout who wants to check their own account or
+              RSVP themselves, or a family with more than one Scout who'd rather each log in separately).
+            </p>
+            <form method="post" action="/admin/roster/members/{{.Member.ID}}/login" class="flex gap-2">
+              <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+              <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Login email" required>
+              <button type="submit" class="rounded-md px-4 py-2 text-white text-sm whitespace-nowrap" style="background-color: var(--unit-color);">
+                Create Individual Login
+              </button>
+            </form>
+          {{end}}
+        </div>
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-gray-200 bg-white p-4">
+      <h2 class="text-lg font-semibold mb-3">Roles</h2>
+      {{if .Roles}}
+        <ul class="space-y-2 mb-4">
+          {{range .Roles}}
+            <li class="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-sm">
+              <span>{{.Role}}{{if .SubGroupName}} — {{.SubGroupName}}{{end}}</span>
+              <form method="post" action="/admin/roster/roles/{{.ID}}/delete">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="text-xs text-red-600 hover:underline">Remove</button>
+              </form>
+            </li>
+          {{end}}
+        </ul>
+      {{else}}
+        <p class="text-sm text-gray-500 mb-4">No roles yet — this member won't appear on the public roster until they have at least one.</p>
+      {{end}}
+
+      <form method="post" action="/admin/roster/members/{{.Member.ID}}/roles" class="space-y-2">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="flex gap-2">
+          <select name="sub_group_id" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm">
+            {{if .Scope.UnitWide}}<option value="">No {{.SubGroupNoun}}</option>{{end}}
+            {{range .AddableSubGroups}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+          </select>
+          <select name="role" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+            {{range .AllowedRoles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+          </select>
+        </div>
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--unit-color);">
+          Add Role
+        </button>
+      </form>
+    </section>
+  </div>
+{{end}}

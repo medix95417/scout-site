@@ -1,0 +1,35 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-1">My Accounts — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-6">
+    Every individual Scout account tied to your login in this unit. Click one to see its full statement or push
+    money into an open trip fund.
+  </p>
+
+  {{if .Accounts}}
+    <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <thead class="bg-gray-100 text-left">
+        <tr>
+          <th class="px-4 py-2">Scout</th>
+          <th class="px-4 py-2">Account</th>
+          <th class="px-4 py-2 text-right">Balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Accounts}}
+          <tr class="border-t border-gray-100">
+            <td class="px-4 py-2">{{.MemberName}}</td>
+            <td class="px-4 py-2">
+              <a href="/treasury/accounts/{{.ID}}" class="underline" style="color: var(--unit-color);">{{.Name}}</a>
+            </td>
+            <td class="px-4 py-2 text-right font-mono">{{.BalanceDisplay}}</td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="text-sm text-gray-500">
+      No individual Scout account yet — one gets created automatically the first time a fundraiser credit or other
+      deposit is posted to a Scout's name.
+    </p>
+  {{end}}
+{{end}}

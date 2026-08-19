@@ -1,0 +1,27 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-6">Roster — {{.Unit.Name}}</h1>
+  {{if .Roster}}
+    <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <thead class="bg-gray-100 text-left">
+        <tr>
+          <th class="px-4 py-2">Name</th>
+          <th class="px-4 py-2">Type</th>
+          <th class="px-4 py-2">Den/Patrol</th>
+          <th class="px-4 py-2">Roles</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Roster}}
+          <tr class="border-t border-gray-100">
+            <td class="px-4 py-2">{{.FirstName}} {{.LastName}}</td>
+            <td class="px-4 py-2 capitalize">{{.MemberType}}</td>
+            <td class="px-4 py-2">{{if .SubGroupName}}{{.SubGroupName}}{{else}}—{{end}}</td>
+            <td class="px-4 py-2">{{range .Roles}}<span class="inline-block rounded-full bg-gray-100 px-2 py-0.5 mr-1 text-xs">{{.}}</span>{{end}}</td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="text-sm text-gray-500">No members recorded for this unit yet.</p>
+  {{end}}
+{{end}}

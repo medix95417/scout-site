@@ -1,0 +1,145 @@
+{{define "content"}}
+  {{/* Structure modeled on pack6crestwood.org: a full-bleed hero banner,
+       a row of quick-link cards, a bulleted "Our Program" section with a
+       photo, meeting/leadership info, a two-photo gallery strip, upcoming
+       public events, and a closing CTA band — adapted to only link to
+       pages this site actually has. Sections use the "break out of the
+       centered <main> column" trick (relative left-1/2 -mx-[50vw] w-screen)
+       to go edge-to-edge even though the rest of the site stays in a
+       centered column; see base.html for the overflow-x-hidden that keeps
+       that trick from causing a stray horizontal scrollbar. */}}
+
+  <!-- Hero -->
+  <section
+    class="relative left-1/2 right-1/2 -mx-[50vw] w-screen -mt-8 mb-12 bg-cover bg-center text-white"
+    style="{{if .HeroImageURL}}background-image: linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.5)), url('{{.HeroImageURL}}');{{else}}background-color: var(--unit-color);{{end}}"
+  >
+    <div class="relative max-w-3xl mx-auto px-4 py-28 sm:py-36 text-center">
+      {{if .SocialURL}}
+        <a href="{{.SocialURL}}" target="_blank" rel="noopener"
+           class="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/30 px-3 py-1 text-xs hover:bg-black/50">
+          Follow us &#8599;
+        </a>
+      {{end}}
+      <h1 class="text-4xl sm:text-6xl font-bold mb-4 drop-shadow-lg">{{.Unit.Name}}</h1>
+      <p class="text-lg sm:text-2xl max-w-2xl mx-auto opacity-95 drop-shadow whitespace-pre-line">{{.Hero}}</p>
+      {{if not .LoggedIn}}
+        <div class="mt-8 flex flex-wrap justify-center gap-3">
+          <a href="/login" class="rounded-md bg-white px-6 py-2.5 font-medium shadow" style="color: var(--unit-color);">Family Log In</a>
+          <a href="#join" class="rounded-md border-2 border-white px-6 py-2.5 font-medium hover:bg-white/10">How to Join</a>
+        </div>
+      {{end}}
+    </div>
+  </section>
+
+  {{if .CanEditContent}}
+    <div class="mb-6 text-right">
+      <a href="/admin/home" class="text-sm underline" style="color: var(--unit-color);">Edit homepage content &amp; photos</a>
+    </div>
+  {{end}}
+
+  <!-- Quick-link cards -->
+  <div class="grid gap-4 sm:grid-cols-3 mb-14">
+    <a href="/calendar" class="rounded-xl border border-gray-200 bg-white p-5 text-center hover:shadow-md transition-shadow">
+      <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-2xl">&#128197;</div>
+      <div class="font-semibold">Upcoming Events</div>
+      <div class="text-sm text-gray-500 mt-1">See the full calendar</div>
+    </a>
+    <a href="#join" class="rounded-xl border border-gray-200 bg-white p-5 text-center hover:shadow-md transition-shadow">
+      <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-sky-100 text-2xl">&#129309;</div>
+      <div class="font-semibold">How to Join</div>
+      <div class="text-sm text-gray-500 mt-1">Meeting info &amp; contacts</div>
+    </a>
+    <a href="/login" class="rounded-xl border border-gray-200 bg-white p-5 text-center hover:shadow-md transition-shadow">
+      <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl">&#128101;</div>
+      <div class="font-semibold">Family Portal</div>
+      <div class="text-sm text-gray-500 mt-1">Roster, RSVPs &amp; more</div>
+    </a>
+  </div>
+
+  <!-- Our Program: bullets + photo -->
+  <section class="mb-14 grid gap-8 sm:grid-cols-2 items-center">
+    <div>
+      <h2 class="text-xl font-bold tracking-wide mb-4">OUR PROGRAM</h2>
+      {{if .ProgramItems}}
+        <ul class="space-y-2 mb-5">
+          {{range .ProgramItems}}
+            <li class="flex items-start gap-2 text-gray-700">
+              <span class="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full" style="background-color: var(--unit-color);"></span>
+              <span>{{.}}</span>
+            </li>
+          {{end}}
+        </ul>
+      {{end}}
+      <a href="#join" class="inline-block rounded-md px-5 py-2 text-white text-sm font-medium" style="background-color: var(--unit-color);">
+        Join {{if eq .Unit.UnitType "troop"}}Scouts BSA{{else}}Cub Scouts{{end}}! Contact Us!
+      </a>
+    </div>
+    {{if .ProgramImageURL}}
+      <img src="{{.ProgramImageURL}}" alt="" class="rounded-xl shadow-md w-full h-64 object-cover">
+    {{end}}
+  </section>
+
+  <!-- Meeting info + leadership/contact -->
+  <div id="join" class="grid gap-6 sm:grid-cols-2 mb-14">
+    <section class="rounded-xl border border-gray-200 bg-white p-5">
+      <h2 class="text-lg font-semibold mb-2">Meeting Info</h2>
+      <p class="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{{.Meeting}}</p>
+    </section>
+    <section class="rounded-xl border border-gray-200 bg-white p-5">
+      <h2 class="text-lg font-semibold mb-2">Leadership &amp; Contact</h2>
+      <p class="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{{.Leadership}}</p>
+    </section>
+  </div>
+
+  <!-- Gallery strip: full-bleed, two photos side by side -->
+  {{if or .Gallery1URL .Gallery2URL}}
+    <section class="relative left-1/2 right-1/2 -mx-[50vw] w-screen mb-14 grid grid-cols-1 sm:grid-cols-2">
+      {{if .Gallery1URL}}
+        <div class="relative h-56 sm:h-72 bg-cover bg-center" style="background-image: url('{{.Gallery1URL}}');">
+          <div class="absolute inset-0 bg-black/25 flex items-end p-4">
+            <span class="text-white font-semibold text-lg drop-shadow">The Great Outdoors</span>
+          </div>
+        </div>
+      {{end}}
+      {{if .Gallery2URL}}
+        <div class="relative h-56 sm:h-72 bg-cover bg-center" style="background-image: url('{{.Gallery2URL}}');">
+          <div class="absolute inset-0 bg-black/25 flex items-end p-4">
+            <span class="text-white font-semibold text-lg drop-shadow">{{.Gallery2Caption}}</span>
+          </div>
+        </div>
+      {{end}}
+    </section>
+  {{end}}
+
+  <!-- Public calendar events pass through to the homepage. -->
+  <section class="mb-14">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-xl font-semibold">Upcoming Events</h2>
+      <a href="/calendar" class="text-sm underline whitespace-nowrap" style="color: var(--unit-color);">View full calendar &rarr;</a>
+    </div>
+    {{if .Events}}
+      <ul class="grid gap-3 sm:grid-cols-2">
+        {{range .Events}}
+          <li class="rounded-xl border border-gray-200 bg-white p-4">
+            <div class="font-medium">{{.Title}}</div>
+            <div class="text-sm text-gray-500">{{.DateRangeDisplay}}{{if .Location}} · {{.Location}}{{end}}</div>
+            {{if .Description}}<p class="text-sm mt-1 text-gray-600">{{.Description}}</p>{{end}}
+          </li>
+        {{end}}
+      </ul>
+    {{else}}
+      <p class="text-sm text-gray-500">No public events scheduled right now — check back soon.</p>
+    {{end}}
+  </section>
+
+  <!-- Closing CTA band, echoing the hero, full-bleed -->
+  <section class="relative left-1/2 right-1/2 -mx-[50vw] w-screen mb-2 px-4 py-12 text-center text-white" style="background-color: var(--unit-color);">
+    {{if .LoggedIn}}
+      <p class="text-lg font-medium">Glad to have you as part of {{.Unit.Name}}!</p>
+    {{else}}
+      <p class="text-lg font-medium mb-4">Ready to join the adventure?</p>
+      <a href="/login" class="rounded-md bg-white px-6 py-2.5 font-medium" style="color: var(--unit-color);">Family Log In</a>
+    {{end}}
+  </section>
+{{end}}

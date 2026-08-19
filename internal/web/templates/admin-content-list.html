@@ -1,0 +1,50 @@
+{{define "content"}}
+  <div class="flex items-center justify-between mb-2">
+    <h1 class="text-2xl font-bold">Manage {{.Kind.LabelPlural}} — {{.Unit.Name}}</h1>
+    <a href="{{.Kind.BasePath}}/new" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+      + New {{.Kind.Label}}
+    </a>
+  </div>
+  <p class="text-sm text-gray-600 mb-6">
+    New {{.Kind.LabelPlural}} start as a draft — nothing families see until you publish it.
+    <a href="{{.Kind.PublicPath}}" class="underline" style="color: var(--unit-color);">View the public {{.Kind.LabelPlural}} page &rarr;</a>
+  </p>
+
+  {{if .Items}}
+    <div class="space-y-3">
+      {{range .Items}}
+        <div class="rounded-lg border border-gray-200 bg-white p-4 flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <a href="{{$.Kind.BasePath}}/{{.ID}}/edit" class="font-medium hover:underline truncate" style="color: var(--unit-color);">{{.Title}}</a>
+              {{if eq .Status "published"}}
+                <span class="rounded-full bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5">Published</span>
+              {{else}}
+                <span class="rounded-full bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5">Draft</span>
+              {{end}}
+              {{if eq .Visibility "public"}}
+                <span class="rounded-full bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5">Public</span>
+              {{else}}
+                <span class="rounded-full bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5">Members only</span>
+              {{end}}
+            </div>
+            <div class="text-xs text-gray-400 mt-1">Updated {{.UpdatedOn}}</div>
+          </div>
+          <div class="flex-shrink-0 flex items-center gap-2">
+            <a href="{{$.Kind.BasePath}}/{{.ID}}/edit" class="text-sm underline" style="color: var(--unit-color);">Edit</a>
+            <form method="post" action="{{$.Kind.BasePath}}/{{.ID}}/publish">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              {{if eq .Status "published"}}
+                <button type="submit" class="rounded-full bg-gray-100 text-gray-600 text-xs font-medium px-3 py-1.5 hover:bg-gray-200">Unpublish</button>
+              {{else}}
+                <button type="submit" class="rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1.5 hover:bg-green-200">Publish</button>
+              {{end}}
+            </form>
+          </div>
+        </div>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="text-sm text-gray-500">No {{.Kind.LabelPlural}} yet — click "+ New {{.Kind.Label}}" to create the first one.</p>
+  {{end}}
+{{end}}

@@ -1,0 +1,12 @@
+# Reverse proxy + automatic HTTPS for both subdomains. Only does anything
+# useful once real DNS for these hostnames points at this machine — for
+# local development, bypass this entirely and hit the app service directly
+# (see README "Local development").
+
+{$TROOP_HOST} {
+	reverse_proxy app:8080
+}
+
+{$PACK_HOST} {
+	reverse_proxy app:8080
+}

@@ -1,0 +1,73 @@
+# The ONE file for both local development and production (a VPS) — see
+# README.md "Running with Docker Compose" (local) and "Running on a VPS"
+# (production). Everything that differs between the two environments comes
+# from .env, not from a second compose file:
+#   - locally: leave POSTGRES_PASSWORD/COOKIE_DOMAIN at their defaults
+#   - on a VPS: set a real POSTGRES_PASSWORD, SESSION_SECRET, and
+#     COOKIE_DOMAIN=.47-yonkers.org so Caddy's certificates and the shared
+#     login cookie both work against real DNS.
+#
+# The `caddy` service only does something useful once real DNS points at
+# this host — locally, just talk to the `app` service on localhost:8080
+# (see README for the /etc/hosts-based approach to testing both subdomains
+# locally without Caddy).
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scoutsite
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scoutsite}
+      POSTGRES_DB: scoutsite
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432" # bound to localhost only — never exposed to the public internet, even on a VPS
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scoutsite"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://scoutsite:${POSTGRES_PASSWORD:-scoutsite}@db:5432/scoutsite?sslmode=disable
+      LISTEN_ADDR: ":8080"
+      SESSION_SECRET: ${SESSION_SECRET}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_TLS_MODE: ${SMTP_TLS_MODE:-starttls}
+      REMINDER_WINDOW_HOURS: ${REMINDER_WINDOW_HOURS:-24}
+    ports:
+      - "127.0.0.1:8080:8080" # localhost only — the public path is always through Caddy (80/443); this is just for local debugging (curl/SSH tunnel)
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      TROOP_HOST: ${TROOP_HOST:-troop.47-yonkers.org}
+      PACK_HOST: ${PACK_HOST:-pack.47-yonkers.org}
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

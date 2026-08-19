@@ -1,0 +1,76 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Unit.Name}}{{if .PageTitle}} — {{.PageTitle}}{{end}}</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.3/htmx.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --unit-color: {{.Unit.ThemeColor}}; }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-50 text-gray-900 overflow-x-hidden">
+  <!-- overflow-x-hidden guards against the 1px-ish horizontal scroll some
+       browsers introduce when a full-bleed section (100vw) meets a page
+       that also has a vertical scrollbar — see home.html's hero/gallery
+       sections, which break out of the centered <main> column. -->
+  <header class="text-white" style="background-color: var(--unit-color);">
+    <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+      <a href="/" class="text-lg font-semibold">{{.Unit.Name}}</a>
+      <nav class="flex gap-4 text-sm">
+        <a href="/calendar" class="hover:underline">Calendar</a>
+        <a href="/news" class="hover:underline">News</a>
+        <a href="/gallery" class="hover:underline">Gallery</a>
+        {{if .LoggedIn}}
+          <a href="/roster" class="hover:underline">Roster</a>
+          <a href="/accounts" class="hover:underline">My Accounts</a>
+          {{if .CanEditContent}}
+            <a href="/admin/roster" class="hover:underline">Manage Roster</a>
+            <a href="/admin/home" class="hover:underline">Edit Homepage</a>
+            <a href="/admin/news" class="hover:underline">Manage News</a>
+            <a href="/admin/gallery" class="hover:underline">Manage Gallery</a>
+          {{end}}
+          {{if .CanManageLedger}}
+            <a href="/treasury" class="hover:underline">Treasury</a>
+          {{end}}
+          {{if or .CanEditContent .CanManageLedger}}
+            <a href="/audit" class="hover:underline">Activity Log</a>
+          {{end}}
+          {{if .IsSuperAdmin}}
+            <a href="/admin/settings" class="hover:underline">Site Settings</a>
+          {{end}}
+          <a href="/settings/2fa" class="hover:underline">Security</a>
+          <form method="post" action="/logout" class="inline">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <button type="submit" class="hover:underline">Log out</button>
+          </form>
+        {{else}}
+          <a href="/login" class="hover:underline">Log in</a>
+        {{end}}
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-4 py-8">
+    {{if .NeedsTwoFactorSetup}}
+      <div class="mb-4 rounded-md bg-red-50 border border-red-300 px-4 py-2 text-red-900 text-sm flex items-center justify-between gap-3">
+        <span>Your login can access unit funds — set up two-factor authentication to keep it secure.</span>
+        <a href="/settings/2fa" class="whitespace-nowrap underline font-medium">Set up now</a>
+      </div>
+    {{end}}
+    {{if .Flash}}
+      <div class="mb-4 rounded-md bg-amber-100 border border-amber-300 px-4 py-2 text-amber-900 text-sm">
+        {{.Flash}}
+      </div>
+    {{end}}
+    {{template "content" .}}
+  </main>
+
+  <footer class="max-w-4xl mx-auto px-4 py-8 text-xs text-gray-400">
+    {{.Unit.Name}} — part of the 47-Yonkers Scouting sites (Phase 1 &amp; 2)
+  </footer>
+</body>
+</html>
+{{end}}
