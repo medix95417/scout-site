@@ -77,6 +77,8 @@ type Handlers struct {
 
 	rosterImport        *template.Template
 	rosterImportResults *template.Template
+
+	permissionSlip *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -183,6 +185,9 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.rosterImportResults, err = parse("admin-roster-import-results.html"); err != nil {
 		return nil, err
 	}
+	if h.permissionSlip, err = parse("permission-slip.html"); err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
@@ -202,6 +207,9 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /calendar", h.CalendarCreate)
 	mux.HandleFunc("POST /calendar/{id}/rsvp", h.CalendarRSVP)
 	mux.HandleFunc("POST /calendar/approvals/{id}/decide", h.ApprovalDecide)
+	mux.HandleFunc("GET /calendar/{id}/permission-slip", h.PermissionSlipView)
+	mux.HandleFunc("POST /calendar/{id}/permission-slip", h.PermissionSlipSave)
+	mux.HandleFunc("POST /calendar/{id}/permission-slip/sign", h.PermissionSlipSign)
 	mux.HandleFunc("GET /audit", h.AuditView)
 	mux.HandleFunc("GET /audit/export.csv", h.AuditExport)
 	mux.HandleFunc("GET /accounts", h.AccountsView)

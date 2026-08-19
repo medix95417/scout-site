@@ -99,11 +99,12 @@
           <div class="font-medium">{{.Title}} {{if eq .Visibility "public"}}<span class="text-xs text-gray-400">(public)</span>{{end}}</div>
           <div class="text-sm text-gray-500">{{.DateRangeDisplay}}{{if .Location}} · {{.Location}}{{end}}</div>
           {{if .Description}}<p class="text-sm mt-1">{{.Description}}</p>{{end}}
-          <form method="post" action="/calendar/{{.ID}}/rsvp" class="mt-2 flex gap-2">
+          <form method="post" action="/calendar/{{.ID}}/rsvp" class="mt-2 flex gap-2 items-center">
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <button name="response" value="yes" class="text-xs rounded-full border px-2 py-1">I'm going</button>
             <button name="response" value="maybe" class="text-xs rounded-full border px-2 py-1">Maybe</button>
             <button name="response" value="no" class="text-xs rounded-full border px-2 py-1">Can't make it</button>
+            <a href="/calendar/{{.ID}}/permission-slip" class="text-xs underline ml-1" style="color: var(--unit-color);">Permission slip</a>
           </form>
         </li>
       {{end}}
