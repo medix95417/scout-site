@@ -21,6 +21,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/content"
 	"github.com/47-yonkers/scout-site/internal/family"
+	"github.com/47-yonkers/scout-site/internal/files"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
 
@@ -39,6 +40,7 @@ type contentKind struct {
 	BodyLabel       string
 	BodyHelp        string
 	BodyPlaceholder string
+	HasImagePicker  bool // true for galleryKind — offers the "choose from library" thumbnail strip alongside the body textarea (see admin-content-form.html)
 }
 
 var (
@@ -53,8 +55,9 @@ var (
 		PageType: "gallery", Label: "Gallery", LabelPlural: "Galleries",
 		BasePath: "/admin/gallery", PublicPath: "/gallery",
 		BodyLabel:       "Photos",
-		BodyHelp:        "One photo per line: paste a link to an image hosted elsewhere (e.g. a photo shared publicly from Google Photos/Drive), optionally followed by | and a caption — e.g. https://example.com/photo.jpg | Sam at the summit.",
+		BodyHelp:        "One photo per line: paste a link to an image hosted elsewhere (e.g. a photo shared publicly from Google Photos/Drive), or click one from your library below — either way, optionally followed by | and a caption, e.g. https://example.com/photo.jpg | Sam at the summit.",
 		BodyPlaceholder: "https://example.com/photo1.jpg | Setting up camp\nhttps://example.com/photo2.jpg",
+		HasImagePicker:  true,
 	}
 )
 
@@ -323,12 +326,22 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 		post.Visibility = "members" // same default as calendar events — see events table's DEFAULT 'members'
 	}
 
+	var publicImages []files.PickerImage
+	if kind.HasImagePicker {
+		var err error
+		publicImages, err = files.ListPublicImagesForUnit(r.Context(), h.Pool, unit.ID)
+		if err != nil {
+			log.Printf("web: loading public images: %v", err)
+		}
+	}
+
 	data := struct {
 		baseData
-		Kind   contentKind
-		IsEdit bool
-		Post   content.Post
-	}{baseData: h.base(r, kind.Label), Kind: kind, IsEdit: isEdit, Post: post}
+		Kind         contentKind
+		IsEdit       bool
+		Post         content.Post
+		PublicImages []files.PickerImage
+	}{baseData: h.base(r, kind.Label), Kind: kind, IsEdit: isEdit, Post: post, PublicImages: publicImages}
 	h.render(w, h.adminContentFormTmpl, data)
 }
 

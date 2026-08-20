@@ -136,7 +136,7 @@ func templateDict(pairs ...any) (map[string]any, error) {
 // New parses templates and returns a ready-to-use Handlers.
 func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *mailer.Mailer, store *storage.Store) (*Handlers, error) {
 	parse := func(page string) (*template.Template, error) {
-		return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/"+page)
+		return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/_image-picker.html", "templates/"+page)
 	}
 
 	h := &Handlers{Pool: pool, CookieDomain: cookieDomain, SecureCookie: secureCookie, Mailer: mail, Storage: store}

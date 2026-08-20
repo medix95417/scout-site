@@ -4,16 +4,8 @@
   <div class="text-xs text-gray-400 mb-6">{{.PostedOn}}</div>
 
   {{if .Photos}}
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-      {{range .Photos}}
-        <figure class="rounded-lg border border-gray-200 bg-white overflow-hidden">
-          <img src="{{.URL}}" alt="{{.Caption}}" class="w-full h-56 object-cover">
-          {{if .Caption}}
-            <figcaption class="p-2 text-xs text-gray-600">{{.Caption}}</figcaption>
-          {{end}}
-        </figure>
-      {{end}}
-    </div>
+    {{template "photoCarousel" (dict "Photos" .Photos "HeightClass" "h-80")}}
+    {{template "photoCarouselScript" .}}
   {{else}}
     <p class="text-sm text-gray-500">No photos in this gallery yet.</p>
   {{end}}
