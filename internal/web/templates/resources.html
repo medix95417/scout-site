@@ -26,7 +26,7 @@
           {{if .LibraryFiles}}
             <select class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="file_id">
               {{range .LibraryFiles}}
-                <option value="{{.ID}}">{{.Filename}}</option>
+                <option value="{{.ID}}">{{.DisplayLabel}}</option>
               {{end}}
             </select>
           {{else}}
@@ -70,7 +70,7 @@
               {{if .Description}}<p class="text-sm text-gray-600 mt-0.5">{{.Description}}</p>{{end}}
               <div class="text-xs text-gray-400 mt-0.5">
                 {{if .FileID}}
-                  <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 font-medium">{{.FileFilename}} · {{.SizeDisplay}}</span>
+                  <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 font-medium">{{.FileDisplayLabel}} · {{.SizeDisplay}}</span>
                 {{else}}
                   <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 font-medium">Link</span>
                 {{end}}

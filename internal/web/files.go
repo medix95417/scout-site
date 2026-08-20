@@ -150,6 +150,15 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Only applied when uploading exactly one file at a time — a single
+	// display_name field can't unambiguously label several files uploaded
+	// together in one submission, and a bulk upload can still be renamed
+	// afterward via FileSetDisplayName.
+	var displayName string
+	if len(uploaded) == 1 {
+		displayName = strings.TrimSpace(r.FormValue("display_name"))
+	}
+
 	var created []files.File
 	for _, fh := range uploaded {
 		if fh.Size > maxUploadFileSize {
@@ -179,6 +188,7 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 		f, err := files.Create(r.Context(), h.Pool, files.File{
 			UnitID:      unit.ID,
 			Filename:    fh.Filename,
+			DisplayName: displayName,
 			ContentType: contentType,
 			SizeBytes:   fh.Size,
 			StorageKey:  key,
@@ -337,6 +347,41 @@ func (h *Handlers) FileSetPublic(w http.ResponseWriter, r *http.Request) {
 
 	if err := files.SetPublic(r.Context(), h.Pool, fileID, unit.ID, !f.Public); err != nil {
 		log.Printf("web: setting file public flag: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/files", http.StatusSeeOther)
+}
+
+// FileSetDisplayName sets a friendlier label for a file — see
+// files.File.DisplayLabel — shown in place of the raw uploaded filename
+// wherever the file is listed or picked. Same CanEditUnitContent gate as
+// the file library's other management actions.
+func (h *Handlers) FileSetDisplayName(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	user, loggedIn := auth.UserFromContext(r.Context())
+	if !loggedIn {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
+		http.Error(w, "you don't have permission to manage files", http.StatusForbidden)
+		return
+	}
+
+	fileID := r.PathValue("id")
+	if _, found, err := files.Get(r.Context(), h.Pool, fileID, unit.ID); err != nil {
+		log.Printf("web: loading file: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	} else if !found {
+		http.NotFound(w, r)
+		return
+	}
+
+	if err := files.SetDisplayName(r.Context(), h.Pool, fileID, unit.ID, strings.TrimSpace(r.FormValue("display_name"))); err != nil {
+		log.Printf("web: setting file display name: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

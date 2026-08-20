@@ -24,6 +24,7 @@ type File struct {
 	ID          string
 	UnitID      string
 	Filename    string
+	DisplayName string // "" until a leader sets a friendlier label — see migration 0020 and DisplayLabel
 	ContentType string
 	SizeBytes   int64
 	StorageKey  string
@@ -31,6 +32,19 @@ type File struct {
 	UploadedBy  *string
 	CreatedAt   time.Time
 	Public      bool // see migration 0016 — whether FileDownload may serve this one without requiring login
+}
+
+// DisplayLabel is what to show for this file wherever it's listed or
+// picked — the leader-set DisplayName if there is one, the original
+// uploaded filename otherwise. Callers should always show this, never
+// Filename directly (Filename remains what FileDownload's
+// Content-Disposition header uses, so a saved copy keeps a sensible
+// on-disk name regardless of the display label).
+func (f File) DisplayLabel() string {
+	if f.DisplayName != "" {
+		return f.DisplayName
+	}
+	return f.Filename
 }
 
 // NewStorageKey generates a collision-proof object key for a new upload,
@@ -50,10 +64,10 @@ func NewStorageKey(unitID, filename string) string {
 // harmless).
 func Create(ctx context.Context, pool *pgxpool.Pool, f File) (File, error) {
 	err := pool.QueryRow(ctx, `
-		INSERT INTO files (unit_id, filename, content_type, size_bytes, storage_key, category, uploaded_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO files (unit_id, filename, display_name, content_type, size_bytes, storage_key, category, uploaded_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at
-	`, f.UnitID, f.Filename, f.ContentType, f.SizeBytes, f.StorageKey, f.Category, f.UploadedBy,
+	`, f.UnitID, f.Filename, f.DisplayName, f.ContentType, f.SizeBytes, f.StorageKey, f.Category, f.UploadedBy,
 	).Scan(&f.ID, &f.CreatedAt)
 	if err != nil {
 		return File{}, err
@@ -64,7 +78,7 @@ func Create(ctx context.Context, pool *pgxpool.Pool, f File) (File, error) {
 // ListForUnit returns every file belonging to a unit, most recent first.
 func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]File, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, unit_id, filename, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
+		SELECT id, unit_id, filename, display_name, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
 		FROM files WHERE unit_id = $1 ORDER BY created_at DESC
 	`, unitID)
 	if err != nil {
@@ -75,7 +89,7 @@ func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]File
 	var out []File
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
 			return nil, err
 		}
 		out = append(out, f)
@@ -90,9 +104,9 @@ func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]File
 func Get(ctx context.Context, pool *pgxpool.Pool, fileID, unitID string) (File, bool, error) {
 	var f File
 	err := pool.QueryRow(ctx, `
-		SELECT id, unit_id, filename, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
+		SELECT id, unit_id, filename, display_name, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
 		FROM files WHERE id = $1 AND unit_id = $2
-	`, fileID, unitID).Scan(&f.ID, &f.UnitID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public)
+	`, fileID, unitID).Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public)
 	if err != nil {
 		return File{}, false, nil //nolint:nilerr // "no such file in this unit" is a normal, expected outcome
 	}
@@ -107,13 +121,20 @@ func SetPublic(ctx context.Context, pool *pgxpool.Pool, fileID, unitID string, p
 	return err
 }
 
+// SetDisplayName sets (or clears, with "") a file's friendlier label — see
+// DisplayLabel. Scoped to unitID like every other file write here.
+func SetDisplayName(ctx context.Context, pool *pgxpool.Pool, fileID, unitID, displayName string) error {
+	_, err := pool.Exec(ctx, `UPDATE files SET display_name = $1 WHERE id = $2 AND unit_id = $3`, displayName, fileID, unitID)
+	return err
+}
+
 // ListPublicImagesForUnit lists a unit's public, image-content-type files —
 // what the "choose from library" picker on /admin/home offers for the
 // hero/program/gallery photo slots. Only ever returns what a leader has
 // already explicitly marked public (SetPublic); never all of ListForUnit.
 func ListPublicImagesForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]File, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, unit_id, filename, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
+		SELECT id, unit_id, filename, display_name, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
 		FROM files WHERE unit_id = $1 AND is_public = true AND content_type LIKE 'image/%'
 		ORDER BY created_at DESC
 	`, unitID)
@@ -125,7 +146,7 @@ func ListPublicImagesForUnit(ctx context.Context, pool *pgxpool.Pool, unitID str
 	var out []File
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
 			return nil, err
 		}
 		out = append(out, f)
@@ -195,7 +216,7 @@ func EventIDsForFile(ctx context.Context, pool *pgxpool.Pool, fileID string) ([]
 // link).
 func ListForEvent(ctx context.Context, pool *pgxpool.Pool, eventID string) ([]File, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT f.id, f.unit_id, f.filename, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at
+		SELECT f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at
 		FROM files f
 		JOIN event_files ef ON ef.file_id = f.id
 		WHERE ef.event_id = $1
@@ -209,7 +230,7 @@ func ListForEvent(ctx context.Context, pool *pgxpool.Pool, eventID string) ([]Fi
 	var out []File
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt); err != nil {
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, f)
@@ -226,7 +247,7 @@ func ListForEvents(ctx context.Context, pool *pgxpool.Pool, eventIDs []string) (
 		return out, nil
 	}
 	rows, err := pool.Query(ctx, `
-		SELECT ef.event_id, f.id, f.unit_id, f.filename, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at
+		SELECT ef.event_id, f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at
 		FROM files f
 		JOIN event_files ef ON ef.file_id = f.id
 		WHERE ef.event_id = ANY($1)
@@ -240,7 +261,7 @@ func ListForEvents(ctx context.Context, pool *pgxpool.Pool, eventIDs []string) (
 	for rows.Next() {
 		var eventID string
 		var f File
-		if err := rows.Scan(&eventID, &f.ID, &f.UnitID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt); err != nil {
+		if err := rows.Scan(&eventID, &f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt); err != nil {
 			return nil, err
 		}
 		out[eventID] = append(out[eventID], f)
@@ -301,7 +322,7 @@ func SubGroupIDsForFile(ctx context.Context, pool *pgxpool.Pool, fileID string) 
 // grid. Mirrors ListForEvent.
 func ListForSubGroup(ctx context.Context, pool *pgxpool.Pool, subGroupID string) ([]File, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT f.id, f.unit_id, f.filename, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at, f.is_public
+		SELECT f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at, f.is_public
 		FROM files f
 		JOIN sub_group_files sgf ON sgf.file_id = f.id
 		WHERE sgf.sub_group_id = $1
@@ -315,7 +336,7 @@ func ListForSubGroup(ctx context.Context, pool *pgxpool.Pool, subGroupID string)
 	var out []File
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
 			return nil, err
 		}
 		out = append(out, f)

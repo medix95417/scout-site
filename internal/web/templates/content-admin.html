@@ -41,7 +41,7 @@
               <select class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" data-image-picker="{{.Slug}}">
                 <option value="">Choose from your file library…</option>
                 {{range $.PublicImages}}
-                  <option value="/files/{{.ID}}/download">{{.Filename}}</option>
+                  <option value="/files/{{.ID}}/download">{{.DisplayLabel}}</option>
                 {{end}}
               </select>
             {{else}}
@@ -104,7 +104,7 @@
             <select class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" data-image-picker="{{.Slug}}">
               <option value="">Choose from your file library…</option>
               {{range $.PublicImages}}
-                <option value="/files/{{.ID}}/download">{{.Filename}}</option>
+                <option value="/files/{{.ID}}/download">{{.DisplayLabel}}</option>
               {{end}}
             </select>
           {{else}}

@@ -20,6 +20,15 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Friendly names for uploaded files.** A file in the file library can now
+be given a friendlier display name (e.g. "Summer Camp Group Photo" instead
+of `IMG_6440.jpeg`) — set at upload time, or any time after via a new
+"Rename" action on `/files`. Shown everywhere a file is listed or picked
+(the file library, every "choose from your library" image picker, the
+resources page), falling back to the original filename until a leader sets
+one. The original filename is unchanged and still what a downloaded copy
+is saved as.
+
 **Fix — no way to give an existing person a role in a different unit.** A
 leader could not add a Scout or parent already registered under the other
 unit (e.g. a Pack Scout crossing over to a Troop position, or a parent
