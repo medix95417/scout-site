@@ -22,6 +22,33 @@ tagged commit with an accurate date.
 
 Nothing yet.
 
+## [1.6.2] — 2026-08-19
+
+**Fix — restart loop when `S3_ENDPOINT` is set to a full URL.** 1.6.1
+made an *unconfigured* S3 endpoint safe (the app boots, `/files` just
+shows a notice), but a *misconfigured* one still crashed the app on
+every startup: `main.go` called `log.Fatalf` on any error from
+`storage.New`, and pasting the endpoint value a provider's own
+dashboard gives you — e.g. DigitalOcean Spaces' "Origin Endpoint,"
+`https://nyc3.digitaloceanspaces.com` — produced exactly that error
+(minio-go's `Endpoint` field wants a bare host, not a URL with a
+scheme: `"Endpoint url cannot have fully qualified paths"`), so the
+container restart-looped forever under `restart: unless-stopped`.
+
+Two fixes: `internal/storage.New` now accepts either form —
+`S3_ENDPOINT` can be a bare host (`nyc3.digitaloceanspaces.com`) or a
+full URL with scheme (`https://nyc3.digitaloceanspaces.com`), stripping
+the scheme/path and inferring `S3_USE_SSL` from it when present. And
+regardless of that, storage errors are no longer fatal at all —
+`cmd/server/main.go` now treats a storage configuration error the same
+as an unconfigured one: logged, not fatal, with the file library/event
+photos degrading instead of the whole site going down.
+
+- **No deploy or `.env` changes needed** to pick up this fix — just
+  redeploy. If you'd previously worked around the crash by removing
+  `S3_ENDPOINT`, you can now set it back to the exact value your
+  provider gave you.
+
 ## [1.6.1] — 2026-08-19
 
 Two fixes to the file storage work in 1.6.0, found from a real deploy attempt.
