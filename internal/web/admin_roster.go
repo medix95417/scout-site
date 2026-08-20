@@ -145,6 +145,18 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: loading families: %v", err)
 	}
 
+	// Only offered to unit-wide leaders — see AdminRosterAssignExistingMember's
+	// doc comment for why pulling in someone new to this unit is above a
+	// single Den Leader's "their den" scope, same restriction as creating a
+	// new sub-group.
+	var otherMembers []roster.MemberOption
+	if scope.UnitWide {
+		otherMembers, err = roster.MembersNotInUnit(r.Context(), h.Pool, unit.ID)
+		if err != nil {
+			log.Printf("web: loading members outside this unit: %v", err)
+		}
+	}
+
 	entries, err := family.RosterForUnit(r.Context(), h.Pool, unit.ID)
 	if err != nil {
 		log.Printf("web: loading roster: %v", err)
@@ -174,6 +186,7 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 		Families         []roster.FamilyOption
 		Roles            []roster.RoleOption
 		Roster           []rosterRow
+		OtherMembers     []roster.MemberOption
 	}{
 		baseData:         h.base(r, "Manage Roster"),
 		Scope:            scope,
@@ -183,6 +196,7 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 		Families:         families,
 		Roles:            allowedRoles,
 		Roster:           rows,
+		OtherMembers:     otherMembers,
 	}
 	h.render(w, h.rosterAdmin, data)
 }
@@ -303,6 +317,74 @@ func (h *Handlers) AdminRosterCreateSubGroup(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	http.Redirect(w, r, "/admin/roster", http.StatusSeeOther)
+}
+
+// AdminRosterAssignExistingMember gives an existing member — already in
+// the system under any family, in either unit — their first role in this
+// unit. This is the fix for "I can't see people between the groups": a
+// person registered only under, say, the Pack (a Scout crossing over to
+// the Troop, or a parent taking on a Troop role too) never appears in
+// family.RosterForUnit or in "Add a Member to an Existing Family" (which
+// only creates brand-new member rows), so there was previously no way to
+// reuse an existing person across units without either duplicating their
+// member record or hand-editing the database.
+//
+// Unit-wide leaders only — the same restriction AdminRosterCreateSubGroup
+// already applies, since pulling in someone new to this unit is above a
+// single Den Leader's "their den" scope.
+//
+// Deliberately does not go through Scope.CanManageMember, which requires
+// an existing role_assignment row in this unit (see that function's own
+// doc comment on why) — a brand-new cross-unit assignment has none yet by
+// definition. Instead this relies on exactly the same authorization
+// AdminRosterAddMember/AdminRosterCreateFamily already use to grant a
+// member's very first role in a unit — CanEditUnitContent (via
+// requireRosterEditor) plus IsAllowedRole and resolveSubGroup — which
+// applies just as well to an existing member as to a brand-new one.
+func (h *Handlers) AdminRosterAssignExistingMember(w http.ResponseWriter, r *http.Request) {
+	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	if !ok {
+		return
+	}
+	if !scope.UnitWide {
+		http.Error(w, "only unit-wide leaders can add someone new to this unit's roster", http.StatusForbidden)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	memberID := r.FormValue("member_id")
+	if memberID == "" {
+		http.Error(w, "choose a person", http.StatusBadRequest)
+		return
+	}
+	if _, found, err := roster.GetMember(r.Context(), h.Pool, memberID); err != nil {
+		writeError(w, err)
+		return
+	} else if !found {
+		http.Error(w, "that person doesn't exist", http.StatusBadRequest)
+		return
+	}
+
+	role := r.FormValue("role")
+	if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, role); err != nil || !allowed {
+		http.Error(w, "you don't have permission to assign that role", http.StatusForbidden)
+		return
+	}
+	subGroupPtr, err := h.resolveSubGroup(r, unit, scope, r.FormValue("sub_group_id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	if err := roster.AssignRole(r.Context(), h.Pool, memberID, unit.ID, subGroupPtr, role, actor.ID); err != nil {
+		log.Printf("web: assigning role to existing member: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin/roster/members/"+memberID, http.StatusSeeOther)
 }
 
 // --- Member edit --------------------------------------------------------

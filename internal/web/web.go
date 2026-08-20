@@ -282,6 +282,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/roster/members/{id}/login/reset-password", h.AdminRosterResetMemberLoginPassword)
 	mux.HandleFunc("POST /admin/roster/roles/{id}/delete", h.AdminRosterRemoveRole)
 	mux.HandleFunc("POST /admin/roster/sub-groups", h.AdminRosterCreateSubGroup)
+	mux.HandleFunc("POST /admin/roster/existing-member", h.AdminRosterAssignExistingMember)
 	mux.HandleFunc("GET /admin/roster/import", h.AdminRosterImportForm)
 	mux.HandleFunc("POST /admin/roster/import", h.AdminRosterImportApply)
 

@@ -20,6 +20,23 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fix — no way to give an existing person a role in a different unit.** A
+leader could not add a Scout or parent already registered under the other
+unit (e.g. a Pack Scout crossing over to a Troop position, or a parent
+taking on a role in both) — the roster admin page's roster list only ever
+shows members who already hold a role in the current unit, and both "add"
+flows there only ever create brand-new member records, so an existing
+person from the other unit was simply invisible. Added a new "Add an
+Existing Person" section on `/admin/roster` (unit-wide leaders only, same
+restriction as creating a new den/patrol) backed by a new
+`roster.MembersNotInUnit` query — every member system-wide who doesn't yet
+have a role here — letting a leader give that person their first role in
+this unit without duplicating their member record. Once assigned, the
+"also holds roles elsewhere" note on the member's profile page (added
+earlier) now actually reaches someone in this situation, since previously
+that page's own access check silently required the member to already have
+a role in the current unit too.
+
 **Print / Download PDF on My Family and the Family Directory.** Both pages
 now have a "Print / Download PDF" link that generates a real, server-side
 PDF (via the new `github.com/go-pdf/fpdf` dependency) — a simple,
