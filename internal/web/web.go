@@ -373,6 +373,7 @@ type baseData struct {
 	ScoutAccountsSelfService bool              // this unit's settings.ScoutAccountSelfService toggle — drives the "My Accounts" nav link and family self-service account access, see internal/web/accounts.go
 	NeedsTwoFactorSetup      bool              // this login holds a treasury role, or the require-two-factor-for-all setting is on, and hasn't confirmed TOTP enrollment yet — drives a persistent nudge banner, see base.html
 	NavSubGroups             []roster.SubGroup // every patrol/den in this unit, for the hamburger nav's Patrols/Dens submenu (see base.html) — named distinctly from any page's own "Groups" field (e.g. internal/web/groups.go's GroupsList) so embedding baseData never shadows a page's own data
+	PageHeroImageURL         string            // this request's page hero banner image, if the current path is one of content.HeroPages and a leader has set one — see heroKeyForPath and base.html. Named distinctly from the Home handler's own "HeroImageURL" field (for the homepage's separate, richer hero mechanism) so embedding baseData never lets one shadow the other
 	PageTitle                string
 	Flash                    string
 	CSRFToken                string // embedded as a hidden field in every <form method="post"> — see internal/csrf
@@ -467,10 +468,45 @@ func (h *Handlers) scoutAccountSelfServiceEnabled(ctx context.Context, unitID st
 	return settings.GetForUnit(ctx, h.Pool, unitID, settings.ScoutAccountSelfService)
 }
 
+// heroKeyForPath maps a request path to the content.HeroPage.Key whose
+// banner (if any) that page should show, or "" if the path isn't one of
+// content.HeroPages. Matches both a page's list route and its sub-routes
+// (e.g. "/news/123") so an article/detail page still shows the same
+// section-wide banner as its listing page.
+func heroKeyForPath(path string) string {
+	switch {
+	case path == "/calendar" || strings.HasPrefix(path, "/calendar/"):
+		return "calendar"
+	case path == "/news" || strings.HasPrefix(path, "/news/"):
+		return "news"
+	case path == "/gallery" || strings.HasPrefix(path, "/gallery/"):
+		return "gallery"
+	case path == "/roster" || strings.HasPrefix(path, "/roster/"):
+		return "roster"
+	case path == "/directory" || strings.HasPrefix(path, "/directory/"):
+		return "directory"
+	case path == "/files" || strings.HasPrefix(path, "/files/"):
+		return "files"
+	case path == "/groups" || strings.HasPrefix(path, "/groups/"):
+		return "groups"
+	default:
+		return ""
+	}
+}
+
 func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
 	data := baseData{Unit: unit, LoggedIn: loggedIn, PageTitle: pageTitle, CSRFToken: csrf.TokenFromContext(r.Context()), Version: version.Version}
+
+	if heroKey := heroKeyForPath(r.URL.Path); heroKey != "" {
+		if heroURL, err := content.HeroURLForPage(r.Context(), h.Pool, unit.ID, heroKey); err != nil {
+			log.Printf("web: loading page hero banner: %v", err)
+		} else {
+			data.PageHeroImageURL = heroURL
+		}
+	}
+
 	if loggedIn {
 		caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 		if err != nil {
@@ -669,6 +705,21 @@ func (h *Handlers) HomeContentList(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 
+	savedHero, err := content.HeroSectionsForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading page hero banners: %v", err)
+	}
+	heroDefs := content.HeroSections()
+	heroRows := make([]homeAdminRow, 0, len(heroDefs))
+	for _, def := range heroDefs {
+		row := homeAdminRow{Slug: def.Slug, Label: def.Label, Placeholder: def.Placeholder, Help: def.Help, Kind: def.Kind}
+		if s, ok := savedHero[def.Slug]; ok {
+			row.Body = s.Body
+			row.Saved = true
+		}
+		heroRows = append(heroRows, row)
+	}
+
 	publicImages, err := files.ListPublicImagesForUnit(r.Context(), h.Pool, unit.ID)
 	if err != nil {
 		log.Printf("web: loading public images: %v", err)
@@ -677,8 +728,9 @@ func (h *Handlers) HomeContentList(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		baseData
 		Sections     []homeAdminRow
+		HeroSections []homeAdminRow
 		PublicImages []files.File
-	}{baseData: h.base(r, "Edit Homepage"), Sections: rows, PublicImages: publicImages}
+	}{baseData: h.base(r, "Edit Homepage"), Sections: rows, HeroSections: heroRows, PublicImages: publicImages}
 	h.render(w, h.contentAdmin, data)
 }
 
@@ -703,6 +755,15 @@ func (h *Handlers) HomeContentSave(w http.ResponseWriter, r *http.Request) {
 			valid = true
 			label = def.Label
 			break
+		}
+	}
+	if !valid {
+		for _, def := range content.HeroSections() {
+			if def.Slug == slug {
+				valid = true
+				label = def.Label
+				break
+			}
 		}
 	}
 	if !valid {

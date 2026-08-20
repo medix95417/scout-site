@@ -122,6 +122,17 @@
     })();
   </script>
 
+  {{if .PageHeroImageURL}}
+    <!-- Generic page hero banner — image only, no text overlay, since the
+         page's own <h1>/heading already renders inside <main> below. Set
+         per-page via /admin/home's "Page Hero Banners" section; see
+         internal/content.HeroPages and web.go's heroKeyForPath. Deliberately
+         a distinct field name from the homepage's own "HeroImageURL" (see
+         web.go's baseData.PageHeroImageURL comment) so the two hero
+         mechanisms never shadow one another. -->
+    <section class="w-full h-40 sm:h-56 bg-gray-200 bg-cover bg-center" style="background-image: url('{{.PageHeroImageURL}}');"></section>
+  {{end}}
+
   <main class="max-w-4xl mx-auto px-4 py-8">
     {{if .NeedsTwoFactorSetup}}
       <div class="mb-4 rounded-md bg-red-50 border border-red-300 px-4 py-2 text-red-900 text-sm flex items-center justify-between gap-3">

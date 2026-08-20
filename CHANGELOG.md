@@ -20,6 +20,23 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Per-page hero banners, admin-editable.** Calendar, News, Gallery, Roster,
+Family Directory, Files, and the Patrols/Dens list can each now carry an
+optional full-bleed hero banner image, shown just below the site header on
+that page (and its sub-pages, e.g. an individual news article). Set from a
+new "Page Hero Banners" section on `/admin/home`, right below the existing
+homepage sections — same paste-a-URL-or-choose-from-your-public-library
+picker the homepage's own photo fields already use, so no new admin UI
+concept was needed. Leave one blank for no banner; News and Gallery banners
+show to logged-out visitors too, since those pages are public. The
+homepage keeps its own separate, richer hero (background photo + tagline +
+call-to-action) — this is additive, not a replacement. Built on
+`internal/content`'s existing `content_pages`-backed section mechanism,
+with a new `pagehero-*` slug prefix alongside the existing `home-*` one.
+Also fixed a pre-existing bug where the Pack unit's homepage hero-photo
+field was missing the image preview/picker UI that the Troop's identical
+field already had (a `SectionDef.Kind` of `"url"` instead of `"image"`).
+
 **Patrols/Dens dropdown in the hamburger nav.** The nav's "Patrols"/"Dens"
 entry now expands (a nested no-JS `<details>` disclosure, same pattern as
 the outer hamburger) to list each patrol/den by name with a direct link to
