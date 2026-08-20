@@ -53,6 +53,13 @@ type toggleView struct {
 	Enabled bool
 }
 
+// unitToggleView is toggleView's per-unit sibling — see
+// settings.UnitToggle.
+type unitToggleView struct {
+	settings.UnitToggle
+	Enabled bool
+}
+
 // textSettingView decorates a settings.TextSetting with its current
 // stored value (empty if unset — falls back to whatever the environment
 // provides, see internal/mailer.Mailer.effective), for the template.
@@ -62,6 +69,7 @@ type textSettingView struct {
 }
 
 func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
 	if _, ok := h.requireSuperAdmin(w, r, "/admin/settings"); !ok {
 		return
 	}
@@ -78,6 +86,12 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	unitValues, err := settings.AllForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading unit settings: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 
 	views := make([]toggleView, 0, len(settings.Toggles))
 	for _, t := range settings.Toggles {
@@ -87,15 +101,21 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 	for _, t := range settings.TextSettings {
 		textViews = append(textViews, textSettingView{TextSetting: t, Value: textValues[t.Key]})
 	}
+	unitViews := make([]unitToggleView, 0, len(settings.UnitToggles))
+	for _, t := range settings.UnitToggles {
+		unitViews = append(unitViews, unitToggleView{UnitToggle: t, Enabled: unitValues[t.Key]})
+	}
 
 	data := struct {
 		baseData
 		Toggles      []toggleView
 		TextSettings []textSettingView
+		UnitToggles  []unitToggleView
 	}{
 		baseData:     h.base(r, "Site Settings"),
 		Toggles:      views,
 		TextSettings: textViews,
+		UnitToggles:  unitViews,
 	}
 	h.render(w, h.systemSettings, data)
 }
@@ -153,6 +173,36 @@ func (h *Handlers) SystemSettingsToggle(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		log.Printf("web: updating setting %q: %v", key, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+}
+
+// UnitSettingsToggle is SystemSettingsToggle's per-unit sibling — flips
+// one of settings.UnitToggles for the currently-viewed unit only.
+func (h *Handlers) UnitSettingsToggle(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	actor, ok := h.requireSuperAdmin(w, r, "/admin/settings")
+	if !ok {
+		return
+	}
+
+	key := r.PathValue("key")
+	current, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, key)
+	if err != nil {
+		log.Printf("web: reading unit setting %q: %v", key, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := settings.SetForUnit(r.Context(), h.Pool, unit.ID, key, !current, actor.ID); err != nil {
+		if errors.Is(err, settings.ErrUnknownSetting) {
+			http.Error(w, "unrecognized setting", http.StatusBadRequest)
+			return
+		}
+		log.Printf("web: updating unit setting %q: %v", key, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

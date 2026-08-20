@@ -29,8 +29,29 @@ import (
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/roster"
+	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
+
+// requireAdvancementEnabled reports whether advancement tracking is on
+// for unitID (see settings.AdvancementEnabled), writing a clear 403 if
+// not — hiding the nav link (see base.html) isn't itself a security
+// boundary, so every advancement route checks this directly too, the same
+// way a disabled feature should behave for anyone who still has the URL
+// bookmarked or types it directly.
+func (h *Handlers) requireAdvancementEnabled(w http.ResponseWriter, r *http.Request, unitID string) bool {
+	enabled, err := settings.GetForUnit(r.Context(), h.Pool, unitID, settings.AdvancementEnabled)
+	if err != nil {
+		log.Printf("web: checking advancement-enabled setting: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return false
+	}
+	if !enabled {
+		http.Error(w, "advancement tracking is turned off for this unit — an admin can re-enable it from /admin/settings", http.StatusForbidden)
+		return false
+	}
+	return true
+}
 
 // advancementImportRow is one line of a pasted bulk-advancement import
 // and its outcome — the advancement-specific sibling of roster_import.go's
@@ -78,6 +99,9 @@ func (h *Handlers) Advancement(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?next=/advancement", http.StatusSeeOther)
 		return
 	}
+	if !h.requireAdvancementEnabled(w, r, unit.ID) {
+		return
+	}
 
 	records, err := advancement.ListForUnit(r.Context(), h.Pool, unit.ID)
 	if err != nil {
@@ -114,6 +138,9 @@ func memberIDsOf(records []advancement.Record) []string {
 func (h *Handlers) AdminAdvancementList(w http.ResponseWriter, r *http.Request) {
 	unit, _, ok := h.requireContentEditor(w, r, "/admin/advancement")
 	if !ok {
+		return
+	}
+	if !h.requireAdvancementEnabled(w, r, unit.ID) {
 		return
 	}
 	h.renderAdvancementAdmin(w, r, unit.ID, "", nil)
@@ -186,6 +213,9 @@ func (h *Handlers) AdminAdvancementCreate(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	if !h.requireAdvancementEnabled(w, r, unit.ID) {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
@@ -230,6 +260,9 @@ func (h *Handlers) AdminAdvancementDelete(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	if !h.requireAdvancementEnabled(w, r, unit.ID) {
+		return
+	}
 	id := r.PathValue("id")
 	if err := advancement.DeleteRecord(r.Context(), h.Pool, id, unit.ID, actor.ID); err != nil {
 		if err == advancement.ErrNotFound {
@@ -252,6 +285,9 @@ func (h *Handlers) AdminAdvancementDelete(w http.ResponseWriter, r *http.Request
 func (h *Handlers) AdminAdvancementBulkImport(w http.ResponseWriter, r *http.Request) {
 	unit, actor, ok := h.requireContentEditor(w, r, "/admin/advancement")
 	if !ok {
+		return
+	}
+	if !h.requireAdvancementEnabled(w, r, unit.ID) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {

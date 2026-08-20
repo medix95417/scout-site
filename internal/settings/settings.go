@@ -163,6 +163,138 @@ func isKnown(key string) bool {
 	return false
 }
 
+// --- Per-unit toggles ---------------------------------------------------
+//
+// A sibling to the Toggle/Toggles above, but scoped to one unit (see
+// migration 0014's unit_settings table) — for a setting Troop and Pack
+// might reasonably answer differently, unlike a Toggle, which by design
+// affects the whole install. Same shape and Get/All/Set pattern otherwise.
+
+// AdvancementEnabled controls whether /advancement and /admin/advancement
+// are reachable for a unit. Defaults to true (advancement tracking is
+// part of the normal feature set) so existing units see no behavior
+// change until an admin explicitly turns it off — e.g. because BSA
+// national's own Scoutbook changes made this unit's own tracking
+// redundant, while keeping the ability to flip it back on quickly if
+// that changes again.
+const AdvancementEnabled = "advancement_enabled"
+
+// UnitToggle is a per-unit sibling of Toggle.
+type UnitToggle struct {
+	Key         string
+	Label       string
+	Description string
+	Default     bool
+}
+
+// UnitToggles is every per-unit setting the "This Unit's Settings"
+// section of /admin/settings shows, in display order.
+var UnitToggles = []UnitToggle{
+	{
+		Key:         AdvancementEnabled,
+		Label:       "Rank/badge advancement tracking",
+		Description: "Shows /advancement and /admin/advancement for this unit. Turn off if you're tracking advancement elsewhere (e.g. Scoutbook) and don't need it duplicated here — the data isn't deleted, just hidden, so turning it back on picks up right where it left off.",
+		Default:     true,
+	},
+}
+
+// GetForUnit reads one per-unit setting, returning its Default if no row
+// is stored yet for this unit.
+func GetForUnit(ctx context.Context, pool *pgxpool.Pool, unitID, key string) (bool, error) {
+	var value bool
+	err := pool.QueryRow(ctx, `SELECT value FROM unit_settings WHERE unit_id = $1 AND key = $2`, unitID, key).Scan(&value)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return defaultForUnit(key), nil
+		}
+		return false, err
+	}
+	return value, nil
+}
+
+// AllForUnit returns every known UnitToggle's current value for a unit —
+// what /admin/settings renders in its "This Unit's Settings" section.
+func AllForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (map[string]bool, error) {
+	values := make(map[string]bool, len(UnitToggles))
+	for _, t := range UnitToggles {
+		values[t.Key] = t.Default
+	}
+
+	rows, err := pool.Query(ctx, `SELECT key, value FROM unit_settings WHERE unit_id = $1`, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var key string
+		var value bool
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, err
+		}
+		if _, known := values[key]; known {
+			values[key] = value
+		}
+	}
+	return values, rows.Err()
+}
+
+// SetForUnit writes a per-unit setting's value, audit-logged the same way
+// Set does. Rejects unknown keys for the same reason Set does.
+func SetForUnit(ctx context.Context, pool *pgxpool.Pool, unitID, key string, value bool, actorID string) error {
+	if !isKnownUnitToggle(key) {
+		return ErrUnknownSetting
+	}
+
+	var before any
+	var existingValue bool
+	err := pool.QueryRow(ctx, `SELECT value FROM unit_settings WHERE unit_id = $1 AND key = $2`, unitID, key).Scan(&existingValue)
+	if err == nil {
+		before = existingValue
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+
+	var id string
+	err = pool.QueryRow(ctx, `
+		INSERT INTO unit_settings (unit_id, key, value, updated_by)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (unit_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now(), updated_by = EXCLUDED.updated_by
+		RETURNING id
+	`, unitID, key, value, actorID).Scan(&id)
+	if err != nil {
+		return err
+	}
+
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "unit_setting",
+		EntityID:   id,
+		ActorID:    &actorID,
+		Action:     "update",
+		Before:     map[string]any{"key": key, "value": before},
+		After:      map[string]any{"key": key, "value": value},
+	})
+	return nil
+}
+
+func defaultForUnit(key string) bool {
+	for _, t := range UnitToggles {
+		if t.Key == key {
+			return t.Default
+		}
+	}
+	return false
+}
+
+func isKnownUnitToggle(key string) bool {
+	for _, t := range UnitToggles {
+		if t.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
 // --- Text settings -----------------------------------------------------
 //
 // A second, parallel key/value concept alongside the boolean Toggles
