@@ -16,7 +16,16 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/server ./cmd/server
+# GOMAXPROCS=1 and -p=1 (fewer packages/functions compiled concurrently)
+# trade build speed for peak memory: one of this app's dependencies
+# (minio-go, for the file library — see internal/storage) pulls in
+# goccy/go-json, which contains a single ~5,000-line generated encoder
+# file large enough that compiling it in parallel with everything else
+# can get OOM-killed on a small VPS ("signal: killed" with no other
+# error). If it still gets OOM-killed even serialized like this, the
+# build needs more available memory than the box has — add swap (see
+# DEPLOY.md).
+RUN CGO_ENABLED=0 GOOS=linux GOMAXPROCS=1 GOFLAGS=-p=1 go build -o /out/server ./cmd/server
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=build /out/server /server

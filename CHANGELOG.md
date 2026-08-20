@@ -22,6 +22,25 @@ tagged commit with an accurate date.
 
 Nothing yet.
 
+## [1.6.3] — 2026-08-20
+
+**Fix — deploy build OOM-killed on a small VPS.** `docker compose up -d
+--build` could fail with `signal: killed` and no other error message —
+the Docker build's `go build` step getting silently OOM-killed partway
+through. Root cause: `minio-go` (the S3 client added in 1.6.0) pulls in
+`goccy/go-json`, which contains a single ~5,000-line generated encoder
+file large enough that compiling it concurrently with everything else
+in the build can exceed available memory on a 1GB VPS. The Dockerfile's
+build step now sets `GOMAXPROCS=1 GOFLAGS=-p=1`, trading build speed for
+peak memory by serializing compilation instead of parallelizing it.
+DEPLOY.md also documents adding 2GB of swap on a 1GB-RAM VPS, for the
+case where even a serialized build still needs more memory than the box
+has to spare.
+
+- **No deploy or `.env` changes needed** beyond the usual `git pull` +
+  `docker compose up -d --build` — if the build still gets OOM-killed
+  afterward, add swap per DEPLOY.md's updated step 2.
+
 ## [1.6.2] — 2026-08-19
 
 **Fix — restart loop when `S3_ENDPOINT` is set to a full URL.** 1.6.1
