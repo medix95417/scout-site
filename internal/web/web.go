@@ -555,6 +555,9 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		Gallery2URL     string
 		Gallery2Caption string
 		SocialURL       string
+		FacebookURL     string
+		InstagramURL    string
+		TikTokURL       string
 	}{
 		baseData:        h.base(r, ""),
 		Events:          events,
@@ -568,6 +571,9 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		Gallery2URL:     text["home-gallery-2"],
 		Gallery2Caption: gallery2Caption,
 		SocialURL:       text["home-social"],
+		FacebookURL:     text["home-facebook"],
+		InstagramURL:    text["home-instagram"],
+		TikTokURL:       text["home-tiktok"],
 	}
 
 	h.render(w, h.home, data)

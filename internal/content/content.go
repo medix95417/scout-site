@@ -80,6 +80,9 @@ func HomepageSections(unitType string) []SectionDef {
 			{Slug: "home-gallery-1", Label: "Gallery photo 1 URL", Kind: "url", Placeholder: stockPhotoCampsite, Help: imageHelp},
 			{Slug: "home-gallery-2", Label: "Gallery photo 2 URL", Kind: "url", Placeholder: stockPhotoTroopCamp, Help: imageHelp},
 			{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your troop's Facebook or Instagram page."},
+			{Slug: "home-facebook", Label: "Facebook page URL (optional)", Kind: "url", Help: "Shows a Facebook icon/link on the homepage if set."},
+			{Slug: "home-instagram", Label: "Instagram profile URL (optional)", Kind: "url", Help: "Shows an Instagram icon/link on the homepage if set."},
+			{Slug: "home-tiktok", Label: "TikTok profile URL (optional)", Kind: "url", Help: "Shows a TikTok icon/link on the homepage if set."},
 		}
 	}
 	return []SectionDef{
@@ -92,6 +95,9 @@ func HomepageSections(unitType string) []SectionDef {
 		{Slug: "home-gallery-1", Label: "Gallery photo 1 URL", Kind: "url", Placeholder: stockPhotoCampsite, Help: imageHelp},
 		{Slug: "home-gallery-2", Label: "Gallery photo 2 URL", Kind: "url", Placeholder: stockPhotoDerby, Help: imageHelp},
 		{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your pack's Instagram or Facebook page."},
+		{Slug: "home-facebook", Label: "Facebook page URL (optional)", Kind: "url", Help: "Shows a Facebook icon/link on the homepage if set."},
+		{Slug: "home-instagram", Label: "Instagram profile URL (optional)", Kind: "url", Help: "Shows an Instagram icon/link on the homepage if set."},
+		{Slug: "home-tiktok", Label: "TikTok profile URL (optional)", Kind: "url", Help: "Shows a TikTok icon/link on the homepage if set."},
 	}
 }
 
