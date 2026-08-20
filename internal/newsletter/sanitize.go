@@ -101,20 +101,65 @@ func renderSanitized(b *strings.Builder, n *html.Node) {
 }
 
 // sanitizeAttrValue blocks the value-based attacks an allowlisted attribute
-// can still carry: a javascript:/data: URL in href/src, or an old
-// IE-only CSS expression() in style — the attribute name being allowed
-// isn't enough on its own.
+// can still carry: a dangerous URL scheme in href/src, or an old IE-only
+// CSS expression() in style — the attribute name being allowed isn't
+// enough on its own.
 func sanitizeAttrValue(key, val string) bool {
-	lower := strings.ToLower(strings.TrimSpace(val))
 	switch key {
 	case "href", "src":
-		if strings.HasPrefix(lower, "javascript:") || strings.HasPrefix(lower, "data:") {
-			return false
-		}
+		return safeURL(val)
 	case "style":
-		if strings.Contains(lower, "expression(") || strings.Contains(lower, "javascript:") {
+		lower := strings.ToLower(stripURLNoise(val))
+		if strings.Contains(lower, "expression(") || strings.Contains(lower, "javascript:") || strings.Contains(lower, "vbscript:") {
 			return false
 		}
 	}
 	return true
+}
+
+// safeURL reports whether a href/src value uses a scheme we're willing to
+// emit. It uses a positive allowlist (http, https, mailto, tel, or a
+// scheme-relative/relative/anchor URL) rather than a blocklist of bad
+// schemes: a blocklist has to anticipate every dangerous scheme AND every
+// way of obfuscating it, while an allowlist rejects anything it doesn't
+// positively recognize. Crucially it strips the ASCII control characters
+// and whitespace browsers themselves ignore inside a scheme BEFORE
+// checking — otherwise "java\tscript:" or "java\nscript:" reads as a
+// harmless unknown-scheme string here but still executes as javascript:
+// once a browser (or mail client) parses it.
+func safeURL(val string) bool {
+	cleaned := strings.ToLower(stripURLNoise(val))
+
+	// No scheme at all (relative path, "#anchor", "?query", or a bare
+	// "//host" scheme-relative URL) — nothing to execute.
+	colon := strings.IndexByte(cleaned, ':')
+	if colon == -1 {
+		return true
+	}
+	// A colon that only appears after a '/', '?', or '#' is part of the
+	// path/query/fragment (e.g. "/a/b:c"), not a scheme separator.
+	if slash := strings.IndexAny(cleaned, "/?#"); slash != -1 && slash < colon {
+		return true
+	}
+
+	scheme := cleaned[:colon]
+	switch scheme {
+	case "http", "https", "mailto", "tel":
+		return true
+	default:
+		return false
+	}
+}
+
+// stripURLNoise removes the leading/trailing spaces and the embedded ASCII
+// control characters (including tab, newline, carriage return, form feed,
+// and NUL) that browsers strip from a URL before resolving its scheme —
+// see safeURL for why this matters.
+func stripURLNoise(val string) string {
+	return strings.Map(func(r rune) rune {
+		if r <= 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, val)
 }

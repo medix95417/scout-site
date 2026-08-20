@@ -18,6 +18,31 @@ the date range between the `v1.0.0` commit and the `v1.4.0` catch-up
 commit. Every version from `v1.4.0` onward is a real, individually
 tagged commit with an accurate date.
 
+## [Unreleased]
+
+**Security — stored-XSS fix in the newsletter sanitizer.** A full security
+audit found that the newsletter HTML sanitizer (`internal/newsletter.Sanitize`,
+added in 1.7.0) blocked `javascript:` URLs by a prefix check but could be
+bypassed two ways: embedding an ASCII control character inside the scheme
+(`java&#9;script:` — browsers strip it before evaluating, so the link still
+executes) and using other dangerous schemes like `vbscript:`. Since a
+newsletter body is stored HTML that renders into other leaders' browsers
+(re-opening a draft) and is emailed to families, this was an exploitable
+stored-XSS vector. The URL check is now a positive scheme allowlist
+(`http`/`https`/`mailto`/`tel` plus relative/anchor URLs) applied after
+stripping the control characters and whitespace browsers ignore — anything
+it doesn't positively recognize is dropped. Added regression tests covering
+the obfuscation bypasses and confirming legitimate links still pass.
+
+**Security — defense-in-depth response headers.** Every response now carries
+`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: strict-origin-when-cross-origin`, and a minimal
+`Content-Security-Policy` (`frame-ancestors 'none'; object-src 'none';
+base-uri 'self'`). The CSP deliberately doesn't restrict scripts — the app
+loads htmx/Tailwind/Quill from CDNs and uses inline scripts — so it only
+locks down framing/plugins/`<base>`, which is a pure win. HSTS stays with
+Caddy, which adds it on TLS termination.
+
 ## [1.7.0] — 2026-08-20
 
 **Calendar events scoped to a specific patrol/den.** The "Add an event"
