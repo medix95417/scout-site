@@ -44,7 +44,7 @@
             <a href="/groups" class="block px-4 py-2 hover:bg-gray-100">{{if eq .Unit.UnitType "troop"}}Patrols{{else}}Dens{{end}}</a>
             {{if .AdvancementEnabled}}<a href="/advancement" class="block px-4 py-2 hover:bg-gray-100">Advancement</a>{{end}}
             <a href="/files" class="block px-4 py-2 hover:bg-gray-100">Files</a>
-            <a href="/accounts" class="block px-4 py-2 hover:bg-gray-100">My Accounts</a>
+            {{if or .ScoutAccountsSelfService .CanManageLedger}}<a href="/accounts" class="block px-4 py-2 hover:bg-gray-100">My Accounts</a>{{end}}
             <a href="/my-family" class="block px-4 py-2 hover:bg-gray-100">My Family</a>
             {{if or .CanEditContent .CanManageLedger .IsSuperAdmin}}
               <div class="border-t border-gray-100 my-1"></div>

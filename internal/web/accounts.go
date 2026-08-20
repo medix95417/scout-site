@@ -25,6 +25,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/ledger"
+	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
 
@@ -40,6 +41,29 @@ func (h *Handlers) AccountsView(w http.ResponseWriter, r *http.Request) {
 	if !loggedIn {
 		http.Redirect(w, r, "/login?next=/accounts", http.StatusSeeOther)
 		return
+	}
+
+	// Family self-service view can be turned off per unit (see
+	// settings.ScoutAccountSelfService). A treasurer/super_admin still
+	// reaches accounts through the treasury area, so they're not blocked
+	// here; everyone else gets a clear message rather than the page.
+	selfService, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.ScoutAccountSelfService)
+	if err != nil {
+		log.Printf("web: checking scout-account-self-service setting: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !selfService {
+		caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+		if err != nil {
+			log.Printf("web: loading capabilities: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if !units.CanManageLedger(caps) {
+			http.Error(w, "account balances aren't available to families for this unit — please contact your unit's treasurer", http.StatusForbidden)
+			return
+		}
 	}
 
 	var rows []accountRow

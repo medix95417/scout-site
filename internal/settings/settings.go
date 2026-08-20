@@ -179,6 +179,16 @@ func isKnown(key string) bool {
 // that changes again.
 const AdvancementEnabled = "advancement_enabled"
 
+// ScoutAccountSelfService controls whether a family/individual login can
+// view its own Scout ledger account page (the self-service side of
+// /treasury/accounts/{id}). Defaults to true (families can see their own
+// balances). When off, only a Treasurer/super_admin can open an account
+// page — the account still exists and the treasury side is unchanged, the
+// individual/family self-service view is just shut off (and the
+// "My Accounts" nav link hidden). Lets a unit that doesn't want families
+// browsing balances turn that off without dropping the treasury feature.
+const ScoutAccountSelfService = "scout_account_self_service"
+
 // UnitToggle is a per-unit sibling of Toggle.
 type UnitToggle struct {
 	Key         string
@@ -194,6 +204,12 @@ var UnitToggles = []UnitToggle{
 		Key:         AdvancementEnabled,
 		Label:       "Rank/badge advancement tracking",
 		Description: "Shows /advancement and /admin/advancement for this unit. Turn off if you're tracking advancement elsewhere (e.g. Scoutbook) and don't need it duplicated here — the data isn't deleted, just hidden, so turning it back on picks up right where it left off.",
+		Default:     true,
+	},
+	{
+		Key:         ScoutAccountSelfService,
+		Label:       "Family access to Scout account balances",
+		Description: "Lets a family (or a Scout's own login) view their own Scout account balance and history under \"My Accounts\". Turn off to keep account balances treasurer-only — the Treasury area is unchanged, this just shuts off the family-facing self-service view.",
 		Default:     true,
 	},
 }
