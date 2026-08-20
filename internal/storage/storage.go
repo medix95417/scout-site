@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -56,14 +57,36 @@ func New(_ context.Context, cfg Config) (*Store, error) {
 	if cfg.Endpoint == "" {
 		return nil, nil
 	}
-	client, err := minio.New(cfg.Endpoint, &minio.Options{
+	endpoint, useSSL := normalizeEndpoint(cfg.Endpoint, cfg.UseSSL)
+	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
-		Secure: cfg.UseSSL,
+		Secure: useSSL,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("storage: configuring client for %s: %w", cfg.Endpoint, err)
+		return nil, fmt.Errorf("storage: configuring client for %s: %w", endpoint, err)
 	}
 	return &Store{client: client, bucket: cfg.Bucket}, nil
+}
+
+// normalizeEndpoint accepts either a bare host[:port] (what minio-go's
+// Endpoint actually wants) or a full URL with scheme (what a provider's own
+// docs/dashboard typically hand out, e.g. DigitalOcean Spaces' "Origin
+// Endpoint" — "https://nyc3.digitaloceanspaces.com"), since an operator
+// pasting that value verbatim into S3_ENDPOINT is the expected case, not a
+// mistake to reject. A "https://" or "http://" prefix is stripped (and
+// forces useSSL accordingly, since a scheme this explicit shouldn't be
+// second-guessed by a separate S3_USE_SSL setting), along with any
+// trailing path or slash.
+func normalizeEndpoint(endpoint string, useSSL bool) (string, bool) {
+	if rest, ok := strings.CutPrefix(endpoint, "https://"); ok {
+		endpoint, useSSL = rest, true
+	} else if rest, ok := strings.CutPrefix(endpoint, "http://"); ok {
+		endpoint, useSSL = rest, false
+	}
+	if i := strings.IndexByte(endpoint, '/'); i != -1 {
+		endpoint = endpoint[:i]
+	}
+	return endpoint, useSSL
 }
 
 // Put uploads size bytes from r under key, replacing any existing object at

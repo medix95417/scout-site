@@ -316,7 +316,7 @@ this configuration; see `SECURITY_AUDIT.md`.
 ## Versioning
 
 Changes are tracked in `CHANGELOG.md` and tagged in git as `vX.Y.Z`
-(current version: **v1.6.1**). Each delivery from here forward gets its
+(current version: **v1.6.2**). Each delivery from here forward gets its
 own commit and tag — see `CHANGELOG.md` for the full history and how
 version numbers are chosen.
 

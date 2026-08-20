@@ -151,6 +151,11 @@ func main() {
 	// whether a cookie domain is set, since local dev leaves it empty.
 	secureCookie := cfg.CookieDomain != ""
 
+	// File storage is optional, same as email below: a bad or unreachable
+	// S3_ENDPOINT must never take the whole site down (see storage.New's
+	// doc comment) — so any error here is logged and continued past, not
+	// fatal. Only actually configuring it wrong (or not at all) costs you
+	// the file library/event photos, not the entire server.
 	store, err := storage.New(ctx, storage.Config{
 		Endpoint:  cfg.S3Endpoint,
 		AccessKey: cfg.S3AccessKey,
@@ -159,9 +164,9 @@ func main() {
 		UseSSL:    cfg.S3UseSSL,
 	})
 	if err != nil {
-		log.Fatalf("storage: %v", err)
-	}
-	if store == nil {
+		log.Printf("file storage is misconfigured (%v) — the file library and event photos will report a clear error instead of working", err)
+		store = nil
+	} else if store == nil {
 		log.Println("file storage is not configured (no S3_ENDPOINT environment variable) — the file library and event photos will report a clear error instead of failing to start")
 	}
 
