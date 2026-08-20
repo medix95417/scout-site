@@ -16,7 +16,7 @@
             <p class="text-xs text-amber-700 mb-2">
               Not set yet — the placeholder below is what's currently showing on the live site.
             </p>
-          {{else if and (eq .Kind "image") .Placeholder}}
+          {{else if and (or (eq .Kind "image") (eq .Kind "images")) .Placeholder}}
             <p class="text-xs text-amber-700 mb-2">
               Not set yet — a stock photo is currently showing on the live site until you add your own.
             </p>
@@ -25,6 +25,9 @@
         {{if and (eq .Kind "image") (or .Body .Placeholder)}}
           <img src="{{if .Body}}{{.Body}}{{else}}{{.Placeholder}}{{end}}" alt=""
                class="mb-2 h-28 w-full max-w-xs rounded-md border border-gray-200 object-cover">
+        {{end}}
+        {{if eq .Kind "images"}}
+          {{template "photoCarousel" (dict "Photos" (galleryPhotos .Body .Placeholder) "HeightClass" "h-28")}}
         {{end}}
         <form method="post" action="/admin/home/{{.Slug}}" class="space-y-2">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
@@ -38,6 +41,15 @@
               data-image-url-input="{{.Slug}}"
             >
             {{template "imagePicker" (dict "Slug" .Slug "Images" $.PublicImages "CurrentURL" .Body)}}
+          {{else if eq .Kind "images"}}
+            <textarea
+              id="gallery-body-{{.Slug}}"
+              name="body"
+              rows="4"
+              class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
+              placeholder="{{.Placeholder}}"
+            >{{.Body}}</textarea>
+            {{template "imagePicker" (dict "Slug" .Slug "Images" $.PublicImages "Mode" "append" "AppendTarget" (printf "gallery-body-%s" .Slug))}}
           {{else if eq .Kind "url"}}
             <input
               type="url"

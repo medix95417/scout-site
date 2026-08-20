@@ -92,24 +92,12 @@
     </section>
   </div>
 
-  <!-- Gallery strip: full-bleed, two photos side by side -->
-  {{if or .Gallery1URL .Gallery2URL}}
-    <section class="relative left-1/2 right-1/2 -mx-[50vw] w-screen mb-14 grid grid-cols-1 sm:grid-cols-2">
-      {{if .Gallery1URL}}
-        <div class="relative h-56 sm:h-72 bg-cover bg-center" style="background-image: url('{{.Gallery1URL}}');">
-          <div class="absolute inset-0 bg-black/25 flex items-end p-4">
-            <span class="text-white font-semibold text-lg drop-shadow">The Great Outdoors</span>
-          </div>
-        </div>
-      {{end}}
-      {{if .Gallery2URL}}
-        <div class="relative h-56 sm:h-72 bg-cover bg-center" style="background-image: url('{{.Gallery2URL}}');">
-          <div class="absolute inset-0 bg-black/25 flex items-end p-4">
-            <span class="text-white font-semibold text-lg drop-shadow">{{.Gallery2Caption}}</span>
-          </div>
-        </div>
-      {{end}}
+  <!-- Gallery strip: full-bleed carousel (plain if just one photo) -->
+  {{if .GalleryPhotos}}
+    <section class="relative left-1/2 right-1/2 -mx-[50vw] w-screen mb-14">
+      {{template "photoCarousel" (dict "Photos" .GalleryPhotos "HeightClass" "h-56 sm:h-72")}}
     </section>
+    {{template "photoCarouselScript" .}}
   {{end}}
 
   <!-- Public calendar events pass through to the homepage. -->
