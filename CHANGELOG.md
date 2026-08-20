@@ -20,6 +20,18 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Print / Download PDF on My Family and the Family Directory.** Both pages
+now have a "Print / Download PDF" link that generates a real, server-side
+PDF (via the new `github.com/go-pdf/fpdf` dependency) — a simple,
+one-page contact list, grouped by family, using the exact same
+release-filtered contact info the on-screen Family Directory already shows
+(and, for My Family, the caller's own unfiltered info, same as that page's
+own display). The Family Directory's on-screen layout was already grouped
+by family (one card per family) — this only adds the export, not a new
+grouping. A real PDF was chosen deliberately over a print stylesheet, since
+the My Family page itself is full of editable form fields that wouldn't
+print cleanly.
+
 **Resources page — public and members-only documents/links.** A new
 `/resources` page lists leader-curated documents and links (handbooks,
 forms, useful outside sites) — some marked public and visible to any

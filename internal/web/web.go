@@ -365,7 +365,9 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /my-family", h.MyFamily)
 	mux.HandleFunc("POST /my-family/members/{id}", h.MyFamilyUpdateMember)
 	mux.HandleFunc("POST /my-family/address", h.MyFamilyUpdateAddress)
+	mux.HandleFunc("GET /my-family/export.pdf", h.MyFamilyExportPDF)
 	mux.HandleFunc("GET /directory", h.FamilyDirectory)
+	mux.HandleFunc("GET /directory/export.pdf", h.DirectoryExportPDF)
 
 	// Members-only patrol/den pages (internal/web/groups.go).
 	mux.HandleFunc("GET /groups", h.GroupsList)
