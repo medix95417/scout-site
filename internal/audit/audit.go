@@ -118,6 +118,8 @@ const entityScopeSQL = `
 	UNION
 	SELECT id FROM sub_groups WHERE unit_id = $1
 	UNION
+	SELECT id FROM resources WHERE unit_id = $1
+	UNION
 	SELECT id FROM role_assignments WHERE unit_id = $1
 	UNION
 	SELECT member_id FROM role_assignments WHERE unit_id = $1

@@ -20,6 +20,23 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Resources page — public and members-only documents/links.** A new
+`/resources` page lists leader-curated documents and links (handbooks,
+forms, useful outside sites) — some marked public and visible to any
+visitor, others members-only. One page serves both views: a logged-out
+visitor sees only what's marked public, a logged-in one sees everything,
+and an admin/cubmaster/pack master (`units.CanEditUnitContent`, the same
+gate the homepage and news/gallery admin surfaces already use) additionally
+gets an inline "Add a resource" form and per-resource delete/toggle-public
+controls — the same "one page, admin controls appear inline" pattern
+`/files` already uses, rather than a separate admin page. A resource is
+either a document already in the unit's file library or an external link,
+never both. Built on a new `resources` table (migration
+`0019_resources.sql`) with its own `is_public` flag, independent of the
+underlying file's own — a members-only-by-default library file can be
+curated here as a public resource without changing its own public flag or
+its raw `/files/{id}/download` URL.
+
 **Per-page hero banners, admin-editable.** Calendar, News, Gallery, Roster,
 Family Directory, Files, and the Patrols/Dens list can each now carry an
 optional full-bleed hero banner image, shown just below the site header on

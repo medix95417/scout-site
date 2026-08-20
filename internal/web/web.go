@@ -97,6 +97,8 @@ type Handlers struct {
 	groupsList *template.Template
 	groupView  *template.Template
 	groupAdmin *template.Template
+
+	resourcesList *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -234,6 +236,9 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.groupAdmin, err = parse("admin-group.html"); err != nil {
 		return nil, err
 	}
+	if h.resourcesList, err = parse("resources.html"); err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
@@ -342,6 +347,14 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /files/{id}/delete", h.FileDelete)
 	mux.HandleFunc("POST /files/{id}/link", h.FileSetEventLinks)
 	mux.HandleFunc("POST /files/{id}/public", h.FileSetPublic)
+
+	// Resources page — curated documents/links, public or members-only
+	// (internal/web/resources.go).
+	mux.HandleFunc("GET /resources", h.ResourcesList)
+	mux.HandleFunc("POST /resources", h.ResourceCreate)
+	mux.HandleFunc("GET /resources/{id}/download", h.ResourceDownload)
+	mux.HandleFunc("POST /resources/{id}/delete", h.ResourceDelete)
+	mux.HandleFunc("POST /resources/{id}/public", h.ResourceSetPublic)
 
 	// Custom roles — super_admin only (internal/web/admin_roles.go).
 	mux.HandleFunc("GET /admin/custom-roles", h.AdminCustomRolesList)
