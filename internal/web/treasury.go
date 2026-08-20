@@ -465,7 +465,18 @@ func (h *Handlers) TreasuryAccountView(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		isOwner = owns
+		// Ownership only grants access while family self-service is on for
+		// this unit — otherwise accounts are treasurer-only (see
+		// settings.ScoutAccountSelfService).
+		if owns {
+			selfService, err := h.scoutAccountSelfServiceEnabled(r.Context(), unit.ID)
+			if err != nil {
+				log.Printf("web: checking scout-account-self-service setting: %v", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			isOwner = selfService
+		}
 	}
 
 	if !canManage && !isOwner {
@@ -563,6 +574,18 @@ func (h *Handlers) TreasuryRequestTransfer(w http.ResponseWriter, r *http.Reques
 		log.Printf("web: checking account ownership: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+	// Ownership only grants a self-service transfer while family
+	// self-service is on for this unit (see settings.ScoutAccountSelfService);
+	// otherwise only a treasurer can move money from an account.
+	if owns {
+		selfService, err := h.scoutAccountSelfServiceEnabled(r.Context(), unit.ID)
+		if err != nil {
+			log.Printf("web: checking scout-account-self-service setting: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		owns = selfService
 	}
 	if !owns && !units.CanManageLedger(caps) {
 		http.Error(w, "you don't have permission to move money from this account", http.StatusForbidden)

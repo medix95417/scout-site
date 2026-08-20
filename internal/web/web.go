@@ -364,17 +364,18 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 
 // baseData is embedded in every page's template data.
 type baseData struct {
-	Unit                units.Unit
-	LoggedIn            bool
-	CanEditContent      bool // leader roles only — drives the "Edit Homepage" nav link and homepage edit affordances
-	CanManageLedger     bool // Treasurer/super_admin in *this* unit — drives the "Treasury" nav link
-	IsSuperAdmin        bool // super_admin in *this* unit — drives the "Site Settings" nav link (see internal/web/settings_admin.go)
-	AdvancementEnabled  bool // this unit's settings.AdvancementEnabled toggle — drives the "Advancement"/"Manage Advancement" nav links, see internal/web/advancement.go
-	NeedsTwoFactorSetup bool // this login holds a treasury role, or the require-two-factor-for-all setting is on, and hasn't confirmed TOTP enrollment yet — drives a persistent nudge banner, see base.html
-	PageTitle           string
-	Flash               string
-	CSRFToken           string // embedded as a hidden field in every <form method="post"> — see internal/csrf
-	Version             string // this build's release version — see internal/version, shown in base.html's footer
+	Unit                     units.Unit
+	LoggedIn                 bool
+	CanEditContent           bool // leader roles only — drives the "Edit Homepage" nav link and homepage edit affordances
+	CanManageLedger          bool // Treasurer/super_admin in *this* unit — drives the "Treasury" nav link
+	IsSuperAdmin             bool // super_admin in *this* unit — drives the "Site Settings" nav link (see internal/web/settings_admin.go)
+	AdvancementEnabled       bool // this unit's settings.AdvancementEnabled toggle — drives the "Advancement"/"Manage Advancement" nav links, see internal/web/advancement.go
+	ScoutAccountsSelfService bool // this unit's settings.ScoutAccountSelfService toggle — drives the "My Accounts" nav link and family self-service account access, see internal/web/accounts.go
+	NeedsTwoFactorSetup      bool // this login holds a treasury role, or the require-two-factor-for-all setting is on, and hasn't confirmed TOTP enrollment yet — drives a persistent nudge banner, see base.html
+	PageTitle                string
+	Flash                    string
+	CSRFToken                string // embedded as a hidden field in every <form method="post"> — see internal/csrf
+	Version                  string // this build's release version — see internal/version, shown in base.html's footer
 }
 
 // rolesFor resolves the current login's roles in a unit. A family-wide
@@ -456,6 +457,15 @@ func isAccountOwner(ctx context.Context, pool *pgxpool.Pool, user auth.User, mem
 	return family.MemberBelongsToFamily(ctx, pool, memberID, user.FamilyID)
 }
 
+// scoutAccountSelfServiceEnabled reports whether families/individuals may
+// reach their own Scout ledger account in this unit (see
+// settings.ScoutAccountSelfService). When false, account ownership stops
+// granting access — only a Treasurer/super_admin can view or move money on
+// an account — so the account handlers gate their "owner" path on this.
+func (h *Handlers) scoutAccountSelfServiceEnabled(ctx context.Context, unitID string) (bool, error) {
+	return settings.GetForUnit(ctx, h.Pool, unitID, settings.ScoutAccountSelfService)
+}
+
 func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
@@ -473,6 +483,15 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 			log.Printf("web: checking advancement-enabled setting: %v", err)
 		} else {
 			data.AdvancementEnabled = enabled
+		}
+
+		if enabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.ScoutAccountSelfService); err != nil {
+			log.Printf("web: checking scout-account-self-service setting: %v", err)
+		} else {
+			// The "My Accounts" nav link shows when families may see their
+			// own balances, or always for a treasurer (who reaches accounts
+			// through the treasury area regardless of the family-facing toggle).
+			data.ScoutAccountsSelfService = enabled
 		}
 
 		// Cross-unit check (not the per-unit `caps` above) — a login that's

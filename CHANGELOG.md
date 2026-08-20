@@ -18,6 +18,18 @@ the date range between the `v1.0.0` commit and the `v1.4.0` catch-up
 commit. Every version from `v1.4.0` onward is a real, individually
 tagged commit with an accurate date.
 
+## [Unreleased]
+
+**Toggle: family access to Scout account balances.** A new per-unit
+setting on `/admin/settings` ("Family access to Scout account balances")
+lets an admin shut off the family-facing self-service view of Scout ledger
+accounts while leaving the Treasury area fully intact. When off, only a
+Treasurer/super_admin can open an account page — `/accounts` and
+`/treasury/accounts/{id}` return a clear message to anyone else, the
+self-service push-transfer is blocked, and the "My Accounts" nav link is
+hidden. Defaults to on, so existing units are unchanged. Same per-unit
+mechanism as the advancement toggle (`unit_settings`, no migration).
+
 ## [1.7.1] — 2026-08-20
 
 **Fix — deploy-blocking migration error (`events.sub_group_id` already
