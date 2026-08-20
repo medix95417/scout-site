@@ -20,6 +20,26 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Members-only patrol/den pages, with photos.** Each patrol (Troop) or
+den (Pack) now gets its own page at `/groups/{id}` — a short description
+plus a photo grid, similar in spirit to the main homepage's "Our Program"
+section and gallery strip, but never shown to a logged-out visitor: every
+route here requires login, and none of it is reachable from the public
+homepage. A new `/groups` page lists every patrol/den in the unit as the
+members-only landing point, and pills on `/admin/roster`'s "Dens &
+Patrols" section now link to a sub-group's edit page.
+
+Editing a sub-group's own blurb/photos requires being able to manage
+that specific sub-group — a unit-wide leader can edit any of them, a Den
+Leader only their own den, matching the existing "Den Leader (their
+den)" scoping already used everywhere else in the roster. Photos are
+picked from the file library the same way event photos already are (no
+new upload path needed), and don't need to be marked "Public" the way a
+homepage photo does, since the page itself already requires login.
+
+- **Migration:** `0017_sub_group_pages.sql` — adds `sub_groups.description`
+  and a `sub_group_files` join table (mirrors the existing `event_files`).
+
 **Home page photos, chosen from the site's own file storage.** The hero,
 "Our Program," and gallery photo fields on `/admin/home` now offer a
 "Choose from your file library" dropdown alongside the existing paste-a-

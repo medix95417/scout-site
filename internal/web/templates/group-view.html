@@ -1,0 +1,37 @@
+{{define "content"}}
+  <p class="mb-4"><a href="/groups" class="text-sm underline" style="color: var(--unit-color);">&larr; All {{.SubGroupNoun}}s</a></p>
+  <div class="flex items-center justify-between gap-2 mb-1">
+    <h1 class="text-2xl font-bold">{{.Group.Name}}</h1>
+    {{if .Scope.CanManageSubGroup .Group.ID}}
+      <a href="/admin/groups/{{.Group.ID}}" class="text-sm underline flex-shrink-0" style="color: var(--unit-color);">Edit</a>
+    {{end}}
+  </div>
+
+  {{if .Group.Description}}
+    <p class="text-gray-700 mb-6 whitespace-pre-line">{{.Group.Description}}</p>
+  {{end}}
+
+  {{if .Photos}}
+    <div class="grid gap-3 sm:grid-cols-3 mb-8">
+      {{range .Photos}}
+        <a href="/files/{{.ID}}/download" target="_blank" class="block h-32 rounded-md overflow-hidden border border-gray-200 bg-gray-100">
+          <img src="/files/{{.ID}}/download" alt="{{.Filename}}" class="w-full h-full object-cover">
+        </a>
+      {{end}}
+    </div>
+  {{end}}
+
+  <h2 class="text-lg font-semibold mb-3">Members</h2>
+  {{if .Members}}
+    <ul class="space-y-2">
+      {{range .Members}}
+        <li class="rounded-md bg-gray-50 px-3 py-2 text-sm flex items-center justify-between">
+          <span>{{.FirstName}} {{.LastName}}</span>
+          <span class="text-xs text-gray-500">{{range $i, $r := .Roles}}{{if $i}}, {{end}}{{$r}}{{end}}</span>
+        </li>
+      {{end}}
+    </ul>
+  {{else}}
+    <p class="text-sm text-gray-500">No members assigned yet.</p>
+  {{end}}
+{{end}}

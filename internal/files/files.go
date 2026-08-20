@@ -247,3 +247,78 @@ func ListForEvents(ctx context.Context, pool *pgxpool.Pool, eventIDs []string) (
 	}
 	return out, rows.Err()
 }
+
+// SetSubGroupLinks replaces the full set of files linked to one patrol's/
+// den's page with exactly fileIDs — the reverse direction of SetEventLinks
+// (one file linked to many events); here it's one sub-group linked to many
+// files, since a sub-group's page picks its photos from a checkbox list
+// (see admin-group.html). Scoped to unitID via a join so a file ID from
+// another unit can't be slipped into the link set.
+func SetSubGroupLinks(ctx context.Context, pool *pgxpool.Pool, subGroupID, unitID string, fileIDs []string) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx, `DELETE FROM sub_group_files WHERE sub_group_id = $1`, subGroupID); err != nil {
+		return err
+	}
+	for _, fileID := range fileIDs {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO sub_group_files (sub_group_id, file_id)
+			SELECT $1, $2 WHERE EXISTS (SELECT 1 FROM files WHERE id = $2 AND unit_id = $3)
+			ON CONFLICT DO NOTHING
+		`, subGroupID, fileID, unitID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// SubGroupIDsForFile returns the IDs of every patrol/den a file is
+// currently linked to — mirrors EventIDsForFile.
+func SubGroupIDsForFile(ctx context.Context, pool *pgxpool.Pool, fileID string) ([]string, error) {
+	rows, err := pool.Query(ctx, `SELECT sub_group_id FROM sub_group_files WHERE file_id = $1`, fileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ListForSubGroup returns every file linked to one patrol/den, most recent
+// first — what that sub-group's own members-only page shows as its photo
+// grid. Mirrors ListForEvent.
+func ListForSubGroup(ctx context.Context, pool *pgxpool.Pool, subGroupID string) ([]File, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT f.id, f.unit_id, f.filename, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at, f.is_public
+		FROM files f
+		JOIN sub_group_files sgf ON sgf.file_id = f.id
+		WHERE sgf.sub_group_id = $1
+		ORDER BY f.created_at DESC
+	`, subGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []File
+	for rows.Next() {
+		var f File
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}

@@ -93,6 +93,10 @@ type Handlers struct {
 
 	myFamily        *template.Template
 	familyDirectory *template.Template
+
+	groupsList *template.Template
+	groupView  *template.Template
+	groupAdmin *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -221,6 +225,15 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.familyDirectory, err = parse("family-directory.html"); err != nil {
 		return nil, err
 	}
+	if h.groupsList, err = parse("groups-list.html"); err != nil {
+		return nil, err
+	}
+	if h.groupView, err = parse("group-view.html"); err != nil {
+		return nil, err
+	}
+	if h.groupAdmin, err = parse("admin-group.html"); err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
@@ -340,6 +353,13 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /my-family/members/{id}", h.MyFamilyUpdateMember)
 	mux.HandleFunc("POST /my-family/address", h.MyFamilyUpdateAddress)
 	mux.HandleFunc("GET /directory", h.FamilyDirectory)
+
+	// Members-only patrol/den pages (internal/web/groups.go).
+	mux.HandleFunc("GET /groups", h.GroupsList)
+	mux.HandleFunc("GET /groups/{id}", h.GroupView)
+	mux.HandleFunc("GET /admin/groups/{id}", h.AdminGroupEdit)
+	mux.HandleFunc("POST /admin/groups/{id}", h.AdminGroupUpdate)
+	mux.HandleFunc("POST /admin/groups/{id}/photos", h.AdminGroupSetPhotos)
 }
 
 // baseData is embedded in every page's template data.

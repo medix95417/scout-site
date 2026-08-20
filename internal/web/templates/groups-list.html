@@ -1,0 +1,20 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-6">{{.PageTitle}} — {{.Unit.Name}}</h1>
+  {{if .Groups}}
+    <div class="grid gap-3 sm:grid-cols-2">
+      {{range .Groups}}
+        <div class="rounded-lg border border-gray-200 bg-white p-4 hover:border-gray-300">
+          <div class="flex items-center justify-between gap-2">
+            <a href="/groups/{{.ID}}" class="font-medium hover:underline">{{.Name}}</a>
+            {{if $.Scope.CanManageSubGroup .ID}}
+              <a href="/admin/groups/{{.ID}}" class="text-xs underline flex-shrink-0" style="color: var(--unit-color);">Edit</a>
+            {{end}}
+          </div>
+          {{if .Description}}<p class="text-sm text-gray-500 mt-1 line-clamp-2">{{.Description}}</p>{{end}}
+        </div>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="text-sm text-gray-500">No {{.SubGroupNoun}}s set up yet.</p>
+  {{end}}
+{{end}}
