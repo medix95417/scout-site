@@ -20,6 +20,16 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Social media links on the homepage.** A leader can now set a Facebook
+page, Instagram profile, and/or TikTok profile URL for their unit from
+the existing `/admin/home` homepage editor — each is its own optional
+field, independent of the other, and only the ones actually filled in
+show up as follow links on the public homepage. Built on the existing
+generic homepage-section mechanism (`internal/content.HomepageSections`)
+rather than a new table or admin page — three new section slugs
+(`home-facebook`, `home-instagram`, `home-tiktok`) picked up the existing
+`/admin/home` editing UI for free. No migration needed.
+
 **Custom roles with admin-picked capabilities.** A super_admin can now
 create a role on the fly (`/admin/custom-roles`, per unit) and choose
 which capabilities it grants — edit content, approve submissions, submit
