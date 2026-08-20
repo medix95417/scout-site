@@ -1,8 +1,15 @@
 {{define "content"}}
   <h1 class="text-2xl font-bold mb-1">Family Directory</h1>
-  <p class="text-sm text-gray-500 mb-6">
+  <p class="text-sm text-gray-500 mb-4">
     Only shows what each family has chosen to share — see
     <a href="/my-family" class="underline" style="color: var(--unit-color);">My Family</a> to manage your own.
+  </p>
+
+  <p class="mb-6">
+    <a href="/directory/export.pdf" target="_blank"
+       class="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50">
+      Print / Download PDF
+    </a>
   </p>
 
   {{if .Entries}}
