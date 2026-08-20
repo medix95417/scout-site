@@ -34,6 +34,12 @@ stripping the control characters and whitespace browsers ignore — anything
 it doesn't positively recognize is dropped. Added regression tests covering
 the obfuscation bypasses and confirming legitimate links still pass.
 
+**Security — `govulncheck` in CI.** The GitHub Actions workflow now runs
+`govulncheck` as its own job on every push and pull request, scanning the
+code and its dependencies against the Go vulnerability database. It reports
+only vulnerabilities actually reachable from this module, so a failure here
+is a real, actionable finding.
+
 **Security — defense-in-depth response headers.** Every response now carries
 `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 `Referrer-Policy: strict-origin-when-cross-origin`, and a minimal

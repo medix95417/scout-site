@@ -24,3 +24,19 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Scans the code and its dependencies against the Go vulnerability
+      # database (vuln.go.dev). Its own job so a finding shows up as a
+      # distinct, clearly-labeled failing check rather than looking like a
+      # build/test break. govulncheck reports only vulnerabilities in code
+      # paths actually reachable from this module, so a finding here is real,
+      # not just "a dependency somewhere has a CVE."
+      - name: govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-input: "1.25"
