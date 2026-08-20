@@ -1,0 +1,122 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-1">Resources — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-500 mb-6">
+    Handbooks, forms, and useful links, all in one place. Some are public;
+    others are only visible once you're logged in.
+  </p>
+
+  {{if .CanManage}}
+    <section class="rounded-lg border border-gray-200 bg-white p-4 mb-8 max-w-lg">
+      <h2 class="text-lg font-semibold mb-3">Add a resource</h2>
+      <form method="post" action="/resources" class="space-y-3" data-resource-form>
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="title" placeholder="Title" required>
+        <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="description" rows="2" placeholder="Description (optional)"></textarea>
+
+        <div class="flex gap-4 text-sm">
+          <label class="flex items-center gap-1">
+            <input type="radio" name="kind" value="file" checked data-resource-kind="file"> A document from the file library
+          </label>
+          <label class="flex items-center gap-1">
+            <input type="radio" name="kind" value="link" data-resource-kind="link"> A link
+          </label>
+        </div>
+
+        <div data-resource-panel="file">
+          {{if .LibraryFiles}}
+            <select class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="file_id">
+              {{range .LibraryFiles}}
+                <option value="{{.ID}}">{{.Filename}}</option>
+              {{end}}
+            </select>
+          {{else}}
+            <p class="text-xs text-gray-500">
+              No files in your <a href="/files" class="underline" style="color: var(--unit-color);">file library</a> yet —
+              upload one there first, then come back to add it here.
+            </p>
+          {{end}}
+        </div>
+        <div data-resource-panel="link" class="hidden">
+          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="url" name="url" placeholder="https://…">
+        </div>
+
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="is_public" value="1">
+          Public — visible to anyone, even logged out
+        </label>
+
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+          Add resource
+        </button>
+      </form>
+    </section>
+  {{end}}
+
+  {{if .Resources}}
+    <div class="space-y-3">
+      {{range .Resources}}
+        <div class="rounded-lg border border-gray-200 bg-white p-4">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              {{if .FileID}}
+                <a href="/resources/{{.ID}}/download" target="_blank" class="font-medium hover:underline truncate block" style="color: var(--unit-color);">
+                  {{.Title}}
+                </a>
+              {{else}}
+                <a href="{{.URL}}" target="_blank" rel="noopener" class="font-medium hover:underline truncate block" style="color: var(--unit-color);">
+                  {{.Title}}
+                </a>
+              {{end}}
+              {{if .Description}}<p class="text-sm text-gray-600 mt-0.5">{{.Description}}</p>{{end}}
+              <div class="text-xs text-gray-400 mt-0.5">
+                {{if .FileID}}
+                  <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 font-medium">{{.FileFilename}} · {{.SizeDisplay}}</span>
+                {{else}}
+                  <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 font-medium">Link</span>
+                {{end}}
+                {{if .IsPublic}}
+                  <span class="rounded-full bg-green-100 text-green-800 px-2 py-0.5 font-medium">Public</span>
+                {{else}}
+                  <span class="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 font-medium">Members only</span>
+                {{end}}
+              </div>
+            </div>
+            {{if $.CanManage}}
+              <div class="flex items-center gap-3 flex-shrink-0">
+                <form method="post" action="/resources/{{.ID}}/public">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <button type="submit" class="text-xs hover:underline" style="color: var(--unit-color);">
+                    {{if .IsPublic}}Make members-only{{else}}Make public{{end}}
+                  </button>
+                </form>
+                <form method="post" action="/resources/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Title}}? This can\'t be undone.');">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
+                </form>
+              </div>
+            {{end}}
+          </div>
+        </div>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="text-sm text-gray-500">No resources yet.</p>
+  {{end}}
+
+  <script>
+    // Toggles the "document from library" vs "link" panels on the add-
+    // resource form — a plain radio-driven show/hide, no framework needed.
+    (function () {
+      var form = document.querySelector('[data-resource-form]');
+      if (!form) return;
+      var radios = form.querySelectorAll('[data-resource-kind]');
+      radios.forEach(function (radio) {
+        radio.addEventListener('change', function () {
+          form.querySelectorAll('[data-resource-panel]').forEach(function (panel) {
+            panel.classList.toggle('hidden', panel.getAttribute('data-resource-panel') !== radio.value);
+          });
+        });
+      });
+    })();
+  </script>
+{{end}}
