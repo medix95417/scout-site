@@ -20,6 +20,14 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Gallery: pick photos from your library, with a real carousel.** Adding
+photos to a Gallery entry no longer means hand-typing image URLs — click a
+thumbnail from your file library (sorted by linked event, same picker as
+homepage sections/hero banners) and it's added to the list; pasting an
+external URL still works exactly as before. A gallery with more than one
+photo now renders as an actual swipeable/scrollable carousel with prev/next
+buttons, rather than every photo shown at once in a static grid.
+
 **Friendly names for uploaded files.** A file in the file library can now
 be given a friendlier display name (e.g. "Summer Camp Group Photo" instead
 of `IMG_6440.jpeg`) — set at upload time, or any time after via a new

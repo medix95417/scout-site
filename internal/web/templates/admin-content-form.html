@@ -30,6 +30,10 @@
         placeholder="{{.Kind.BodyPlaceholder}}"
         class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
       >{{.Post.Body}}</textarea>
+      {{if .Kind.HasImagePicker}}
+        <p class="text-xs text-gray-500 mt-2 mb-1">Or click a photo from your library to add it to the list above:</p>
+        {{template "imagePicker" (dict "Slug" "gallery-photos" "Images" .PublicImages "Mode" "append" "AppendTarget" "body")}}
+      {{end}}
     </div>
 
     <div>
@@ -51,4 +55,6 @@
     </button>
     <a href="{{.Kind.BasePath}}" class="text-sm underline ml-2">Cancel</a>
   </form>
+
+  {{if .Kind.HasImagePicker}}{{template "imagePickerScript" .}}{{end}}
 {{end}}

@@ -1,0 +1,130 @@
+{{/* imagePicker is the shared "choose from your library" widget — a
+     horizontally-scrollable strip of photo thumbnails, sorted by linked
+     calendar event (see files.ListPublicImagesForUnit), so a leader
+     recognizes "these came from the campout" instead of hunting through
+     an undifferentiated list. Included in every page template (see
+     web.go's parse helper) so it's reusable across content-admin.html
+     (homepage sections, page hero banners) and admin-content-form.html
+     (Gallery), all without duplicating this markup.
+
+     Takes a dict with (see web.go's templateDict):
+       Slug         field id, ties the picker to its target element
+       Images       []files.PickerImage
+       CurrentURL   (single mode only) the field's current value, to
+                    highlight the active thumbnail
+       Mode         "" (default, single mode) or "append" (Gallery mode)
+       AppendTarget (append mode only) id of the <textarea> to append to
+
+     Single mode: clicking a thumbnail fills in the paired URL <input>
+     (data-image-url-input, matched by Slug) — still a plain URL under the
+     hood, so pasting an external URL instead keeps working exactly the
+     same.
+
+     Append mode: clicking a thumbnail appends a new "URL | " line to the
+     target <textarea> (one photo per line is that field's existing
+     convention — see content.ParseGalleryPhotos) rather than replacing a
+     single value, since a gallery holds many photos, not one. */}}
+{{define "imagePicker"}}
+  {{if .Images}}
+    <div class="flex gap-2 overflow-x-auto pb-1" data-image-picker="{{.Slug}}"
+         {{if eq .Mode "append"}}data-image-picker-mode="append" data-image-append-target="{{.AppendTarget}}"{{end}}>
+      {{$current := .CurrentURL}}
+      {{range .Images}}
+        {{$url := printf "/files/%s/download" .ID}}
+        <button type="button" class="flex-shrink-0 w-20 text-center" data-image-picker-option="{{$url}}" title="{{.DisplayLabel}}">
+          <img src="{{$url}}" alt="{{.DisplayLabel}}" loading="lazy"
+               class="h-16 w-20 object-cover rounded-md border-2 {{if eq $url $current}}border-blue-500{{else}}border-gray-200 hover:border-gray-400{{end}}">
+          <span class="block text-[10px] text-gray-500 truncate mt-0.5">{{if .PrimaryEventName}}{{.PrimaryEventName}}{{else}}&mdash;{{end}}</span>
+        </button>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="text-xs text-gray-500">
+      No public photos in your <a href="/files" class="underline" style="color: var(--unit-color);">file library</a> yet —
+      upload one and mark it "Public" there to pick it here instead of pasting a URL.
+    </p>
+  {{end}}
+{{end}}
+
+{{/* photoCarousel renders a scrollable, snap-to-photo carousel — the
+     public-facing counterpart to the multi-select pickers above. Used
+     wherever more than one photo can be chosen for one spot (a Gallery
+     entry, the homepage's photo strip): a single photo just shows plain,
+     but several become a swipeable/scrollable carousel with prev/next
+     buttons, rather than every photo shown at once in a grid.
+
+     Takes a dict with:
+       Photos      anything rangeable with .URL/.Caption fields (e.g.
+                   []content.GalleryPhoto)
+       HeightClass a Tailwind height class for each photo, e.g. "h-80"
+
+     Pure CSS scroll-snap under the hood, so swipe/scroll navigation works
+     with zero JS; photoCarouselScript below only adds the prev/next
+     button behavior on top. */}}
+{{define "photoCarousel"}}
+  {{if .Photos}}
+    <div class="relative">
+      <div class="flex overflow-x-auto snap-x snap-mandatory rounded-lg border border-gray-200 bg-white" data-carousel>
+        {{$height := .HeightClass}}
+        {{range .Photos}}
+          <figure class="snap-start flex-shrink-0 w-full">
+            <img src="{{.URL}}" alt="{{.Caption}}" class="w-full {{$height}} object-cover">
+            {{if .Caption}}<figcaption class="p-2 text-xs text-gray-600">{{.Caption}}</figcaption>{{end}}
+          </figure>
+        {{end}}
+      </div>
+      {{if gt (len .Photos) 1}}
+        <button type="button" class="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 hover:bg-white p-2 shadow" data-carousel-prev aria-label="Previous photo">&larr;</button>
+        <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 hover:bg-white p-2 shadow" data-carousel-next aria-label="Next photo">&rarr;</button>
+      {{end}}
+    </div>
+  {{end}}
+{{end}}
+
+{{define "photoCarouselScript"}}
+  <script>
+    document.querySelectorAll('[data-carousel]').forEach(function (car) {
+      var wrap = car.closest('.relative');
+      var prev = wrap.querySelector('[data-carousel-prev]');
+      var next = wrap.querySelector('[data-carousel-next]');
+      if (prev) prev.addEventListener('click', function () { car.scrollBy({ left: -car.clientWidth, behavior: 'smooth' }); });
+      if (next) next.addEventListener('click', function () { car.scrollBy({ left: car.clientWidth, behavior: 'smooth' }); });
+    });
+  </script>
+{{end}}
+
+{{/* imagePickerScript wires up every [data-image-picker] on the page —
+     included once per page alongside the picker itself. Safe to include
+     even on a page with zero pickers (querySelectorAll just finds
+     nothing). */}}
+{{define "imagePickerScript"}}
+  <script>
+    document.querySelectorAll('[data-image-picker]').forEach(function (picker) {
+      var slug = picker.getAttribute('data-image-picker');
+      var append = picker.getAttribute('data-image-picker-mode') === 'append';
+      var target = append
+        ? document.getElementById(picker.getAttribute('data-image-append-target'))
+        : document.querySelector('[data-image-url-input="' + slug + '"]');
+      if (!target) return;
+
+      picker.querySelectorAll('[data-image-picker-option]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var url = btn.getAttribute('data-image-picker-option');
+          if (append) {
+            var sep = target.value && !target.value.endsWith('\n') ? '\n' : '';
+            target.value += sep + url + ' | ';
+            target.focus();
+          } else {
+            target.value = url;
+            picker.querySelectorAll('img').forEach(function (img) {
+              img.classList.remove('border-blue-500');
+              img.classList.add('border-gray-200');
+            });
+            btn.querySelector('img').classList.remove('border-gray-200');
+            btn.querySelector('img').classList.add('border-blue-500');
+          }
+        });
+      });
+    });
+  </script>
+{{end}}
