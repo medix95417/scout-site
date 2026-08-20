@@ -377,6 +377,62 @@ func ScopeForMember(ctx context.Context, pool *pgxpool.Pool, memberID, unitID st
 	return scope, rows.Err()
 }
 
+// SubGroupIDsForFamily returns every patrol/den any member of a family
+// belongs to in a unit — via role_assignments.sub_group_id, regardless of
+// whether that role carries any roster-management capability. This is
+// deliberately a different question from Scope (which roles a family can
+// *manage* the roster for): a plain parent/Scout with no leadership role
+// still belongs to their own den/patrol, and needs to see that den's
+// scoped calendar events (see calendar.FilterVisibleToViewer) even though
+// their Scope is empty.
+func SubGroupIDsForFamily(ctx context.Context, pool *pgxpool.Pool, familyID, unitID string) ([]string, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT DISTINCT role_assignments.sub_group_id::text
+		FROM role_assignments
+		JOIN members ON members.id = role_assignments.member_id
+		WHERE members.family_id = $1 AND role_assignments.unit_id = $2 AND role_assignments.sub_group_id IS NOT NULL
+	`, familyID, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// SubGroupIDsForMember is SubGroupIDsForFamily narrowed to one member's own
+// role assignments — the individual-login sibling, same "just their own
+// stuff" pattern as ScopeForMember.
+func SubGroupIDsForMember(ctx context.Context, pool *pgxpool.Pool, memberID, unitID string) ([]string, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT DISTINCT sub_group_id::text
+		FROM role_assignments
+		WHERE member_id = $1 AND unit_id = $2 AND sub_group_id IS NOT NULL
+	`, memberID, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // CanManageMember reports whether the acting scope covers a member who
 // already has role assignments in this unit — true if the scope is
 // unit-wide AND the member holds some role in this unit, or if any of the

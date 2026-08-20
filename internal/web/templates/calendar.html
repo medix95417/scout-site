@@ -45,6 +45,16 @@
           </div>
         </div>
         <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="text" name="location" placeholder="Location (optional)">
+        {{if .CreatableSubGroups}}
+          <div>
+            <label class="block text-xs text-gray-500 mb-1" for="sub_group_id">Scope to a specific {{.SubGroupNoun}} (optional)</label>
+            <select id="sub_group_id" name="sub_group_id" class="w-full rounded-md border border-gray-300 px-3 py-2">
+              <option value="">Whole unit</option>
+              {{range .CreatableSubGroups}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+            </select>
+            <p class="text-xs text-gray-500 mt-1">Only visible to that {{.SubGroupNoun}}'s own members (and leaders) — scoping overrides "visible to the public" below.</p>
+          </div>
+        {{end}}
         <label class="flex items-center gap-2 text-sm">
           <input type="checkbox" name="public" value="1"> Visible to the public
         </label>
@@ -96,7 +106,11 @@
     <ul class="space-y-3">
       {{range .Events}}
         <li id="event-{{.ID}}" class="rounded-lg border border-gray-200 bg-white p-4 scroll-mt-4">
-          <div class="font-medium">{{.Title}} {{if eq .Visibility "public"}}<span class="text-xs text-gray-400">(public)</span>{{end}}</div>
+          <div class="font-medium">
+            {{.Title}}
+            {{if eq .Visibility "public"}}<span class="text-xs text-gray-400">(public)</span>{{end}}
+            {{if .SubGroupName}}<span class="text-xs rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 ml-1">{{.SubGroupName}}</span>{{end}}
+          </div>
           <div class="text-sm text-gray-500">{{.DateRangeDisplay}}{{if .Location}} · {{.Location}}{{end}}</div>
           {{if .Description}}<p class="text-sm mt-1">{{.Description}}</p>{{end}}
           <form method="post" action="/calendar/{{.ID}}/rsvp" class="mt-2 flex gap-2 items-center">

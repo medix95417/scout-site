@@ -18,7 +18,22 @@ the date range between the `v1.0.0` commit and the `v1.4.0` catch-up
 commit. Every version from `v1.4.0` onward is a real, individually
 tagged commit with an accurate date.
 
-## [Unreleased]
+## [1.7.0] — 2026-08-20
+
+**Calendar events scoped to a specific patrol/den.** The "Add an event"
+form now offers an optional "Scope to a specific patrol/den" picker — a
+unit-wide leader can schedule for any patrol/den, a scoped submitter
+(e.g. a Patrol Leader with only submit-for-approval rights) only for
+their own. A scoped event is visible only to that patrol/den's own
+members (via their existing role assignment, not just its leaders) plus
+any leader broad enough to hold full content-edit access, for
+cross-den scheduling oversight — everyone else sees it exactly as if it
+didn't exist. Scoping always overrides "visible to the public": a
+patrol/den event is inherently members-only, since the unauthenticated
+calendar path doesn't apply any den-filtering of its own.
+
+- **Migration:** `0018_calendar_sub_groups.sql` — adds `events.sub_group_id`
+  (nullable; existing and future unscoped events are unaffected).
 
 **Members-only patrol/den pages, with photos.** Each patrol (Troop) or
 den (Pack) now gets its own page at `/groups/{id}` — a short description
