@@ -212,12 +212,16 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirectTo, http.StatusSeeOther)
 }
 
+// requiresLoginToDownload is the access check behind FileDownload, pulled
+// out as a pure function so it's unit-testable without a real storage
+// backend — the only file a logged-out visitor may ever fetch is one a
+// leader has explicitly marked public (see migration 0016).
+func requiresLoginToDownload(f files.File, loggedIn bool) bool {
+	return !f.Public && !loggedIn
+}
+
 func (h *Handlers) FileDownload(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
-	if _, loggedIn := auth.UserFromContext(r.Context()); !loggedIn {
-		http.Redirect(w, r, "/login?next=/files", http.StatusSeeOther)
-		return
-	}
 	if h.Storage == nil {
 		http.Error(w, storageUnavailableMsg, http.StatusServiceUnavailable)
 		return
@@ -231,6 +235,16 @@ func (h *Handlers) FileDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	if !found {
 		http.NotFound(w, r)
+		return
+	}
+
+	// Every file is members-only EXCEPT one a leader has explicitly marked
+	// public (see migration 0016) — that's how a homepage image slot (see
+	// content-admin.html's "choose from library" picker) can point at a
+	// library photo and still render for a logged-out visitor.
+	_, loggedIn := auth.UserFromContext(r.Context())
+	if requiresLoginToDownload(f, loggedIn) {
+		http.Redirect(w, r, "/login?next=/files", http.StatusSeeOther)
 		return
 	}
 
@@ -290,6 +304,42 @@ func (h *Handlers) FileDelete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	http.Redirect(w, r, "/files", http.StatusSeeOther)
+}
+
+// FileSetPublic toggles whether a file may be served without login (see
+// migration 0016) — the same CanEditUnitContent gate as delete/link, since
+// making a file public is a content-level decision, not just a viewing one.
+func (h *Handlers) FileSetPublic(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	user, loggedIn := auth.UserFromContext(r.Context())
+	if !loggedIn {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
+		http.Error(w, "you don't have permission to manage files", http.StatusForbidden)
+		return
+	}
+
+	fileID := r.PathValue("id")
+	f, found, err := files.Get(r.Context(), h.Pool, fileID, unit.ID)
+	if err != nil {
+		log.Printf("web: loading file: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+
+	if err := files.SetPublic(r.Context(), h.Pool, fileID, unit.ID, !f.Public); err != nil {
+		log.Printf("web: setting file public flag: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 	http.Redirect(w, r, "/files", http.StatusSeeOther)
 }
 

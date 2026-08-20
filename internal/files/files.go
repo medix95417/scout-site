@@ -30,6 +30,7 @@ type File struct {
 	Category    string
 	UploadedBy  *string
 	CreatedAt   time.Time
+	Public      bool // see migration 0016 — whether FileDownload may serve this one without requiring login
 }
 
 // NewStorageKey generates a collision-proof object key for a new upload,
@@ -63,7 +64,7 @@ func Create(ctx context.Context, pool *pgxpool.Pool, f File) (File, error) {
 // ListForUnit returns every file belonging to a unit, most recent first.
 func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]File, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, unit_id, filename, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at
+		SELECT id, unit_id, filename, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
 		FROM files WHERE unit_id = $1 ORDER BY created_at DESC
 	`, unitID)
 	if err != nil {
@@ -74,7 +75,7 @@ func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]File
 	var out []File
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt); err != nil {
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
 			return nil, err
 		}
 		out = append(out, f)
@@ -89,13 +90,47 @@ func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]File
 func Get(ctx context.Context, pool *pgxpool.Pool, fileID, unitID string) (File, bool, error) {
 	var f File
 	err := pool.QueryRow(ctx, `
-		SELECT id, unit_id, filename, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at
+		SELECT id, unit_id, filename, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
 		FROM files WHERE id = $1 AND unit_id = $2
-	`, fileID, unitID).Scan(&f.ID, &f.UnitID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt)
+	`, fileID, unitID).Scan(&f.ID, &f.UnitID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public)
 	if err != nil {
 		return File{}, false, nil //nolint:nilerr // "no such file in this unit" is a normal, expected outcome
 	}
 	return f, true, nil
+}
+
+// SetPublic flips whether a file may be served by FileDownload without
+// requiring login — see migration 0016's doc comment. Scoped to unitID like
+// every other file write here.
+func SetPublic(ctx context.Context, pool *pgxpool.Pool, fileID, unitID string, public bool) error {
+	_, err := pool.Exec(ctx, `UPDATE files SET is_public = $1 WHERE id = $2 AND unit_id = $3`, public, fileID, unitID)
+	return err
+}
+
+// ListPublicImagesForUnit lists a unit's public, image-content-type files —
+// what the "choose from library" picker on /admin/home offers for the
+// hero/program/gallery photo slots. Only ever returns what a leader has
+// already explicitly marked public (SetPublic); never all of ListForUnit.
+func ListPublicImagesForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]File, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, unit_id, filename, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
+		FROM files WHERE unit_id = $1 AND is_public = true AND content_type LIKE 'image/%'
+		ORDER BY created_at DESC
+	`, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []File
+	for rows.Next() {
+		var f File
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
 }
 
 // Delete removes a file's metadata row, scoped to a unit. The caller is

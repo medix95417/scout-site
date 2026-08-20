@@ -16,19 +16,41 @@
             <p class="text-xs text-amber-700 mb-2">
               Not set yet — the placeholder below is what's currently showing on the live site.
             </p>
-          {{else if and (eq .Kind "url") .Placeholder}}
+          {{else if and (eq .Kind "image") .Placeholder}}
             <p class="text-xs text-amber-700 mb-2">
               Not set yet — a stock photo is currently showing on the live site until you add your own.
             </p>
           {{end}}
         {{end}}
-        {{if and (eq .Kind "url") (or .Body .Placeholder)}}
+        {{if and (eq .Kind "image") (or .Body .Placeholder)}}
           <img src="{{if .Body}}{{.Body}}{{else}}{{.Placeholder}}{{end}}" alt=""
                class="mb-2 h-28 w-full max-w-xs rounded-md border border-gray-200 object-cover">
         {{end}}
         <form method="post" action="/admin/home/{{.Slug}}" class="space-y-2">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-          {{if eq .Kind "url"}}
+          {{if eq .Kind "image"}}
+            <input
+              type="url"
+              name="body"
+              value="{{.Body}}"
+              class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              placeholder="https://… or choose from your library below"
+              data-image-url-input="{{.Slug}}"
+            >
+            {{if $.PublicImages}}
+              <select class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" data-image-picker="{{.Slug}}">
+                <option value="">Choose from your file library…</option>
+                {{range $.PublicImages}}
+                  <option value="/files/{{.ID}}/download">{{.Filename}}</option>
+                {{end}}
+              </select>
+            {{else}}
+              <p class="text-xs text-gray-500">
+                No public photos in your <a href="/files" class="underline" style="color: var(--unit-color);">file library</a> yet —
+                upload one and mark it "Public" there to pick it here instead of pasting a URL.
+              </p>
+            {{end}}
+          {{else if eq .Kind "url"}}
             <input
               type="url"
               name="body"
@@ -53,4 +75,22 @@
   </div>
 
   <p class="mt-6 text-sm"><a href="/" class="underline" style="color: var(--unit-color);">&larr; Back to homepage</a></p>
+
+  <script>
+    // Wires each "choose from library" <select> to its matching image URL
+    // <input> — picking a photo fills in the input (still a plain URL under
+    // the hood, so pasting an external URL instead keeps working exactly as
+    // before) but doesn't submit the form, since a leader might still want
+    // to review/preview before saving.
+    document.querySelectorAll('[data-image-picker]').forEach(function (picker) {
+      var slug = picker.getAttribute('data-image-picker');
+      var input = document.querySelector('[data-image-url-input="' + slug + '"]');
+      if (!input) return;
+      picker.addEventListener('change', function () {
+        if (picker.value) {
+          input.value = picker.value;
+        }
+      });
+    });
+  </script>
 {{end}}

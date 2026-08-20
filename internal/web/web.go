@@ -101,6 +101,7 @@ type Handlers struct {
 // or number-formatting of their own.
 var templateFuncs = template.FuncMap{
 	"formatCents": formatCents,
+	"hasPrefix":   strings.HasPrefix,
 }
 
 // New parses templates and returns a ready-to-use Handlers.
@@ -327,6 +328,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /files/{id}/download", h.FileDownload)
 	mux.HandleFunc("POST /files/{id}/delete", h.FileDelete)
 	mux.HandleFunc("POST /files/{id}/link", h.FileSetEventLinks)
+	mux.HandleFunc("POST /files/{id}/public", h.FileSetPublic)
 
 	// Custom roles — super_admin only (internal/web/admin_roles.go).
 	mux.HandleFunc("GET /admin/custom-roles", h.AdminCustomRolesList)
@@ -621,10 +623,16 @@ func (h *Handlers) HomeContentList(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 
+	publicImages, err := files.ListPublicImagesForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading public images: %v", err)
+	}
+
 	data := struct {
 		baseData
-		Sections []homeAdminRow
-	}{baseData: h.base(r, "Edit Homepage"), Sections: rows}
+		Sections     []homeAdminRow
+		PublicImages []files.File
+	}{baseData: h.base(r, "Edit Homepage"), Sections: rows, PublicImages: publicImages}
 	h.render(w, h.contentAdmin, data)
 }
 
