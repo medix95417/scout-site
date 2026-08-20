@@ -20,6 +20,21 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Home page photos, chosen from the site's own file storage.** The hero,
+"Our Program," and gallery photo fields on `/admin/home` now offer a
+"Choose from your file library" dropdown alongside the existing paste-a-
+URL option — no more needing to host a photo somewhere else first.
+
+The file library is members-only by design (every download normally
+requires login), but the homepage is public, so a leader has to
+explicitly mark a photo "Public" from `/files` (image files only) before
+it shows up in the homepage picker — picking a photo never makes it
+public by itself. `/files/{id}/download` skips the login requirement only
+for a file marked this way; everything else in the library is unaffected.
+
+- **Migration:** `0016_public_files.sql` — adds `files.is_public`
+  (default false).
+
 **Newsletter: WYSIWYG HTML editor, real HTML email, and starter
 templates.** The newsletter body is now authored with a full rich-text
 editor (Quill, loaded from a CDN — same pattern as htmx/Tailwind already

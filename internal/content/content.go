@@ -35,7 +35,7 @@ type SectionDef struct {
 	Slug        string
 	Label       string // shown in the admin "edit homepage" list
 	Placeholder string // shown on the live site until a leader edits it
-	Kind        string // "" (default) = multi-line text box; "url" = single-line link/image-URL field
+	Kind        string // "" (default) = multi-line text box; "url" = single-line link field; "image" = single-line image-URL field (gets a preview + "choose from library" picker on /admin/home — see content-admin.html)
 	Help        string // optional short instructions shown under the field in the admin list
 }
 
@@ -72,13 +72,13 @@ func HomepageSections(unitType string) []SectionDef {
 	if unitType == "troop" {
 		return []SectionDef{
 			{Slug: "home-hero", Label: "Hero tagline", Placeholder: "Adventure, leadership, and lifelong friendships — join our Scouts BSA troop."},
-			{Slug: "home-hero-image", Label: "Hero background photo URL", Kind: "url", Placeholder: stockPhotoPhilmont, Help: imageHelp},
+			{Slug: "home-hero-image", Label: "Hero background photo URL", Kind: "image", Placeholder: stockPhotoPhilmont, Help: imageHelp},
 			{Slug: "home-program", Label: "Our program (one activity per line)", Placeholder: "Weekly troop meetings\nMonthly campouts\nService projects\nMerit badge workshops\nHigh-adventure trips", Help: "Each line becomes one bullet point on the homepage."},
-			{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "url", Placeholder: stockPhotoHiking, Help: imageHelp},
+			{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 			{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Meetings are held weekly — contact us for the current time and location."},
 			{Slug: "home-leadership", Label: "Leadership & contact", Placeholder: "Contact our Scoutmaster to learn more about joining."},
-			{Slug: "home-gallery-1", Label: "Gallery photo 1 URL", Kind: "url", Placeholder: stockPhotoCampsite, Help: imageHelp},
-			{Slug: "home-gallery-2", Label: "Gallery photo 2 URL", Kind: "url", Placeholder: stockPhotoTroopCamp, Help: imageHelp},
+			{Slug: "home-gallery-1", Label: "Gallery photo 1 URL", Kind: "image", Placeholder: stockPhotoCampsite, Help: imageHelp},
+			{Slug: "home-gallery-2", Label: "Gallery photo 2 URL", Kind: "image", Placeholder: stockPhotoTroopCamp, Help: imageHelp},
 			{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your troop's Facebook or Instagram page."},
 			{Slug: "home-facebook", Label: "Facebook page URL (optional)", Kind: "url", Help: "Shows a Facebook icon/link on the homepage if set."},
 			{Slug: "home-instagram", Label: "Instagram profile URL (optional)", Kind: "url", Help: "Shows an Instagram icon/link on the homepage if set."},
@@ -89,11 +89,11 @@ func HomepageSections(unitType string) []SectionDef {
 		{Slug: "home-hero", Label: "Hero tagline", Placeholder: "Adventure starts here — join our Cub Scout pack!"},
 		{Slug: "home-hero-image", Label: "Hero background photo URL", Kind: "url", Placeholder: stockPhotoCampfire, Help: imageHelp},
 		{Slug: "home-program", Label: "Our program (one activity per line)", Placeholder: "Monthly pack meetings\nDens meeting every other week\nCamping (tent and cabin)\nPinewood Derby\nCommunity service projects", Help: "Each line becomes one bullet point on the homepage, like pack6crestwood.org's \"Our Program\" list."},
-		{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "url", Placeholder: stockPhotoHiking, Help: imageHelp},
+		{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 		{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Contact us for our current meeting time and location."},
 		{Slug: "home-leadership", Label: "Leadership & contact", Placeholder: "Contact our Cubmaster to learn more about joining."},
-		{Slug: "home-gallery-1", Label: "Gallery photo 1 URL", Kind: "url", Placeholder: stockPhotoCampsite, Help: imageHelp},
-		{Slug: "home-gallery-2", Label: "Gallery photo 2 URL", Kind: "url", Placeholder: stockPhotoDerby, Help: imageHelp},
+		{Slug: "home-gallery-1", Label: "Gallery photo 1 URL", Kind: "image", Placeholder: stockPhotoCampsite, Help: imageHelp},
+		{Slug: "home-gallery-2", Label: "Gallery photo 2 URL", Kind: "image", Placeholder: stockPhotoDerby, Help: imageHelp},
 		{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your pack's Instagram or Facebook page."},
 		{Slug: "home-facebook", Label: "Facebook page URL (optional)", Kind: "url", Help: "Shows a Facebook icon/link on the homepage if set."},
 		{Slug: "home-instagram", Label: "Instagram profile URL (optional)", Kind: "url", Help: "Shows an Instagram icon/link on the homepage if set."},
