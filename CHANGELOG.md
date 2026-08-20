@@ -20,6 +20,13 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Patrols/Dens dropdown in the hamburger nav.** The nav's "Patrols"/"Dens"
+entry now expands (a nested no-JS `<details>` disclosure, same pattern as
+the outer hamburger) to list each patrol/den by name with a direct link to
+its own page, plus a "View all" link to the full list — no more landing on
+a list page just to pick one. Falls back to the plain link it replaces
+when a unit has no patrols/dens set up yet.
+
 **Toggle: family access to Scout account balances.** A new per-unit
 setting on `/admin/settings` ("Family access to Scout account balances")
 lets an admin shut off the family-facing self-service view of Scout ledger

@@ -366,12 +366,13 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 type baseData struct {
 	Unit                     units.Unit
 	LoggedIn                 bool
-	CanEditContent           bool // leader roles only — drives the "Edit Homepage" nav link and homepage edit affordances
-	CanManageLedger          bool // Treasurer/super_admin in *this* unit — drives the "Treasury" nav link
-	IsSuperAdmin             bool // super_admin in *this* unit — drives the "Site Settings" nav link (see internal/web/settings_admin.go)
-	AdvancementEnabled       bool // this unit's settings.AdvancementEnabled toggle — drives the "Advancement"/"Manage Advancement" nav links, see internal/web/advancement.go
-	ScoutAccountsSelfService bool // this unit's settings.ScoutAccountSelfService toggle — drives the "My Accounts" nav link and family self-service account access, see internal/web/accounts.go
-	NeedsTwoFactorSetup      bool // this login holds a treasury role, or the require-two-factor-for-all setting is on, and hasn't confirmed TOTP enrollment yet — drives a persistent nudge banner, see base.html
+	CanEditContent           bool              // leader roles only — drives the "Edit Homepage" nav link and homepage edit affordances
+	CanManageLedger          bool              // Treasurer/super_admin in *this* unit — drives the "Treasury" nav link
+	IsSuperAdmin             bool              // super_admin in *this* unit — drives the "Site Settings" nav link (see internal/web/settings_admin.go)
+	AdvancementEnabled       bool              // this unit's settings.AdvancementEnabled toggle — drives the "Advancement"/"Manage Advancement" nav links, see internal/web/advancement.go
+	ScoutAccountsSelfService bool              // this unit's settings.ScoutAccountSelfService toggle — drives the "My Accounts" nav link and family self-service account access, see internal/web/accounts.go
+	NeedsTwoFactorSetup      bool              // this login holds a treasury role, or the require-two-factor-for-all setting is on, and hasn't confirmed TOTP enrollment yet — drives a persistent nudge banner, see base.html
+	NavSubGroups             []roster.SubGroup // every patrol/den in this unit, for the hamburger nav's Patrols/Dens submenu (see base.html) — named distinctly from any page's own "Groups" field (e.g. internal/web/groups.go's GroupsList) so embedding baseData never shadows a page's own data
 	PageTitle                string
 	Flash                    string
 	CSRFToken                string // embedded as a hidden field in every <form method="post"> — see internal/csrf
@@ -492,6 +493,12 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 			// own balances, or always for a treasurer (who reaches accounts
 			// through the treasury area regardless of the family-facing toggle).
 			data.ScoutAccountsSelfService = enabled
+		}
+
+		if groups, err := roster.SubGroupsForUnit(r.Context(), h.Pool, unit.ID); err != nil {
+			log.Printf("web: loading sub-groups for nav: %v", err)
+		} else {
+			data.NavSubGroups = groups
 		}
 
 		// Cross-unit check (not the per-unit `caps` above) — a login that's
