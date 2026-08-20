@@ -283,6 +283,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/settings", h.SystemSettingsView)
 	mux.HandleFunc("POST /admin/settings/{key}/toggle", h.SystemSettingsToggle)
 	mux.HandleFunc("POST /admin/settings/text", h.SystemSettingsUpdateText)
+	mux.HandleFunc("POST /admin/settings/unit/{key}/toggle", h.UnitSettingsToggle)
 
 	// News/announcements and photo galleries (internal/web/content_posts.go).
 	mux.HandleFunc("GET /news", h.NewsList)
@@ -331,6 +332,7 @@ type baseData struct {
 	CanEditContent      bool // leader roles only — drives the "Edit Homepage" nav link and homepage edit affordances
 	CanManageLedger     bool // Treasurer/super_admin in *this* unit — drives the "Treasury" nav link
 	IsSuperAdmin        bool // super_admin in *this* unit — drives the "Site Settings" nav link (see internal/web/settings_admin.go)
+	AdvancementEnabled  bool // this unit's settings.AdvancementEnabled toggle — drives the "Advancement"/"Manage Advancement" nav links, see internal/web/advancement.go
 	NeedsTwoFactorSetup bool // this login holds a treasury role, or the require-two-factor-for-all setting is on, and hasn't confirmed TOTP enrollment yet — drives a persistent nudge banner, see base.html
 	PageTitle           string
 	Flash               string
@@ -429,6 +431,12 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 		data.CanEditContent = units.CanEditUnitContent(caps)
 		data.CanManageLedger = units.CanManageLedger(caps)
 		data.IsSuperAdmin = units.IsSuperAdmin(caps)
+
+		if enabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.AdvancementEnabled); err != nil {
+			log.Printf("web: checking advancement-enabled setting: %v", err)
+		} else {
+			data.AdvancementEnabled = enabled
+		}
 
 		// Cross-unit check (not the per-unit `caps` above) — a login that's
 		// Treasurer on only one of the two units still needs 2FA nudged

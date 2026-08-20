@@ -44,6 +44,19 @@ in the existing "Add Role"/roster UI; nothing needed to change there.
   unchanged) and adds `custom_roles` (per-unit role definitions with a
   `capabilities` array, checked against the fixed capability set).
 
+**Advancement on/off toggle.** A super_admin can now turn `/advancement`
+and `/admin/advancement` on or off per unit, from a new "This Unit's
+Settings" section on `/admin/settings` — Troop and Pack can answer this
+independently. Defaults to on (no behavior change for existing units)
+so it can be turned off where BSA national's own Scoutbook changes have
+made a unit's own tracking redundant, with a one-click way to turn it
+back on. Turning it off hides the nav links and blocks direct URL access
+to every advancement route with a clear message — existing records
+aren't touched, just hidden until re-enabled.
+
+- **Migration:** `0014_unit_settings.sql` — adds `unit_settings`, a
+  per-unit sibling to the existing site-wide `system_settings` table.
+
 ## [1.6.3] — 2026-08-20
 
 **Fix — deploy build OOM-killed on a small VPS.** `docker compose up -d
