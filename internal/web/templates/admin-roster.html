@@ -81,7 +81,9 @@
       <h2 class="text-lg font-semibold mb-3">Dens &amp; Patrols</h2>
       {{if .SubGroups}}
         <ul class="flex flex-wrap gap-2 mb-3">
-          {{range .SubGroups}}<li class="rounded-full bg-gray-100 px-3 py-1 text-xs">{{.Name}}</li>{{end}}
+          {{range .SubGroups}}
+            <li><a href="/admin/groups/{{.ID}}" class="block rounded-full bg-gray-100 px-3 py-1 text-xs hover:bg-gray-200">{{.Name}}</a></li>
+          {{end}}
         </ul>
       {{else}}
         <p class="text-sm text-gray-500 mb-3">None set up yet.</p>

@@ -139,3 +139,38 @@ func RosterForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Ro
 	}
 	return entries, rows.Err()
 }
+
+// RosterForSubGroup is RosterForUnit narrowed to one patrol/den — what a
+// sub-group's own members-only page (see internal/web's GroupView) shows
+// as its member list.
+func RosterForSubGroup(ctx context.Context, pool *pgxpool.Pool, subGroupID string) ([]RosterEntry, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT
+			members.id, members.family_id, members.first_name, members.last_name, members.member_type::text,
+			COALESCE(sub_groups.name, ''),
+			array_agg(DISTINCT role_assignments.role::text) AS roles
+		FROM role_assignments
+		JOIN members ON members.id = role_assignments.member_id
+		LEFT JOIN sub_groups ON sub_groups.id = role_assignments.sub_group_id
+		WHERE role_assignments.sub_group_id = $1
+		GROUP BY members.id, members.family_id, members.first_name, members.last_name, members.member_type, sub_groups.name
+		ORDER BY (members.member_type = 'youth'), members.last_name, members.first_name
+	`, subGroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []RosterEntry
+	for rows.Next() {
+		var e RosterEntry
+		if err := rows.Scan(
+			&e.ID, &e.FamilyID, &e.FirstName, &e.LastName, &e.MemberType,
+			&e.SubGroupName, &e.Roles,
+		); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}

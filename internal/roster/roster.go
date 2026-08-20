@@ -129,10 +129,11 @@ func slugify(label string) string {
 // --- Dens / patrols ---------------------------------------------------------
 
 type SubGroup struct {
-	ID     string
-	UnitID string
-	Name   string
-	Type   string // "den" | "patrol"
+	ID          string
+	UnitID      string
+	Name        string
+	Type        string // "den" | "patrol"
+	Description string // shown on the sub-group's own members-only page — see migration 0017
 }
 
 // SubGroupsForUnit lists every den/patrol in a unit, for populating
@@ -141,7 +142,7 @@ type SubGroup struct {
 // the actual write-time restriction happens in Scope.CanManageSubGroup.
 func SubGroupsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]SubGroup, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, unit_id, name, sub_group_type::text
+		SELECT id, unit_id, name, sub_group_type::text, COALESCE(description, '')
 		FROM sub_groups
 		WHERE unit_id = $1
 		ORDER BY name
@@ -154,12 +155,57 @@ func SubGroupsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([
 	var groups []SubGroup
 	for rows.Next() {
 		var g SubGroup
-		if err := rows.Scan(&g.ID, &g.UnitID, &g.Name, &g.Type); err != nil {
+		if err := rows.Scan(&g.ID, &g.UnitID, &g.Name, &g.Type, &g.Description); err != nil {
 			return nil, err
 		}
 		groups = append(groups, g)
 	}
 	return groups, rows.Err()
+}
+
+// GetSubGroup looks up a single patrol/den, scoped to a unit — what a
+// sub-group's own page (GroupView/AdminGroupEdit, internal/web) loads.
+func GetSubGroup(ctx context.Context, pool *pgxpool.Pool, subGroupID, unitID string) (SubGroup, bool, error) {
+	var g SubGroup
+	err := pool.QueryRow(ctx, `
+		SELECT id, unit_id, name, sub_group_type::text, COALESCE(description, '')
+		FROM sub_groups WHERE id = $1 AND unit_id = $2
+	`, subGroupID, unitID).Scan(&g.ID, &g.UnitID, &g.Name, &g.Type, &g.Description)
+	if err != nil {
+		return SubGroup{}, false, nil //nolint:nilerr // "no such sub-group in this unit" is a normal, expected outcome
+	}
+	return g, true, nil
+}
+
+// UpdateSubGroupDescription sets a patrol's/den's own-page blurb. Callers
+// are responsible for checking Scope.CanManageSubGroup first — a Den
+// Leader may edit their own den's page, not another den's.
+func UpdateSubGroupDescription(ctx context.Context, pool *pgxpool.Pool, subGroupID, unitID, description, actorID string) error {
+	before, found, err := GetSubGroup(ctx, pool, subGroupID, unitID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("roster: sub-group %s not found in unit %s", subGroupID, unitID)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		UPDATE sub_groups SET description = $1 WHERE id = $2 AND unit_id = $3
+	`, description, subGroupID, unitID); err != nil {
+		return err
+	}
+
+	after := before
+	after.Description = description
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "sub_group",
+		EntityID:   subGroupID,
+		ActorID:    &actorID,
+		Action:     "update",
+		Before:     before,
+		After:      after,
+	})
+	return nil
 }
 
 // CreateSubGroup adds a new den/patrol. Callers must check the acting
