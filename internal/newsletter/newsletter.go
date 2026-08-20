@@ -5,6 +5,12 @@
 // newsletter has actually gone out, editing or "unsending" it wouldn't
 // un-deliver the emails already sitting in people's inboxes, so the UI
 // (see internal/web/newsletter.go) doesn't offer to.
+//
+// body is real HTML, authored via a WYSIWYG editor (see
+// admin-newsletter-form.html) — the one place in this codebase raw HTML
+// from a form is stored and rendered/emailed rather than escaped as plain
+// text. See Sanitize: every write path (CreateDraft, UpdateDraft) runs body
+// through it before it ever reaches the database.
 package newsletter
 
 import (
@@ -63,8 +69,13 @@ func scan(row interface{ Scan(dest ...any) error }) (Newsletter, error) {
 	return n, err
 }
 
-// CreateDraft creates a new newsletter as a draft.
+// CreateDraft creates a new newsletter as a draft. body is expected to be
+// HTML authored via the WYSIWYG editor (see admin-newsletter-form.html) —
+// it's run through Sanitize before it's ever written to the database, not
+// just before it's sent, so a stored draft is exactly what the editor will
+// safely reload later too.
 func CreateDraft(ctx context.Context, pool *pgxpool.Pool, unitID, subject, body, actorID string) (Newsletter, error) {
+	body = Sanitize(body)
 	n, err := scan(pool.QueryRow(ctx, `
 		INSERT INTO newsletters (unit_id, subject, body, created_by)
 		VALUES ($1, $2, $3, $4)
@@ -93,6 +104,7 @@ func UpdateDraft(ctx context.Context, pool *pgxpool.Pool, id, unitID, subject, b
 	if err != nil {
 		return Newsletter{}, err
 	}
+	body = Sanitize(body)
 
 	n, err := scan(pool.QueryRow(ctx, `
 		UPDATE newsletters SET subject = $1, body = $2, updated_at = now()
@@ -222,7 +234,7 @@ func Send(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, id, unitID,
 	}
 
 	for _, email := range emails {
-		if err := m.Send(ctx, email, n.Subject, n.Body); err != nil {
+		if err := m.SendHTML(ctx, email, n.Subject, n.Body); err != nil {
 			log.Printf("newsletter: sending %s to %s: %v", id, email, err)
 			res.Failed++
 			continue

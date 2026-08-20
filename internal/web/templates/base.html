@@ -10,6 +10,7 @@
   <style>
     :root { --unit-color: {{.Unit.ThemeColor}}; }
   </style>
+  {{block "extrahead" .}}{{end}}
 </head>
 <body class="min-h-screen bg-gray-50 text-gray-900 overflow-x-hidden">
   <!-- overflow-x-hidden guards against the 1px-ish horizontal scroll some

@@ -20,6 +20,31 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Newsletter: WYSIWYG HTML editor, real HTML email, and starter
+templates.** The newsletter body is now authored with a full rich-text
+editor (Quill, loaded from a CDN — same pattern as htmx/Tailwind already
+used elsewhere) instead of a plain-text box: bold/italic/underline,
+headers, bullet/numbered lists, links, images, colors, and alignment.
+Sending now delivers a real HTML email (`mailer.SendHTML`) rather than
+plain text — every other email in the app (password reset, event
+reminders) is unchanged and still plain-text via `mailer.Send`. A new
+"Start from a template" picker on `/admin/newsletters/new` offers a
+Troop- or Pack-appropriate "Monthly Update" and "Event Announcement"
+starting point (`internal/newsletter.StarterTemplates`), editable before
+saving.
+
+Since this is the first place in the app that stores and renders raw HTML
+from a form rather than escaping it as plain text, every write path
+(`CreateDraft`, `UpdateDraft`) runs the body through a new allowlist-based
+sanitizer (`internal/newsletter.Sanitize`, built on `golang.org/x/net/html`
+— already an indirect dependency, so no new one added) before it's ever
+stored: script tags, event-handler attributes (`onerror=`, etc.), and
+`javascript:`/`data:` URLs are stripped; Quill's actual formatting output
+(styles, classes, lists, links, images) survives untouched.
+
+- **No migration needed** — `newsletters.body` already stored arbitrary
+  text; it just holds HTML now instead of plain text with line breaks.
+
 **Cross-unit role visibility on the member edit page.** A member/family
 can hold roles in both the Troop and Pack at once (already true at the
 data layer), but `/admin/roster/members/{id}` only ever showed roles in
