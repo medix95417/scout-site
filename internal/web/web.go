@@ -834,7 +834,8 @@ type pendingApprovalView struct {
 // linked to it — the calendar page's event list shows both inline.
 type eventView struct {
 	calendar.Event
-	Files []files.File
+	Files        []files.File
+	SubGroupName string // "" if unscoped — see calendar.Event.SubGroupID
 }
 
 // parseMonthParam resolves the year/month a calendar page should show from
@@ -882,6 +883,75 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+
+	var canCreate, requiresApproval, canApprove, canManageFiles bool
+	var pendingViews []pendingApprovalView
+	var creatableSubGroups []roster.SubGroup
+
+	if loggedIn {
+		caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+		if err != nil {
+			log.Printf("web: loading capabilities: %v", err)
+		}
+		canEditContent := units.CanEditUnitContent(caps)
+		canCreate = canEditContent || units.CanSubmitForApproval(caps)
+		requiresApproval = !canEditContent && units.CanSubmitForApproval(caps)
+		canApprove = units.CanApprove(caps)
+		canManageFiles = canEditContent
+
+		if canApprove {
+			pending, err := approval.PendingForUnit(r.Context(), h.Pool, unit.ID)
+			if err != nil {
+				log.Printf("web: loading pending approvals: %v", err)
+			}
+			pendingViews = h.decoratePending(r, pending)
+		}
+
+		// A den-scoped event (see migration 0018) is only visible to
+		// members of that den, plus any leader broad enough to hold
+		// CanEditUnitContent (same "broad content access" den_leader
+		// already gets elsewhere, needed here for cross-den scheduling
+		// oversight) — everyone else only sees unscoped, whole-unit events
+		// plus whichever den(s) their own family actually belongs to.
+		var viewerSubGroupIDs []string
+		if user.MemberID != nil {
+			viewerSubGroupIDs, err = roster.SubGroupIDsForMember(r.Context(), h.Pool, *user.MemberID, unit.ID)
+		} else {
+			viewerSubGroupIDs, err = roster.SubGroupIDsForFamily(r.Context(), h.Pool, user.FamilyID, unit.ID)
+		}
+		if err != nil {
+			log.Printf("web: loading viewer's sub-group membership: %v", err)
+		}
+		viewerSubGroups := make(map[string]bool, len(viewerSubGroupIDs))
+		for _, id := range viewerSubGroupIDs {
+			viewerSubGroups[id] = true
+		}
+		events = calendar.FilterVisibleToViewer(events, viewerSubGroups, canEditContent)
+		monthEvents = calendar.FilterVisibleToViewer(monthEvents, viewerSubGroups, canEditContent)
+
+		// The create form's "scope to a patrol/den" picker: a broad leader
+		// may schedule for any sub-group, a scoped submitter (e.g. a
+		// Patrol Leader with only CanSubmitForApproval) only for their own.
+		if canCreate {
+			if canEditContent {
+				creatableSubGroups, err = roster.SubGroupsForUnit(r.Context(), h.Pool, unit.ID)
+				if err != nil {
+					log.Printf("web: loading sub-groups: %v", err)
+				}
+			} else {
+				allGroups, err := roster.SubGroupsForUnit(r.Context(), h.Pool, unit.ID)
+				if err != nil {
+					log.Printf("web: loading sub-groups: %v", err)
+				}
+				for _, g := range allGroups {
+					if viewerSubGroups[g.ID] {
+						creatableSubGroups = append(creatableSubGroups, g)
+					}
+				}
+			}
+		}
+	}
+
 	monthGrid := calendar.BuildMonthGrid(monthEvents, year, month, today)
 
 	eventIDs := make([]string, len(events))
@@ -893,49 +963,44 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: loading files linked to events: %v", err)
 	}
 
-	var canCreate, requiresApproval, canApprove, canManageFiles bool
-	var pendingViews []pendingApprovalView
-
-	if loggedIn {
-		caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
-		if err != nil {
-			log.Printf("web: loading capabilities: %v", err)
-		}
-		canCreate = units.CanEditUnitContent(caps) || units.CanSubmitForApproval(caps)
-		requiresApproval = !units.CanEditUnitContent(caps) && units.CanSubmitForApproval(caps)
-		canApprove = units.CanApprove(caps)
-		canManageFiles = units.CanEditUnitContent(caps)
-
-		if canApprove {
-			pending, err := approval.PendingForUnit(r.Context(), h.Pool, unit.ID)
-			if err != nil {
-				log.Printf("web: loading pending approvals: %v", err)
-			}
-			pendingViews = h.decoratePending(r, pending)
-		}
+	subGroups, err := roster.SubGroupsForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading sub-groups: %v", err)
+	}
+	subGroupNameByID := make(map[string]string, len(subGroups))
+	for _, g := range subGroups {
+		subGroupNameByID[g.ID] = g.Name
 	}
 
 	eventViews := make([]eventView, len(events))
 	for i, e := range events {
-		eventViews[i] = eventView{Event: e, Files: filesByEvent[e.ID]}
+		var subGroupName string
+		if e.SubGroupID != nil {
+			subGroupName = subGroupNameByID[*e.SubGroupID]
+		}
+		eventViews[i] = eventView{Event: e, Files: filesByEvent[e.ID], SubGroupName: subGroupName}
 	}
 
 	data := struct {
 		baseData
-		Events           []eventView
-		Month            calendar.MonthGrid
-		CanCreate        bool
-		RequiresApproval bool
-		PendingApprovals []pendingApprovalView
-		CanManageFiles   bool
+		Events             []eventView
+		Month              calendar.MonthGrid
+		CanCreate          bool
+		RequiresApproval   bool
+		PendingApprovals   []pendingApprovalView
+		CanManageFiles     bool
+		SubGroupNoun       string
+		CreatableSubGroups []roster.SubGroup
 	}{
-		baseData:         h.base(r, "Calendar"),
-		Events:           eventViews,
-		Month:            monthGrid,
-		CanManageFiles:   canManageFiles,
-		CanCreate:        canCreate,
-		RequiresApproval: requiresApproval,
-		PendingApprovals: pendingViews,
+		baseData:           h.base(r, "Calendar"),
+		Events:             eventViews,
+		Month:              monthGrid,
+		CanManageFiles:     canManageFiles,
+		CanCreate:          canCreate,
+		RequiresApproval:   requiresApproval,
+		PendingApprovals:   pendingViews,
+		SubGroupNoun:       subGroupNoun(unit.UnitType),
+		CreatableSubGroups: creatableSubGroups,
 	}
 	h.render(w, h.calendar, data)
 }
@@ -1010,6 +1075,54 @@ func (h *Handlers) CalendarCreate(w http.ResponseWriter, r *http.Request) {
 		visibility = "public"
 	}
 
+	// A patrol/den-scoped event is inherently members-only — the
+	// unauthenticated calendar path (ListUpcomingPublicForUnit et al.)
+	// doesn't apply any sub-group filtering at all, so a "public" event
+	// scoped to one den would otherwise leak straight past
+	// FilterVisibleToViewer to every logged-out visitor. Scoping always
+	// wins over the "visible to the public" checkbox.
+	var subGroupID *string
+	if raw := strings.TrimSpace(r.FormValue("sub_group_id")); raw != "" {
+		subGroupUnitID, ok, err := roster.SubGroupUnitID(r.Context(), h.Pool, raw)
+		if err != nil {
+			log.Printf("web: looking up sub-group: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if !ok || subGroupUnitID != unit.ID {
+			http.Error(w, "that "+subGroupNoun(unit.UnitType)+" doesn't exist in this unit", http.StatusBadRequest)
+			return
+		}
+
+		allowed := units.CanEditUnitContent(caps)
+		if !allowed {
+			var memberSubGroups []string
+			if user.MemberID != nil {
+				memberSubGroups, err = roster.SubGroupIDsForMember(r.Context(), h.Pool, *user.MemberID, unit.ID)
+			} else {
+				memberSubGroups, err = roster.SubGroupIDsForFamily(r.Context(), h.Pool, user.FamilyID, unit.ID)
+			}
+			if err != nil {
+				log.Printf("web: checking sub-group membership: %v", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			for _, id := range memberSubGroups {
+				if id == raw {
+					allowed = true
+					break
+				}
+			}
+		}
+		if !allowed {
+			http.Error(w, "you can only scope an event to your own "+subGroupNoun(unit.UnitType), http.StatusForbidden)
+			return
+		}
+
+		subGroupID = &raw
+		visibility = "members"
+	}
+
 	actor, err := h.actingMember(r.Context(), user, unit.ID)
 	if err != nil {
 		http.Error(w, "could not determine acting member — has your family been added to the roster yet?", http.StatusBadRequest)
@@ -1019,6 +1132,7 @@ func (h *Handlers) CalendarCreate(w http.ResponseWriter, r *http.Request) {
 	_, err = calendar.Create(r.Context(), h.Pool, calendar.CreateInput{
 		UnitID:      unit.ID,
 		Title:       r.FormValue("title"),
+		SubGroupID:  subGroupID,
 		Description: r.FormValue("description"),
 		Location:    r.FormValue("location"),
 		StartsAt:    startsAt,

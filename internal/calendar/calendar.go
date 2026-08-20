@@ -23,8 +23,9 @@ type Event struct {
 	Location    string
 	StartsAt    time.Time
 	EndsAt      *time.Time
-	Visibility  string // "public" | "members"
-	Status      string // "draft" | "pending_approval" | "published" | "rejected"
+	Visibility  string  // "public" | "members"
+	Status      string  // "draft" | "pending_approval" | "published" | "rejected"
+	SubGroupID  *string // nil = whole-unit event; set = scoped to one patrol/den (see migration 0018)
 }
 
 // DateRangeDisplay is the human-friendly date/time string used everywhere
@@ -71,7 +72,8 @@ type CreateInput struct {
 	StartsAt    time.Time
 	EndsAt      *time.Time
 	Visibility  string
-	CreatedBy   string // member ID
+	CreatedBy   string  // member ID
+	SubGroupID  *string // nil = whole-unit event; set = scoped to one patrol/den
 }
 
 // Create inserts an event. If canPublishDirectly is false (the creator only
@@ -87,11 +89,11 @@ func Create(ctx context.Context, pool *pgxpool.Pool, in CreateInput, canPublishD
 
 	var e Event
 	err := pool.QueryRow(ctx, `
-		INSERT INTO events (unit_id, title, description, location, starts_at, ends_at, visibility, status, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text
-	`, in.UnitID, in.Title, in.Description, in.Location, in.StartsAt, in.EndsAt, in.Visibility, status, in.CreatedBy,
-	).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status)
+		INSERT INTO events (unit_id, title, description, location, starts_at, ends_at, visibility, status, created_by, sub_group_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		RETURNING id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
+	`, in.UnitID, in.Title, in.Description, in.Location, in.StartsAt, in.EndsAt, in.Visibility, status, in.CreatedBy, in.SubGroupID,
+	).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID)
 	if err != nil {
 		return Event{}, err
 	}
@@ -118,7 +120,7 @@ func Create(ctx context.Context, pool *pgxpool.Pool, in CreateInput, canPublishD
 // visitors should use ListUpcomingPublicForUnit instead.
 func ListUpcomingForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Event, error) {
 	return queryEvents(ctx, pool, `
-		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text
+		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
 		FROM events
 		WHERE unit_id = $1 AND status = 'published' AND starts_at >= now() - interval '1 day'
 		ORDER BY starts_at
@@ -129,7 +131,7 @@ func ListUpcomingForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string)
 // what the unauthenticated landing page shows.
 func ListUpcomingPublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Event, error) {
 	return queryEvents(ctx, pool, `
-		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text
+		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
 		FROM events
 		WHERE unit_id = $1 AND status = 'published' AND visibility = 'public' AND starts_at >= now() - interval '1 day'
 		ORDER BY starts_at
@@ -143,7 +145,7 @@ func ListUpcomingPublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID s
 // as opposed to ListUpcomingForUnit's "starting from today" list.
 func ListForRangeForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string, rangeStart, rangeEnd time.Time) ([]Event, error) {
 	return queryEvents(ctx, pool, `
-		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text
+		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
 		FROM events
 		WHERE unit_id = $1 AND status = 'published'
 			AND starts_at < $3 AND COALESCE(ends_at, starts_at) >= $2
@@ -155,7 +157,7 @@ func ListForRangeForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string,
 // events, for the month grid shown to unauthenticated visitors.
 func ListForRangePublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string, rangeStart, rangeEnd time.Time) ([]Event, error) {
 	return queryEvents(ctx, pool, `
-		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text
+		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
 		FROM events
 		WHERE unit_id = $1 AND status = 'published' AND visibility = 'public'
 			AND starts_at < $3 AND COALESCE(ends_at, starts_at) >= $2
@@ -170,7 +172,7 @@ func ListForRangePublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID s
 // forward-looking list.
 func ListAllForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Event, error) {
 	return queryEvents(ctx, pool, `
-		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text
+		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
 		FROM events
 		WHERE unit_id = $1 AND status = 'published'
 		ORDER BY starts_at DESC
@@ -186,9 +188,9 @@ func ListAllForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]E
 func GetEvent(ctx context.Context, pool *pgxpool.Pool, eventID, unitID string) (Event, bool, error) {
 	var e Event
 	err := pool.QueryRow(ctx, `
-		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text
+		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
 		FROM events WHERE id = $1 AND unit_id = $2
-	`, eventID, unitID).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status)
+	`, eventID, unitID).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID)
 	if err != nil {
 		return Event{}, false, nil //nolint:nilerr // "no such event in this unit" is a normal, expected outcome
 	}
@@ -205,7 +207,7 @@ func queryEvents(ctx context.Context, pool *pgxpool.Pool, sql string, args ...an
 	var events []Event
 	for rows.Next() {
 		var e Event
-		if err := rows.Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status); err != nil {
+		if err := rows.Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID); err != nil {
 			return nil, err
 		}
 		events = append(events, e)
@@ -279,6 +281,29 @@ type MonthGrid struct {
 	NextParam  string
 	TodayParam string // current real-world month, for a "Today" link when viewing a different one
 	Weeks      [][]DayCell
+}
+
+// FilterVisibleToViewer narrows a unit-wide event list down to what one
+// particular logged-in viewer should actually see: every unscoped event
+// (SubGroupID == nil) plus any event scoped to a patrol/den the viewer
+// belongs to, per viewerSubGroups (see internal/roster.SubGroupIDsFor*).
+// canSeeAll bypasses the narrowing entirely — for a leader who holds
+// units.CanEditUnitContent, who needs to see every den's events for
+// scheduling/oversight, the same "broad content access, narrow only for
+// roster edits" posture den_leader already gets elsewhere in this app.
+// Pure and order-preserving, so it's easy to test and safe to call on
+// both the upcoming-events list and the month-grid list.
+func FilterVisibleToViewer(events []Event, viewerSubGroups map[string]bool, canSeeAll bool) []Event {
+	if canSeeAll {
+		return events
+	}
+	visible := make([]Event, 0, len(events))
+	for _, e := range events {
+		if e.SubGroupID == nil || viewerSubGroups[*e.SubGroupID] {
+			visible = append(visible, e)
+		}
+	}
+	return visible
 }
 
 // BuildMonthGrid lays events out into a 7-column, whole-weeks grid for the
