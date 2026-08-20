@@ -20,6 +20,16 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Homepage gallery strip: pick multiple photos, with a real carousel.**
+The homepage's two fixed "Gallery photo 1"/"Gallery photo 2" slots are now
+one combined "Gallery photos" field — click as many thumbnails as you
+want from your file library (or paste external URLs), each with an
+optional caption. One photo shows plain; more than one becomes a
+swipeable/scrollable carousel, same as a Gallery entry. A unit that had
+already configured the old two-photo layout keeps seeing those exact
+photos on the live homepage until a leader saves the new field — nothing
+is silently lost during the upgrade.
+
 **Gallery: pick photos from your library, with a real carousel.** Adding
 photos to a Gallery entry no longer means hand-typing image URLs — click a
 thumbnail from your file library (sorted by linked event, same picker as

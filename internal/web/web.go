@@ -107,9 +107,21 @@ type Handlers struct {
 // cent amounts as "$12.34"/"-$12.34" and Go templates have no arithmetic
 // or number-formatting of their own.
 var templateFuncs = template.FuncMap{
-	"formatCents": formatCents,
-	"hasPrefix":   strings.HasPrefix,
-	"dict":        templateDict,
+	"formatCents":   formatCents,
+	"hasPrefix":     strings.HasPrefix,
+	"dict":          templateDict,
+	"galleryPhotos": templateGalleryPhotos,
+}
+
+// templateGalleryPhotos parses a Kind:"images" section's saved body (or,
+// if never saved, its placeholder — the stock default photos) into the
+// list photoCarousel renders, so /admin/home shows a live preview of the
+// same carousel the homepage will.
+func templateGalleryPhotos(body, placeholder string) []content.GalleryPhoto {
+	if body == "" {
+		body = placeholder
+	}
+	return content.ParseGalleryPhotos(body)
 }
 
 // templateDict builds a map from alternating key/value arguments — the
@@ -632,6 +644,30 @@ func sectionText(saved map[string]content.Section, def content.SectionDef) strin
 	return def.Placeholder
 }
 
+// legacyGalleryPhotos reconstructs the pre-carousel, two-fixed-photo
+// homepage gallery strip from its old separate slugs (home-gallery-1/
+// home-gallery-2, retired in favor of one combined home-gallery field —
+// see content.HomepageSections) — so a unit that had already configured
+// those two photos doesn't lose them the first time this handler runs
+// after the upgrade, just because it hasn't saved the new combined field
+// yet. ok is false if neither legacy slug was ever saved (nothing to
+// migrate, the caller should fall back to the new field's own default).
+func legacyGalleryPhotos(saved map[string]content.Section, unitType string) (photos []content.GalleryPhoto, ok bool) {
+	photo2Caption := "Pinewood Derby Fun"
+	if unitType == "troop" {
+		photo2Caption = "Adventure Awaits"
+	}
+	if s, exists := saved["home-gallery-1"]; exists && s.Body != "" {
+		photos = append(photos, content.GalleryPhoto{URL: s.Body, Caption: "The Great Outdoors"})
+		ok = true
+	}
+	if s, exists := saved["home-gallery-2"]; exists && s.Body != "" {
+		photos = append(photos, content.GalleryPhoto{URL: s.Body, Caption: photo2Caption})
+		ok = true
+	}
+	return photos, ok
+}
+
 func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
 	events, err := calendar.ListUpcomingPublicForUnit(r.Context(), h.Pool, unit.ID)
@@ -658,12 +694,15 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// The gallery strip's second photo (and its caption) leans Cub-Scout- or
-	// Troop-specific — Pinewood Derby is a Cub Scout program element, so it
-	// doesn't make sense to caption it that way on the Troop site.
-	gallery2Caption := "Pinewood Derby Fun"
-	if unit.UnitType == "troop" {
-		gallery2Caption = "Adventure Awaits"
+	// The combined home-gallery field replaced two separate fixed-photo
+	// slugs (home-gallery-1/home-gallery-2) — fall back to reconstructing
+	// those if a leader configured the old layout but hasn't saved the new
+	// field yet, so upgrading never silently drops an already-set photo.
+	galleryPhotos := content.ParseGalleryPhotos(text["home-gallery"])
+	if _, alreadySaved := saved["home-gallery"]; !alreadySaved {
+		if legacy, ok := legacyGalleryPhotos(saved, unit.UnitType); ok {
+			galleryPhotos = legacy
+		}
 	}
 
 	data := struct {
@@ -675,9 +714,7 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		ProgramImageURL string
 		Meeting         string
 		Leadership      string
-		Gallery1URL     string
-		Gallery2URL     string
-		Gallery2Caption string
+		GalleryPhotos   []content.GalleryPhoto
 		SocialURL       string
 		FacebookURL     string
 		InstagramURL    string
@@ -691,9 +728,7 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		ProgramImageURL: text["home-program-image"],
 		Meeting:         text["home-meeting"],
 		Leadership:      text["home-leadership"],
-		Gallery1URL:     text["home-gallery-1"],
-		Gallery2URL:     text["home-gallery-2"],
-		Gallery2Caption: gallery2Caption,
+		GalleryPhotos:   galleryPhotos,
 		SocialURL:       text["home-social"],
 		FacebookURL:     text["home-facebook"],
 		InstagramURL:    text["home-instagram"],

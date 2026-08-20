@@ -68,6 +68,7 @@ const (
 // link — adapted to only link to pages this site actually has.
 func HomepageSections(unitType string) []SectionDef {
 	imageHelp := "Paste a link to an image hosted elsewhere (e.g. a photo you've uploaded to Google Photos/Drive and shared publicly). Defaults to a stock Scouting photo until you swap it for your own."
+	galleryHelp := "One photo per line: paste a link to an image hosted elsewhere, or click one from your library below — either way, optionally followed by | and a caption. One photo shows plain; more than one becomes a swipeable carousel. Defaults to stock Scouting photos until you add your own."
 
 	if unitType == "troop" {
 		return []SectionDef{
@@ -77,8 +78,7 @@ func HomepageSections(unitType string) []SectionDef {
 			{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 			{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Meetings are held weekly — contact us for the current time and location."},
 			{Slug: "home-leadership", Label: "Leadership & contact", Placeholder: "Contact our Scoutmaster to learn more about joining."},
-			{Slug: "home-gallery-1", Label: "Gallery photo 1 URL", Kind: "image", Placeholder: stockPhotoCampsite, Help: imageHelp},
-			{Slug: "home-gallery-2", Label: "Gallery photo 2 URL", Kind: "image", Placeholder: stockPhotoTroopCamp, Help: imageHelp},
+			{Slug: "home-gallery", Label: "Gallery photos", Kind: "images", Placeholder: stockPhotoCampsite + " | The Great Outdoors\n" + stockPhotoTroopCamp + " | Adventure Awaits", Help: galleryHelp},
 			{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your troop's Facebook or Instagram page."},
 			{Slug: "home-facebook", Label: "Facebook page URL (optional)", Kind: "url", Help: "Shows a Facebook icon/link on the homepage if set."},
 			{Slug: "home-instagram", Label: "Instagram profile URL (optional)", Kind: "url", Help: "Shows an Instagram icon/link on the homepage if set."},
@@ -92,8 +92,7 @@ func HomepageSections(unitType string) []SectionDef {
 		{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 		{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Contact us for our current meeting time and location."},
 		{Slug: "home-leadership", Label: "Leadership & contact", Placeholder: "Contact our Cubmaster to learn more about joining."},
-		{Slug: "home-gallery-1", Label: "Gallery photo 1 URL", Kind: "image", Placeholder: stockPhotoCampsite, Help: imageHelp},
-		{Slug: "home-gallery-2", Label: "Gallery photo 2 URL", Kind: "image", Placeholder: stockPhotoDerby, Help: imageHelp},
+		{Slug: "home-gallery", Label: "Gallery photos", Kind: "images", Placeholder: stockPhotoCampsite + " | The Great Outdoors\n" + stockPhotoDerby + " | Pinewood Derby Fun", Help: galleryHelp},
 		{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your pack's Instagram or Facebook page."},
 		{Slug: "home-facebook", Label: "Facebook page URL (optional)", Kind: "url", Help: "Shows a Facebook icon/link on the homepage if set."},
 		{Slug: "home-instagram", Label: "Instagram profile URL (optional)", Kind: "url", Help: "Shows an Instagram icon/link on the homepage if set."},
