@@ -57,6 +57,26 @@ aren't touched, just hidden until re-enabled.
 - **Migration:** `0014_unit_settings.sql` — adds `unit_settings`, a
   per-unit sibling to the existing site-wide `system_settings` table.
 
+**Roster contact info, with family-controlled release to the rest of the
+unit.** Each person can now have an email, home phone, and cell phone on
+file, plus one shared address per household — editable either by a
+leader from `/admin/roster/members/{id}` or by the family themselves from
+a new self-service `/my-family` page (a family-wide login manages
+everyone in the family; an individual member login manages only their
+own contact fields, matching the existing "just their own stuff" rule
+used elsewhere for individual logins). Nothing is visible to anyone else
+by default — email, phone, and address each have their own release
+toggle, opt-in and off until the family/member turns it on themselves.
+A new `/directory` page shows every family on the unit's roster with only
+the fields they've chosen to release; the underlying query never even
+selects an unreleased field, rather than fetching everything and hiding
+it in the template.
+
+- **Migration:** `0015_roster_contact_info.sql` — adds `address`/
+  `release_address` to `families`, and `email`/`home_phone`/`cell_phone`/
+  `release_email`/`release_phone` to `members`, all nullable/default-false
+  so existing rows are unaffected.
+
 ## [1.6.3] — 2026-08-20
 
 **Fix — deploy build OOM-killed on a small VPS.** `docker compose up -d

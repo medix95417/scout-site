@@ -511,6 +511,28 @@ func (h *Handlers) AdminRosterMemberUpdate(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+
+	if err := roster.SetContactInfo(r.Context(), h.Pool, memberID,
+		strings.TrimSpace(r.FormValue("email")), strings.TrimSpace(r.FormValue("home_phone")), strings.TrimSpace(r.FormValue("cell_phone")),
+		r.FormValue("release_email") == "1", r.FormValue("release_phone") == "1", actor.ID); err != nil {
+		log.Printf("web: updating member contact info: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	m, found, err := family.GetMember(r.Context(), h.Pool, memberID)
+	if err != nil || !found {
+		log.Printf("web: loading member for family address update: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if err := roster.SetFamilyAddress(r.Context(), h.Pool, m.FamilyID,
+		strings.TrimSpace(r.FormValue("family_address")), r.FormValue("release_address") == "1", actor.ID); err != nil {
+		log.Printf("web: updating family address: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
 	http.Redirect(w, r, "/admin/roster/members/"+memberID, http.StatusSeeOther)
 }
 

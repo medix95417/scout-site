@@ -25,6 +25,87 @@ import (
 	"github.com/47-yonkers/scout-site/internal/units"
 )
 
+// --- Family directory ---------------------------------------------------
+
+// DirectoryMember is one member's row in the family directory (see
+// DirectoryForUnit) — Email/HomePhone/CellPhone are already filtered down
+// to what that member chose to release; nothing here needs a second
+// permission check by the caller.
+type DirectoryMember struct {
+	ID        string
+	FirstName string
+	LastName  string
+	Email     string // "" if not released
+	HomePhone string // "" if not released
+	CellPhone string // "" if not released
+}
+
+// DirectoryEntry is one family's row in the directory — Address is
+// already filtered down to whether that family chose to release it.
+type DirectoryEntry struct {
+	FamilyID   string
+	FamilyName string
+	Address    string // "" if not released
+	Members    []DirectoryMember
+}
+
+// DirectoryForUnit returns every family with at least one member on this
+// unit's roster, each decorated with only the contact fields they've
+// actually opted to release (see migration 0015's release_* columns) —
+// what the members-only "Family Directory" page shows. A family/member
+// that's never released anything simply shows blank fields, same as if
+// they'd never entered them — this never leaks anything nobody chose to
+// share.
+func DirectoryForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]DirectoryEntry, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT
+			families.id, families.name,
+			CASE WHEN families.release_address THEN COALESCE(families.address, '') ELSE '' END,
+			members.id, members.first_name, members.last_name,
+			CASE WHEN members.release_email THEN COALESCE(members.email, '') ELSE '' END,
+			CASE WHEN members.release_phone THEN COALESCE(members.home_phone, '') ELSE '' END,
+			CASE WHEN members.release_phone THEN COALESCE(members.cell_phone, '') ELSE '' END
+		FROM families
+		JOIN members ON members.family_id = families.id
+		JOIN role_assignments ON role_assignments.member_id = members.id
+		WHERE role_assignments.unit_id = $1
+		GROUP BY families.id, families.name, families.release_address, families.address,
+			members.id, members.first_name, members.last_name, members.member_type,
+			members.release_email, members.release_phone, members.email, members.home_phone, members.cell_phone
+		ORDER BY families.name, (members.member_type = 'youth'), members.first_name
+	`, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	byFamily := make(map[string]*DirectoryEntry)
+	var order []string
+	for rows.Next() {
+		var familyID, familyName, address string
+		var m DirectoryMember
+		if err := rows.Scan(&familyID, &familyName, &address, &m.ID, &m.FirstName, &m.LastName, &m.Email, &m.HomePhone, &m.CellPhone); err != nil {
+			return nil, err
+		}
+		entry, ok := byFamily[familyID]
+		if !ok {
+			entry = &DirectoryEntry{FamilyID: familyID, FamilyName: familyName, Address: address}
+			byFamily[familyID] = entry
+			order = append(order, familyID)
+		}
+		entry.Members = append(entry.Members, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	out := make([]DirectoryEntry, 0, len(order))
+	for _, id := range order {
+		out = append(out, *byFamily[id])
+	}
+	return out, nil
+}
+
 // slugify turns a human-entered label ("Committee Chair") into a stable,
 // URL/column-safe slug ("committee_chair") — lowercased, non-alphanumeric
 // runs collapsed to a single underscore, leading/trailing underscores
@@ -810,6 +891,85 @@ func UpdateMember(ctx context.Context, pool *pgxpool.Pool, memberID, firstName, 
 	return nil
 }
 
+// SetContactInfo updates a member's own email/phone numbers and whether
+// each is released to the rest of the unit (see migration 0015 and
+// EmailsReleasedInUnit/PhonesReleasedInUnit below). Deliberately has no
+// roster.Scope check of its own — a member's family should be able to
+// call this for their own contact info without needing CanEditUnitContent
+// (see internal/web/my_family.go's self-service page), while a roster
+// admin editing it through /admin/roster is already gated by
+// requireRosterEditor before reaching here. The caller decides who's
+// allowed to invoke this for a given memberID; this function just writes
+// what it's given.
+func SetContactInfo(ctx context.Context, pool *pgxpool.Pool, memberID, email, homePhone, cellPhone string, releaseEmail, releasePhone bool, actorID string) error {
+	var before struct {
+		Email, HomePhone, CellPhone string
+		ReleaseEmail, ReleasePhone  bool
+	}
+	_ = pool.QueryRow(ctx, `
+		SELECT COALESCE(email, ''), COALESCE(home_phone, ''), COALESCE(cell_phone, ''), release_email, release_phone
+		FROM members WHERE id = $1
+	`, memberID).Scan(&before.Email, &before.HomePhone, &before.CellPhone, &before.ReleaseEmail, &before.ReleasePhone)
+
+	tag, err := pool.Exec(ctx, `
+		UPDATE members SET email = NULLIF($1, ''), home_phone = NULLIF($2, ''), cell_phone = NULLIF($3, ''),
+			release_email = $4, release_phone = $5
+		WHERE id = $6
+	`, email, homePhone, cellPhone, releaseEmail, releasePhone, memberID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("member %s not found", memberID)
+	}
+
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "member_contact_info",
+		EntityID:   memberID,
+		ActorID:    &actorID,
+		Action:     "update",
+		Before:     before,
+		After: map[string]any{
+			"email": email, "home_phone": homePhone, "cell_phone": cellPhone,
+			"release_email": releaseEmail, "release_phone": releasePhone,
+		},
+	})
+	return nil
+}
+
+// SetFamilyAddress updates a family's household address and whether it's
+// released to the rest of the unit — the family-level sibling of
+// SetContactInfo, same "caller decides who's allowed to call this"
+// design.
+func SetFamilyAddress(ctx context.Context, pool *pgxpool.Pool, familyID, address string, releaseAddress bool, actorID string) error {
+	var before struct {
+		Address        string
+		ReleaseAddress bool
+	}
+	_ = pool.QueryRow(ctx, `SELECT COALESCE(address, ''), release_address FROM families WHERE id = $1`, familyID).
+		Scan(&before.Address, &before.ReleaseAddress)
+
+	tag, err := pool.Exec(ctx, `
+		UPDATE families SET address = NULLIF($1, ''), release_address = $2 WHERE id = $3
+	`, address, releaseAddress, familyID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("family %s not found", familyID)
+	}
+
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "family_address",
+		EntityID:   familyID,
+		ActorID:    &actorID,
+		Action:     "update",
+		Before:     before,
+		After:      map[string]any{"address": address, "release_address": releaseAddress},
+	})
+	return nil
+}
+
 // --- Role assignments ---------------------------------------------------
 
 // AssignRole grants a role to a member in a unit, optionally scoped to a
@@ -925,23 +1085,37 @@ func RolesForMemberInUnit(ctx context.Context, pool *pgxpool.Pool, memberID, uni
 
 // MemberDetail is a member plus enough context for the roster edit page.
 type MemberDetail struct {
-	ID         string
-	FamilyID   string
-	FamilyName string
-	FirstName  string
-	LastName   string
-	MemberType string
+	ID             string
+	FamilyID       string
+	FamilyName     string
+	FirstName      string
+	LastName       string
+	MemberType     string
+	Email          string
+	HomePhone      string
+	CellPhone      string
+	ReleaseEmail   bool
+	ReleasePhone   bool
+	FamilyAddress  string
+	ReleaseAddress bool
 }
 
-// GetMember fetches a member and their family's name, for the edit page.
+// GetMember fetches a member, their family's name, and both the member's
+// own contact info and their family's address (see migration 0015), for
+// the edit page.
 func GetMember(ctx context.Context, pool *pgxpool.Pool, memberID string) (MemberDetail, bool, error) {
 	var m MemberDetail
 	err := pool.QueryRow(ctx, `
-		SELECT members.id, members.family_id, families.name, members.first_name, members.last_name, members.member_type::text
+		SELECT members.id, members.family_id, families.name, members.first_name, members.last_name, members.member_type::text,
+			COALESCE(members.email, ''), COALESCE(members.home_phone, ''), COALESCE(members.cell_phone, ''),
+			members.release_email, members.release_phone,
+			COALESCE(families.address, ''), families.release_address
 		FROM members
 		JOIN families ON families.id = members.family_id
 		WHERE members.id = $1
-	`, memberID).Scan(&m.ID, &m.FamilyID, &m.FamilyName, &m.FirstName, &m.LastName, &m.MemberType)
+	`, memberID).Scan(&m.ID, &m.FamilyID, &m.FamilyName, &m.FirstName, &m.LastName, &m.MemberType,
+		&m.Email, &m.HomePhone, &m.CellPhone, &m.ReleaseEmail, &m.ReleasePhone,
+		&m.FamilyAddress, &m.ReleaseAddress)
 	if err != nil {
 		return MemberDetail{}, false, nil //nolint:nilerr // "not found" is a normal, expected outcome
 	}

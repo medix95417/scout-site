@@ -1,0 +1,45 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-1">My Family</h1>
+  <p class="text-sm text-gray-500 mb-6">
+    Manage your own contact info below. Anything you mark "share" becomes visible to the rest of the unit on the
+    <a href="/directory" class="underline" style="color: var(--unit-color);">Family Directory</a> — everything else
+    stays private.
+  </p>
+
+  <div class="grid gap-6 sm:grid-cols-2">
+    {{range .Members}}
+      <section class="rounded-lg border border-gray-200 bg-white p-4">
+        <h2 class="text-lg font-semibold mb-3">{{.FirstName}} {{.LastName}}</h2>
+        <form method="post" action="/my-family/members/{{.ID}}" class="space-y-2">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Email" value="{{.Email}}">
+          <div class="flex gap-2">
+            <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="tel" name="home_phone" placeholder="Home phone" value="{{.HomePhone}}">
+            <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="tel" name="cell_phone" placeholder="Cell phone" value="{{.CellPhone}}">
+          </div>
+          <div class="flex gap-4 text-xs text-gray-600">
+            <label class="flex items-center gap-1"><input type="checkbox" name="release_email" value="1" {{if .ReleaseEmail}}checked{{end}}> Share email</label>
+            <label class="flex items-center gap-1"><input type="checkbox" name="release_phone" value="1" {{if .ReleasePhone}}checked{{end}}> Share phone</label>
+          </div>
+          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+            Save
+          </button>
+        </form>
+      </section>
+    {{end}}
+
+    <section class="rounded-lg border border-gray-200 bg-white p-4">
+      <h2 class="text-lg font-semibold mb-3">Household Address</h2>
+      <form method="post" action="/my-family/address" class="space-y-2">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="address" rows="2" placeholder="Street, City, State ZIP">{{if .Members}}{{(index .Members 0).FamilyAddress}}{{end}}</textarea>
+        <label class="flex items-center gap-1 text-xs text-gray-600">
+          <input type="checkbox" name="release_address" value="1" {{if .Members}}{{if (index .Members 0).ReleaseAddress}}checked{{end}}{{end}}> Share address
+        </label>
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+          Save
+        </button>
+      </form>
+    </section>
+  </div>
+{{end}}
