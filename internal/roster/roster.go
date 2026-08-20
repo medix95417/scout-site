@@ -735,6 +735,52 @@ func AllFamilies(ctx context.Context, pool *pgxpool.Pool) ([]FamilyOption, error
 	return families, rows.Err()
 }
 
+// MemberOption is a minimal, cross-unit member reference for the "add an
+// existing person to this unit" picker (see MembersNotInUnit) — a family's
+// name alongside the member so two same-first-named Scouts in different
+// families are still distinguishable in a flat dropdown.
+type MemberOption struct {
+	ID         string
+	FirstName  string
+	LastName   string
+	FamilyName string
+}
+
+// MembersNotInUnit lists every member system-wide who does not already
+// hold at least one role_assignment in the given unit — i.e. exactly the
+// people a leader can't currently find on their own unit's roster page,
+// because family.RosterForUnit (deliberately) only lists members already
+// part of the unit. This is what lets a leader give an existing person
+// (most commonly: a Scout or parent already registered under the other
+// unit, e.g. a Pack Scout crossing over to a Troop position) their first
+// role here, without creating a duplicate member row for someone who
+// already exists in the system.
+func MembersNotInUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]MemberOption, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT members.id, members.first_name, members.last_name, families.name
+		FROM members
+		JOIN families ON families.id = members.family_id
+		WHERE members.id NOT IN (
+			SELECT member_id FROM role_assignments WHERE unit_id = $1
+		)
+		ORDER BY families.name, (members.member_type = 'youth'), members.first_name
+	`, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []MemberOption
+	for rows.Next() {
+		var m MemberOption
+		if err := rows.Scan(&m.ID, &m.FirstName, &m.LastName, &m.FamilyName); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 // NewFamilyInput is what creating a brand-new family login needs.
 type NewFamilyInput struct {
 	FamilyName string
