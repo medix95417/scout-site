@@ -41,7 +41,30 @@
             <div class="border-t border-gray-100 my-1"></div>
             <a href="/roster" class="block px-4 py-2 hover:bg-gray-100">Roster</a>
             <a href="/directory" class="block px-4 py-2 hover:bg-gray-100">Family Directory</a>
-            <a href="/groups" class="block px-4 py-2 hover:bg-gray-100">{{if eq .Unit.UnitType "troop"}}Patrols{{else}}Dens{{end}}</a>
+            {{if .NavSubGroups}}
+              <!-- Nested <details> for the Patrols/Dens submenu — same
+                   no-JS disclosure pattern as the outer hamburger. Its
+                   <summary> isn't an <a>/<button>, so opening/closing it
+                   doesn't trip the outer menu's "close on link/button
+                   click" listener below; only navigating to one of the
+                   den/patrol links does. -->
+              <details class="group">
+                <summary class="list-none cursor-pointer select-none flex items-center justify-between px-4 py-2 hover:bg-gray-100">
+                  <span>{{if eq .Unit.UnitType "troop"}}Patrols{{else}}Dens{{end}}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </summary>
+                <div class="bg-gray-50">
+                  {{range .NavSubGroups}}
+                    <a href="/groups/{{.ID}}" class="block px-6 py-2 hover:bg-gray-100 text-sm">{{.Name}}</a>
+                  {{end}}
+                  <a href="/groups" class="block px-6 py-2 hover:bg-gray-100 text-xs text-gray-500 border-t border-gray-100">View all {{if eq $.Unit.UnitType "troop"}}patrols{{else}}dens{{end}}</a>
+                </div>
+              </details>
+            {{else}}
+              <a href="/groups" class="block px-4 py-2 hover:bg-gray-100">{{if eq .Unit.UnitType "troop"}}Patrols{{else}}Dens{{end}}</a>
+            {{end}}
             {{if .AdvancementEnabled}}<a href="/advancement" class="block px-4 py-2 hover:bg-gray-100">Advancement</a>{{end}}
             <a href="/files" class="block px-4 py-2 hover:bg-gray-100">Files</a>
             {{if or .ScoutAccountsSelfService .CanManageLedger}}<a href="/accounts" class="block px-4 py-2 hover:bg-gray-100">My Accounts</a>{{end}}
