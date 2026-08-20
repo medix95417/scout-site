@@ -20,6 +20,17 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Cross-unit role visibility on the member edit page.** A member/family
+can hold roles in both the Troop and Pack at once (already true at the
+data layer), but `/admin/roster/members/{id}` only ever showed roles in
+whichever unit you were viewing it from — a Troop leader had no way to
+know the same person is, say, also a Den Leader in the Pack. The page now
+shows a small read-only "Also holds roles elsewhere" note listing any
+other unit(s) and role(s) the member holds. Read-only by design — it
+doesn't grant the viewing leader any ability to manage those other roles,
+just visibility that they exist; managing them still requires being on
+that other unit's own admin roster page.
+
 **Social media links on the homepage.** A leader can now set a Facebook
 page, Instagram profile, and/or TikTok profile URL for their unit from
 the existing `/admin/home` homepage editor — each is its own optional
