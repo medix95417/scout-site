@@ -363,12 +363,18 @@ func (h *Handlers) AdminRosterMemberEdit(w http.ResponseWriter, r *http.Request)
 		log.Printf("web: loading allowed roles: %v", err)
 	}
 
+	otherUnitRoles, err := roster.RolesForMemberOtherUnits(r.Context(), h.Pool, memberID, unit.ID)
+	if err != nil {
+		log.Printf("web: loading other-unit roles: %v", err)
+	}
+
 	data := struct {
 		baseData
 		Scope                roster.Scope
 		SubGroupNoun         string
 		Member               roster.MemberDetail
 		Roles                []roster.RoleAssignment
+		OtherUnitRoles       []roster.OtherUnitRoles
 		AllowedRoles         []roster.RoleOption
 		AddableSubGroups     []roster.SubGroup
 		HasIndividualLogin   bool
@@ -379,6 +385,7 @@ func (h *Handlers) AdminRosterMemberEdit(w http.ResponseWriter, r *http.Request)
 		SubGroupNoun:         subGroupNoun(unit.UnitType),
 		Member:               member,
 		Roles:                memberRoles,
+		OtherUnitRoles:       otherUnitRoles,
 		AllowedRoles:         allowedRoles,
 		AddableSubGroups:     addableSubGroups,
 		HasIndividualLogin:   hasIndividualLogin,

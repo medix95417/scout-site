@@ -1083,6 +1083,47 @@ func RolesForMemberInUnit(ctx context.Context, pool *pgxpool.Pool, memberID, uni
 	return roles, rows.Err()
 }
 
+// OtherUnitRoles is one other unit a member holds role(s) in, for the
+// read-only "also holds roles in" note on the member edit page.
+type OtherUnitRoles struct {
+	UnitID   string
+	UnitName string
+	Roles    []string
+}
+
+// RolesForMemberOtherUnits lists which OTHER units (not currentUnitID) a
+// member holds any role in, and what those roles are — a member/family can
+// hold roles in both the Troop and Pack simultaneously (see
+// RolesForFamilyInUnit's doc comment), but the member edit page only ever
+// queried the current unit, so a Troop leader had no visibility that the
+// same person is, say, also a Den Leader in the Pack. This is read-only:
+// it doesn't grant the viewing leader any ability to manage those other
+// roles, just to see that they exist.
+func RolesForMemberOtherUnits(ctx context.Context, pool *pgxpool.Pool, memberID, currentUnitID string) ([]OtherUnitRoles, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT units.id, units.name, array_agg(role_assignments.role::text ORDER BY role_assignments.role)
+		FROM role_assignments
+		JOIN units ON units.id = role_assignments.unit_id
+		WHERE role_assignments.member_id = $1 AND role_assignments.unit_id != $2
+		GROUP BY units.id, units.name
+		ORDER BY units.name
+	`, memberID, currentUnitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []OtherUnitRoles
+	for rows.Next() {
+		var o OtherUnitRoles
+		if err := rows.Scan(&o.UnitID, &o.UnitName, &o.Roles); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
 // MemberDetail is a member plus enough context for the roster edit page.
 type MemberDetail struct {
 	ID             string
