@@ -184,6 +184,7 @@ func main() {
 	handler = auth.WithUser(pool)(handler)
 	handler = units.Middleware(pool)(handler)
 	handler = csrf.Middleware(secureCookie)(handler)
+	handler = securityHeaders(handler)
 	handler = requestLogger(handler)
 
 	srv := &http.Server{
@@ -215,6 +216,27 @@ func requestLogger(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		log.Printf("%s %s%s %s", r.Method, r.Host, r.URL.Path, time.Since(start))
+	})
+}
+
+// securityHeaders sets defense-in-depth response headers on every request.
+// Deliberately conservative about scripts: this app loads htmx/Tailwind/
+// Quill from CDNs and uses inline <script> blocks and inline event
+// handlers throughout its templates, so a script-src Content-Security-
+// Policy would break the site — the CSP here only locks down the things
+// that don't touch script (framing, plugins, and <base>), which are pure
+// wins with no compatibility cost. HSTS is intentionally left to Caddy,
+// which adds it automatically when it terminates TLS (see Caddyfile);
+// setting it here too would risk sending it over plain http:// in local
+// development.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Content-Security-Policy", "frame-ancestors 'none'; object-src 'none'; base-uri 'self'")
+		next.ServeHTTP(w, r)
 	})
 }
 

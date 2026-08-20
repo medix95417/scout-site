@@ -62,3 +62,50 @@ func TestSanitize_StripsImgOnError(t *testing.T) {
 		t.Errorf("legitimate image src was stripped: %q", out)
 	}
 }
+
+func TestSanitize_BlocksObfuscatedSchemes(t *testing.T) {
+	// Each of these must NOT survive with a working javascript:/vbscript:
+	// href — browsers strip embedded control chars from a scheme before
+	// evaluating it, so a naive prefix check on the raw value misses them.
+	dangerous := []string{
+		`<a href="java` + "\t" + `script:alert(1)">x</a>`,
+		`<a href="java` + "\n" + `script:alert(1)">x</a>`,
+		`<a href="  javascript:alert(1)">x</a>`,
+		`<a href="JaVaScRiPt:alert(1)">x</a>`,
+		`<a href="vbscript:msgbox(1)">x</a>`,
+		`<a href="data:text/html,<b>x</b>">x</a>`,
+	}
+	for _, in := range dangerous {
+		out := Sanitize(in)
+		flat := strings.ToLower(strings.Map(func(r rune) rune {
+			if r <= 0x20 {
+				return -1
+			}
+			return r
+		}, out))
+		if strings.Contains(flat, "javascript:") || strings.Contains(flat, "vbscript:") || strings.Contains(flat, "data:text/html") {
+			t.Errorf("dangerous scheme survived:\n in: %q\nout: %q", in, out)
+		}
+	}
+}
+
+func TestSanitize_KeepsLegitimateURLs(t *testing.T) {
+	safe := []struct {
+		in     string
+		expect string
+	}{
+		{`<a href="https://example.com/x?a=b#c">x</a>`, "https://example.com/x?a=b#c"},
+		{`<a href="http://example.com">x</a>`, "http://example.com"},
+		{`<a href="mailto:leader@example.com">x</a>`, "mailto:leader@example.com"},
+		{`<a href="tel:+15555551234">x</a>`, "tel:+15555551234"},
+		{`<a href="/calendar">x</a>`, "/calendar"},
+		{`<a href="#section">x</a>`, "#section"},
+		{`<img src="https://example.com/p.png">`, "https://example.com/p.png"},
+	}
+	for _, c := range safe {
+		out := Sanitize(c.in)
+		if !strings.Contains(out, c.expect) {
+			t.Errorf("legitimate URL was stripped:\n in: %q\nout: %q (wanted to contain %q)", c.in, out, c.expect)
+		}
+	}
+}
