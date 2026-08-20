@@ -13,7 +13,12 @@ the rest of this guide is the same regardless.
 
 ## 0. What you need before starting
 
-- A VPS with a public IP address and root or sudo SSH access.
+- A VPS with a public IP address and root or sudo SSH access. At least
+  2GB of RAM, or 1GB plus the swap set up in step 2 below — building the
+  Go binary (step 6) needs more memory than a 1GB droplet has to spare on
+  its own, and will get silently OOM-killed partway through
+  (`docker compose up -d --build` failing with `signal: killed` and no
+  other error is exactly this).
 - Access to DNS management for `47-yonkers.org` (your registrar or DNS
   provider's dashboard).
 - This repo's code, either via `git clone` (recommended — makes future
@@ -70,6 +75,21 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 sudo ufw enable
 ```
+
+**If the VPS has 1GB of RAM or less**, add swap now so building the Go
+binary in step 6 doesn't get OOM-killed (see step 0's note above):
+
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+`free -h` should now show a couple GB under "Swap". This survives
+reboots (the `/etc/fstab` line); skip this step entirely on a VPS with
+2GB+ RAM.
 
 ## 3. Install Docker
 
