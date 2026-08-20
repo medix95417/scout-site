@@ -1,3 +1,36 @@
+{{/* imagePicker is the shared "choose from your library" widget for a
+     single-image field — a horizontally-scrollable strip of thumbnails,
+     sorted by linked calendar event (see files.ListPublicImagesForUnit),
+     so a leader recognizes "these came from the campout" instead of
+     hunting through an undifferentiated list. Clicking a thumbnail fills
+     in the paired URL <input> (data-image-url-input, matched by Slug) —
+     still a plain URL under the hood, so pasting an external URL instead
+     keeps working exactly the same.
+
+     Takes a dict with: Slug (field id, ties the picker to its URL input),
+     Images ([]files.PickerImage), CurrentURL (the field's current value,
+     to highlight the active thumbnail). See web.go's templateDict. */}}
+{{define "imagePicker"}}
+  {{if .Images}}
+    <div class="flex gap-2 overflow-x-auto pb-1" data-image-picker="{{.Slug}}">
+      {{$current := .CurrentURL}}
+      {{range .Images}}
+        {{$url := printf "/files/%s/download" .ID}}
+        <button type="button" class="flex-shrink-0 w-20 text-center" data-image-picker-option="{{$url}}" title="{{.DisplayLabel}}">
+          <img src="{{$url}}" alt="{{.DisplayLabel}}" loading="lazy"
+               class="h-16 w-20 object-cover rounded-md border-2 {{if eq $url $current}}border-blue-500{{else}}border-gray-200 hover:border-gray-400{{end}}">
+          <span class="block text-[10px] text-gray-500 truncate mt-0.5">{{if .PrimaryEventName}}{{.PrimaryEventName}}{{else}}&mdash;{{end}}</span>
+        </button>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="text-xs text-gray-500">
+      No public photos in your <a href="/files" class="underline" style="color: var(--unit-color);">file library</a> yet —
+      upload one and mark it "Public" there to pick it here instead of pasting a URL.
+    </p>
+  {{end}}
+{{end}}
+
 {{define "content"}}
   <h1 class="text-2xl font-bold mb-2">Edit Homepage — {{.Unit.Name}}</h1>
   <p class="text-sm text-gray-600 mb-6">
@@ -37,19 +70,7 @@
               placeholder="https://… or choose from your library below"
               data-image-url-input="{{.Slug}}"
             >
-            {{if $.PublicImages}}
-              <select class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" data-image-picker="{{.Slug}}">
-                <option value="">Choose from your file library…</option>
-                {{range $.PublicImages}}
-                  <option value="/files/{{.ID}}/download">{{.DisplayLabel}}</option>
-                {{end}}
-              </select>
-            {{else}}
-              <p class="text-xs text-gray-500">
-                No public photos in your <a href="/files" class="underline" style="color: var(--unit-color);">file library</a> yet —
-                upload one and mark it "Public" there to pick it here instead of pasting a URL.
-              </p>
-            {{end}}
+            {{template "imagePicker" (dict "Slug" .Slug "Images" $.PublicImages "CurrentURL" .Body)}}
           {{else if eq .Kind "url"}}
             <input
               type="url"
@@ -100,19 +121,7 @@
             placeholder="https://… or choose from your library below"
             data-image-url-input="{{.Slug}}"
           >
-          {{if $.PublicImages}}
-            <select class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" data-image-picker="{{.Slug}}">
-              <option value="">Choose from your file library…</option>
-              {{range $.PublicImages}}
-                <option value="/files/{{.ID}}/download">{{.DisplayLabel}}</option>
-              {{end}}
-            </select>
-          {{else}}
-            <p class="text-xs text-gray-500">
-              No public photos in your <a href="/files" class="underline" style="color: var(--unit-color);">file library</a> yet —
-              upload one and mark it "Public" there to pick it here instead of pasting a URL.
-            </p>
-          {{end}}
+          {{template "imagePicker" (dict "Slug" .Slug "Images" $.PublicImages "CurrentURL" .Body)}}
           <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
             Save
           </button>
@@ -124,19 +133,26 @@
   <p class="mt-6 text-sm"><a href="/" class="underline" style="color: var(--unit-color);">&larr; Back to homepage</a></p>
 
   <script>
-    // Wires each "choose from library" <select> to its matching image URL
-    // <input> — picking a photo fills in the input (still a plain URL under
-    // the hood, so pasting an external URL instead keeps working exactly as
-    // before) but doesn't submit the form, since a leader might still want
-    // to review/preview before saving.
+    // Wires each "choose from library" thumbnail strip to its matching
+    // image URL <input> (see the imagePicker block above) — clicking a
+    // thumbnail fills in the input (still a plain URL under the hood, so
+    // pasting an external URL instead keeps working exactly as before) but
+    // doesn't submit the form, since a leader might still want to review/
+    // preview before saving.
     document.querySelectorAll('[data-image-picker]').forEach(function (picker) {
       var slug = picker.getAttribute('data-image-picker');
       var input = document.querySelector('[data-image-url-input="' + slug + '"]');
       if (!input) return;
-      picker.addEventListener('change', function () {
-        if (picker.value) {
-          input.value = picker.value;
-        }
+      picker.querySelectorAll('[data-image-picker-option]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          input.value = btn.getAttribute('data-image-picker-option');
+          picker.querySelectorAll('img').forEach(function (img) {
+            img.classList.remove('border-blue-500');
+            img.classList.add('border-gray-200');
+          });
+          btn.querySelector('img').classList.remove('border-gray-200');
+          btn.querySelector('img').classList.add('border-blue-500');
+        });
       });
     });
   </script>

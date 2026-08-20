@@ -128,28 +128,60 @@ func SetDisplayName(ctx context.Context, pool *pgxpool.Pool, fileID, unitID, dis
 	return err
 }
 
-// ListPublicImagesForUnit lists a unit's public, image-content-type files —
-// what the "choose from library" picker on /admin/home offers for the
-// hero/program/gallery photo slots. Only ever returns what a leader has
-// already explicitly marked public (SetPublic); never all of ListForUnit.
-func ListPublicImagesForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]File, error) {
+// PickerImage is a public image plus the calendar event(s) it's linked to
+// (if any) — what the thumbnail picker (see internal/web/templates'
+// "imagePicker" block) groups/sorts by, so a leader browsing photos to use
+// as a hero banner or homepage photo can recognize "these came from the
+// campout" instead of hunting through an undifferentiated list.
+type PickerImage struct {
+	File
+	EventNames []string // empty means not linked to any event
+}
+
+// PrimaryEventName is the event PickerImage sorts by — the first (soonest-
+// starting) event a photo is linked to, or "" if it isn't linked to any.
+// A photo linked to several events is rare; sorting by just the first one
+// is simpler than a full multi-group display for a niche case.
+func (p PickerImage) PrimaryEventName() string {
+	if len(p.EventNames) == 0 {
+		return ""
+	}
+	return p.EventNames[0]
+}
+
+// ListPublicImagesForUnit lists a unit's public, image-content-type files,
+// each decorated with the event(s) it's linked to — what the "choose from
+// library" picker on /admin/home offers for the hero/program/gallery photo
+// slots. Only ever returns what a leader has already explicitly marked
+// public (SetPublic); never all of ListForUnit. Sorted by linked event
+// (soonest-starting first, unlinked photos last), then by upload recency
+// within each group.
+func ListPublicImagesForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]PickerImage, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, unit_id, filename, display_name, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
-		FROM files WHERE unit_id = $1 AND is_public = true AND content_type LIKE 'image/%'
-		ORDER BY created_at DESC
+		SELECT
+			f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at, f.is_public,
+			COALESCE(array_agg(e.title ORDER BY e.starts_at) FILTER (WHERE e.title IS NOT NULL), '{}'),
+			MIN(e.starts_at)
+		FROM files f
+		LEFT JOIN event_files ef ON ef.file_id = f.id
+		LEFT JOIN events e ON e.id = ef.event_id
+		WHERE f.unit_id = $1 AND f.is_public = true AND f.content_type LIKE 'image/%'
+		GROUP BY f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category, f.uploaded_by, f.created_at, f.is_public
+		ORDER BY (MIN(e.starts_at) IS NULL), MIN(e.starts_at), f.created_at DESC
 	`, unitID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var out []File
+	var out []PickerImage
 	for rows.Next() {
-		var f File
-		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
+		var p PickerImage
+		var firstEventStart *time.Time
+		if err := rows.Scan(&p.ID, &p.UnitID, &p.Filename, &p.DisplayName, &p.ContentType, &p.SizeBytes, &p.StorageKey, &p.Category, &p.UploadedBy, &p.CreatedAt, &p.Public, &p.EventNames, &firstEventStart); err != nil {
 			return nil, err
 		}
-		out = append(out, f)
+		out = append(out, p)
 	}
 	return out, rows.Err()
 }

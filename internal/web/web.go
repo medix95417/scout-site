@@ -8,6 +8,7 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -108,6 +109,28 @@ type Handlers struct {
 var templateFuncs = template.FuncMap{
 	"formatCents": formatCents,
 	"hasPrefix":   strings.HasPrefix,
+	"dict":        templateDict,
+}
+
+// templateDict builds a map from alternating key/value arguments — the
+// standard html/template idiom for passing several named values into a
+// shared {{template}} block (see templates/content-admin.html's
+// "imagePicker" block, reused across homepage sections, page hero
+// banners, and the Gallery/homepage-gallery pickers), which otherwise only
+// ever receives a single ".". Keys must be strings.
+func templateDict(pairs ...any) (map[string]any, error) {
+	if len(pairs)%2 != 0 {
+		return nil, fmt.Errorf("dict: odd number of arguments")
+	}
+	m := make(map[string]any, len(pairs)/2)
+	for i := 0; i < len(pairs); i += 2 {
+		key, ok := pairs[i].(string)
+		if !ok {
+			return nil, fmt.Errorf("dict: keys must be strings, got %T", pairs[i])
+		}
+		m[key] = pairs[i+1]
+	}
+	return m, nil
 }
 
 // New parses templates and returns a ready-to-use Handlers.
@@ -746,7 +769,7 @@ func (h *Handlers) HomeContentList(w http.ResponseWriter, r *http.Request) {
 		baseData
 		Sections     []homeAdminRow
 		HeroSections []homeAdminRow
-		PublicImages []files.File
+		PublicImages []files.PickerImage
 	}{baseData: h.base(r, "Edit Homepage"), Sections: rows, HeroSections: heroRows, PublicImages: publicImages}
 	h.render(w, h.contentAdmin, data)
 }
