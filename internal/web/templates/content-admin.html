@@ -74,6 +74,53 @@
     {{end}}
   </div>
 
+  <h1 class="text-2xl font-bold mt-10 mb-2">Page Hero Banners</h1>
+  <p class="text-sm text-gray-600 mb-6">
+    Optional banner photos for the pages below — leave blank for no banner.
+    Same card layout as the homepage sections above; just a different set of
+    pages and no placeholder text since these have no default copy.
+  </p>
+
+  <div class="space-y-6">
+    {{range .HeroSections}}
+      <section class="rounded-lg border border-gray-200 bg-white p-4">
+        <h2 class="text-lg font-semibold mb-1">{{.Label}}</h2>
+        {{if .Help}}<p class="text-xs text-gray-500 mb-2">{{.Help}}</p>{{end}}
+        {{if .Body}}
+          <img src="{{.Body}}" alt=""
+               class="mb-2 h-28 w-full max-w-xs rounded-md border border-gray-200 object-cover">
+        {{end}}
+        <form method="post" action="/admin/home/{{.Slug}}" class="space-y-2">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <input
+            type="url"
+            name="body"
+            value="{{.Body}}"
+            class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            placeholder="https://… or choose from your library below"
+            data-image-url-input="{{.Slug}}"
+          >
+          {{if $.PublicImages}}
+            <select class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" data-image-picker="{{.Slug}}">
+              <option value="">Choose from your file library…</option>
+              {{range $.PublicImages}}
+                <option value="/files/{{.ID}}/download">{{.Filename}}</option>
+              {{end}}
+            </select>
+          {{else}}
+            <p class="text-xs text-gray-500">
+              No public photos in your <a href="/files" class="underline" style="color: var(--unit-color);">file library</a> yet —
+              upload one and mark it "Public" there to pick it here instead of pasting a URL.
+            </p>
+          {{end}}
+          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+            Save
+          </button>
+        </form>
+      </section>
+    {{end}}
+  </div>
+
   <p class="mt-6 text-sm"><a href="/" class="underline" style="color: var(--unit-color);">&larr; Back to homepage</a></p>
 
   <script>

@@ -87,7 +87,7 @@ func HomepageSections(unitType string) []SectionDef {
 	}
 	return []SectionDef{
 		{Slug: "home-hero", Label: "Hero tagline", Placeholder: "Adventure starts here — join our Cub Scout pack!"},
-		{Slug: "home-hero-image", Label: "Hero background photo URL", Kind: "url", Placeholder: stockPhotoCampfire, Help: imageHelp},
+		{Slug: "home-hero-image", Label: "Hero background photo URL", Kind: "image", Placeholder: stockPhotoCampfire, Help: imageHelp},
 		{Slug: "home-program", Label: "Our program (one activity per line)", Placeholder: "Monthly pack meetings\nDens meeting every other week\nCamping (tent and cabin)\nPinewood Derby\nCommunity service projects", Help: "Each line becomes one bullet point on the homepage, like pack6crestwood.org's \"Our Program\" list."},
 		{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 		{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Contact us for our current meeting time and location."},
@@ -99,6 +99,68 @@ func HomepageSections(unitType string) []SectionDef {
 		{Slug: "home-instagram", Label: "Instagram profile URL (optional)", Kind: "url", Help: "Shows an Instagram icon/link on the homepage if set."},
 		{Slug: "home-tiktok", Label: "TikTok profile URL (optional)", Kind: "url", Help: "Shows a TikTok icon/link on the homepage if set."},
 	}
+}
+
+// heroSlugPrefix is the well-known slug prefix for a page's hero banner
+// image — see HeroPages/HeroSections below.
+const heroSlugPrefix = "pagehero-"
+
+// HeroPage describes one of the main member/public-facing pages (besides
+// the homepage, which already has its own richer hero) that can carry an
+// editable hero banner image.
+type HeroPage struct {
+	Key   string // slug suffix (heroSlugPrefix + Key is the content_pages slug) and the internal/web lookup key for the current request path
+	Label string // shown in the admin "Page Hero Banners" list
+}
+
+// HeroPages is every page offering an editable hero banner, in admin-list
+// display order. Deliberately a smaller set than "every page" — the
+// pages a visitor actually lands on and browses, not admin/settings
+// pages. The homepage isn't here: it already has its own hero (background
+// photo + tagline + CTA), edited via HomepageSections, not this mechanism.
+var HeroPages = []HeroPage{
+	{Key: "calendar", Label: "Calendar"},
+	{Key: "news", Label: "News"},
+	{Key: "gallery", Label: "Gallery"},
+	{Key: "roster", Label: "Roster"},
+	{Key: "directory", Label: "Family Directory"},
+	{Key: "files", Label: "Files"},
+	{Key: "groups", Label: "Patrols/Dens list"},
+}
+
+// HeroSections is HeroPages expressed as SectionDefs (Kind "image", the
+// same paste-a-URL-or-choose-from-your-public-library field HomepageSections
+// already uses) so /admin/home's existing editing UI and picker can render
+// these with zero new code — see internal/web/web.go's HomeContentList/
+// HomeContentSave, which combine this list with HomepageSections.
+func HeroSections() []SectionDef {
+	defs := make([]SectionDef, len(HeroPages))
+	for i, p := range HeroPages {
+		defs[i] = SectionDef{
+			Slug:  heroSlugPrefix + p.Key,
+			Label: p.Label + " page hero banner (optional)",
+			Kind:  "image",
+			Help:  "Paste an image URL, or choose one already marked \"Public\" in your file library. Leave blank for no banner on this page.",
+		}
+	}
+	return defs
+}
+
+// HeroSectionsForUnit fetches every hero banner already set for a unit,
+// keyed by slug — the hero sibling of SectionsForUnit.
+func HeroSectionsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (map[string]Section, error) {
+	return sectionsForUnitLike(ctx, pool, unitID, heroSlugPrefix+"%")
+}
+
+// HeroURLForPage returns the hero banner image URL for one page (see
+// HeroPage.Key), or "" if that page has no hero set — what every hero-
+// capable page's own handler calls to decorate its baseData.
+func HeroURLForPage(ctx context.Context, pool *pgxpool.Pool, unitID, pageKey string) (string, error) {
+	s, found, err := GetSection(ctx, pool, unitID, heroSlugPrefix+pageKey)
+	if err != nil || !found {
+		return "", err
+	}
+	return s.Body, nil
 }
 
 // GetSection fetches one homepage section for a unit. Returns
@@ -121,11 +183,18 @@ func GetSection(ctx context.Context, pool *pgxpool.Pool, unitID, slug string) (S
 // unit, keyed by slug, in one query — what the Home handler uses so
 // rendering the page doesn't cost one query per section.
 func SectionsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (map[string]Section, error) {
+	return sectionsForUnitLike(ctx, pool, unitID, "home-%")
+}
+
+// sectionsForUnitLike is the shared query behind SectionsForUnit and
+// HeroSectionsForUnit — both just want every content_pages row for a unit
+// whose slug matches a known prefix, keyed by slug.
+func sectionsForUnitLike(ctx context.Context, pool *pgxpool.Pool, unitID, slugLike string) (map[string]Section, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT id, unit_id, slug, title, body, updated_at
 		FROM content_pages
-		WHERE unit_id = $1 AND slug LIKE 'home-%'
-	`, unitID)
+		WHERE unit_id = $1 AND slug LIKE $2
+	`, unitID, slugLike)
 	if err != nil {
 		return nil, err
 	}
