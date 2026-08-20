@@ -30,19 +30,30 @@ type Resource struct {
 
 	// Set only when FileID is non-nil — joined in from files so rendering
 	// the list doesn't cost one query per document resource.
-	FileFilename  string
-	FileSizeBytes int64
+	FileFilename    string
+	FileDisplayName string
+	FileSizeBytes   int64
+}
+
+// FileDisplayLabel is what to show for this resource's underlying file —
+// mirrors files.File.DisplayLabel without needing a second query to fetch
+// the full File row.
+func (r Resource) FileDisplayLabel() string {
+	if r.FileDisplayName != "" {
+		return r.FileDisplayName
+	}
+	return r.FileFilename
 }
 
 const selectColumns = `
 	resources.id, resources.unit_id, resources.title, resources.description,
 	resources.file_id, resources.url, resources.is_public, resources.created_by, resources.created_at,
-	COALESCE(files.filename, ''), COALESCE(files.size_bytes, 0)
+	COALESCE(files.filename, ''), COALESCE(files.display_name, ''), COALESCE(files.size_bytes, 0)
 `
 
 func scanResource(row interface{ Scan(...any) error }) (Resource, error) {
 	var r Resource
-	err := row.Scan(&r.ID, &r.UnitID, &r.Title, &r.Description, &r.FileID, &r.URL, &r.IsPublic, &r.CreatedBy, &r.CreatedAt, &r.FileFilename, &r.FileSizeBytes)
+	err := row.Scan(&r.ID, &r.UnitID, &r.Title, &r.Description, &r.FileID, &r.URL, &r.IsPublic, &r.CreatedBy, &r.CreatedAt, &r.FileFilename, &r.FileDisplayName, &r.FileSizeBytes)
 	return r, err
 }
 

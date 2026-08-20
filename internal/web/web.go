@@ -348,6 +348,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /files/{id}/delete", h.FileDelete)
 	mux.HandleFunc("POST /files/{id}/link", h.FileSetEventLinks)
 	mux.HandleFunc("POST /files/{id}/public", h.FileSetPublic)
+	mux.HandleFunc("POST /files/{id}/rename", h.FileSetDisplayName)
 
 	// Resources page — curated documents/links, public or members-only
 	// (internal/web/resources.go).

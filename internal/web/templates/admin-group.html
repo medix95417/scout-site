@@ -30,7 +30,7 @@
           {{range .ImageFiles}}
             <label class="flex items-center gap-2 text-sm">
               <input type="checkbox" name="file_ids" value="{{.ID}}" {{if index $.LinkedFileID .ID}}checked{{end}}>
-              <span class="truncate">{{.Filename}}</span>
+              <span class="truncate">{{.DisplayLabel}}</span>
             </label>
           {{end}}
         </div>
