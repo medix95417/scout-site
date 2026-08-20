@@ -1,3 +1,8 @@
+{{define "extrahead"}}
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/2.0.2/quill.snow.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/2.0.2/quill.min.js"></script>
+{{end}}
+
 {{define "content"}}
   <h1 class="text-2xl font-bold mb-2">{{if .IsEdit}}Edit{{else}}New{{end}} Newsletter — {{.Unit.Name}}</h1>
   <p class="text-sm text-gray-600 mb-6">
@@ -13,7 +18,16 @@
     {{end}}
   </p>
 
-  <form method="post" action="{{if .IsEdit}}/admin/newsletters/{{.Newsletter.ID}}{{else}}/admin/newsletters{{end}}" class="space-y-4 max-w-2xl">
+  {{if not .IsEdit}}
+    <div class="mb-4 max-w-2xl">
+      <label class="block text-sm font-medium mb-1" for="starter-template">Start from a template (optional)</label>
+      <select id="starter-template" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+        <option value="">Blank</option>
+      </select>
+    </div>
+  {{end}}
+
+  <form id="newsletter-form" method="post" action="{{if .IsEdit}}/admin/newsletters/{{.Newsletter.ID}}{{else}}/admin/newsletters{{end}}" class="space-y-4 max-w-2xl">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
     <div>
@@ -27,14 +41,11 @@
     </div>
 
     <div>
-      <label class="block text-sm font-medium mb-1" for="body">Body</label>
-      <p class="text-xs text-gray-500 mb-2">Plain text — line breaks are preserved, but no HTML.</p>
-      <textarea
-        id="body" name="body" rows="12"
-        placeholder="Hi families,&#10;&#10;A few updates for this month..."
-        {{if eq .Newsletter.Status "sent"}}disabled{{end}}
-        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
-      >{{.Newsletter.Body}}</textarea>
+      <label class="block text-sm font-medium mb-1">Body</label>
+      <p class="text-xs text-gray-500 mb-2">Full formatting supported — bold, lists, links, images, colors.</p>
+      <div id="quill-editor" style="height: 300px; background: white;"></div>
+      <textarea id="body-initial" style="display:none">{{.Newsletter.Body}}</textarea>
+      <input type="hidden" id="body-input" name="body">
     </div>
 
     {{if ne .Newsletter.Status "sent"}}
@@ -57,4 +68,55 @@
       </form>
     {{end}}
   {{end}}
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var quill = new Quill('#quill-editor', {
+        theme: 'snow',
+        modules: {
+          toolbar: [
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ list: 'ordered' }, { list: 'bullet' }],
+            [{ header: [1, 2, 3, false] }],
+            ['link', 'image'],
+            [{ color: [] }, { background: [] }],
+            [{ align: [] }],
+            ['blockquote'],
+            ['clean']
+          ]
+        }
+      });
+
+      var initial = document.getElementById('body-initial').value;
+      if (initial) {
+        quill.root.innerHTML = initial;
+      }
+      {{if eq .Newsletter.Status "sent"}}
+        quill.enable(false);
+      {{end}}
+
+      document.getElementById('newsletter-form').addEventListener('submit', function () {
+        document.getElementById('body-input').value = quill.root.innerHTML;
+      });
+
+      {{if not .IsEdit}}
+        var starterTemplates = {{.StarterTemplates}};
+        var picker = document.getElementById('starter-template');
+        starterTemplates.forEach(function (t) {
+          var opt = document.createElement('option');
+          opt.textContent = t.Name;
+          opt.value = t.Name;
+          picker.appendChild(opt);
+        });
+        picker.addEventListener('change', function () {
+          var t = starterTemplates.find(function (t) { return t.Name === picker.value; });
+          if (!t) {
+            return;
+          }
+          document.getElementById('subject').value = t.Subject;
+          quill.root.innerHTML = t.Body;
+        });
+      {{end}}
+    });
+  </script>
 {{end}}

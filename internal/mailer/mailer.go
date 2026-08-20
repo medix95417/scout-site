@@ -122,6 +122,26 @@ func (m *Mailer) Enabled(ctx context.Context) bool {
 // from an HTTP handler (forgot-password) as well as from the batch
 // reminders job.
 func (m *Mailer) Send(ctx context.Context, to, subject, body string) error {
+	return m.deliver(ctx, to, func(from string) string {
+		return buildMessage("text/plain", from, to, subject, body)
+	})
+}
+
+// SendHTML delivers a single HTML email — used only by internal/newsletter,
+// where a leader has authored real formatted content via a WYSIWYG editor
+// (see internal/newsletter.Sanitize, which the caller must have already run
+// on body). Every other send in this codebase (password reset, event
+// reminders) stays plain-text via Send; this doesn't change that.
+func (m *Mailer) SendHTML(ctx context.Context, to, subject, body string) error {
+	return m.deliver(ctx, to, func(from string) string {
+		return buildMessage("text/html", from, to, subject, body)
+	})
+}
+
+// deliver is the shared SMTP dial/handshake/transmit path behind Send and
+// SendHTML — the only difference between a plain-text and an HTML send is
+// the already-built message string handed in.
+func (m *Mailer) deliver(ctx context.Context, to string, buildBody func(from string) string) error {
 	cfg := m.effective(ctx)
 	if !cfg.Enabled() {
 		return fmt.Errorf("mailer: not configured — set SMTP_HOST (and SMTP_PORT/SMTP_USERNAME/SMTP_PASSWORD/SMTP_FROM), or fill in the host/port/username/from fields on /admin/settings, to enable email")
@@ -183,7 +203,7 @@ func (m *Mailer) Send(ctx context.Context, to, subject, body string) error {
 	if err != nil {
 		return fmt.Errorf("mailer: DATA: %w", err)
 	}
-	if _, err := w.Write([]byte(buildMessage(cfg.From, to, subject, body))); err != nil {
+	if _, err := w.Write([]byte(buildBody(cfg.From))); err != nil {
 		return fmt.Errorf("mailer: writing message: %w", err)
 	}
 	if err := w.Close(); err != nil {
@@ -205,21 +225,21 @@ func extractAddr(from string) (string, error) {
 }
 
 // buildMessage assembles a minimal, correct RFC 5322 message: headers plus
-// a plain-text UTF-8 body, CRLF line endings throughout (matching the
-// canonical net/smtp.SendMail usage pattern from the standard library's own
-// documentation). Note: this deliberately does NOT hand-roll SMTP dot-
-// stuffing (escaping a body line that's just ".") — client.Data() returns a
-// textproto DotWriter, which already does that transparently for whatever
-// well-formed, CRLF-terminated message it's given. Doing it here too would
-// double-escape.
-func buildMessage(from, to, subject, body string) string {
+// a UTF-8 body of the given contentType ("text/plain" or "text/html"), CRLF
+// line endings throughout (matching the canonical net/smtp.SendMail usage
+// pattern from the standard library's own documentation). Note: this
+// deliberately does NOT hand-roll SMTP dot-stuffing (escaping a body line
+// that's just ".") — client.Data() returns a textproto DotWriter, which
+// already does that transparently for whatever well-formed, CRLF-terminated
+// message it's given. Doing it here too would double-escape.
+func buildMessage(contentType, from, to, subject, body string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\n", from)
 	fmt.Fprintf(&b, "To: %s\r\n", to)
 	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
 	fmt.Fprintf(&b, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))
 	b.WriteString("MIME-Version: 1.0\r\n")
-	b.WriteString("Content-Type: text/plain; charset=\"utf-8\"\r\n")
+	fmt.Fprintf(&b, "Content-Type: %s; charset=\"utf-8\"\r\n", contentType)
 	b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
 	b.WriteString("\r\n")
 	for _, line := range strings.Split(body, "\n") {

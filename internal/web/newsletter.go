@@ -13,7 +13,9 @@ package web
 // many).
 
 import (
+	"encoding/json"
 	"errors"
+	"html/template"
 	"log"
 	"net/http"
 	"strings"
@@ -66,17 +68,37 @@ func (h *Handlers) AdminNewsletterList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) AdminNewsletterNew(w http.ResponseWriter, r *http.Request) {
-	_, _, ok := h.requireContentEditor(w, r, "/admin/newsletters/new")
+	unit, _, ok := h.requireContentEditor(w, r, "/admin/newsletters/new")
 	if !ok {
 		return
 	}
 
 	data := struct {
 		baseData
-		IsEdit     bool
-		Newsletter newsletter.Newsletter
-	}{baseData: h.base(r, "New Newsletter")}
+		IsEdit           bool
+		Newsletter       newsletter.Newsletter
+		StarterTemplates template.JS
+	}{
+		baseData:         h.base(r, "New Newsletter"),
+		StarterTemplates: starterTemplatesJSON(unit.UnitType),
+	}
 	h.render(w, h.newsletterForm, data)
+}
+
+// starterTemplatesJSON marshals the unit's built-in starter templates
+// (internal/newsletter.StarterTemplates) to a JSON array for the "start
+// from a template" picker on admin-newsletter-form.html — server-authored
+// Go constants, not user input, so embedding the result directly in a
+// <script> block (see the template) is safe. Marshal failing here would
+// mean a bug in a Go struct literal, not bad input, so it's logged and
+// swallowed rather than failing the whole page.
+func starterTemplatesJSON(unitType string) template.JS {
+	b, err := json.Marshal(newsletter.StarterTemplates(unitType))
+	if err != nil {
+		log.Printf("web: marshaling newsletter starter templates: %v", err)
+		return template.JS("[]")
+	}
+	return template.JS(b) //nolint:gosec // server-authored constants, not user input — see comment above
 }
 
 func (h *Handlers) AdminNewsletterEdit(w http.ResponseWriter, r *http.Request) {
