@@ -34,6 +34,16 @@ stripping the control characters and whitespace browsers ignore — anything
 it doesn't positively recognize is dropped. Added regression tests covering
 the obfuscation bypasses and confirming legitimate links still pass.
 
+**Security — patched a SQL-injection CVE in the `pgx` database driver.**
+The newly-added `govulncheck` CI job immediately surfaced GO-2026-5004: a
+SQL-injection vulnerability in `github.com/jackc/pgx/v5` v5.6.0 (placeholder
+confusion with dollar-quoted string literals), reachable from this app's
+own queries. The application's own SQL is fully parameterized — this was a
+flaw inside the driver's placeholder handling, not in app code — but it was
+still exploitable through us, so the driver is upgraded to v5.9.2 (the
+patched release). This is exactly the class of dependency-level issue a
+manual code review can't catch, which is why the scan was added.
+
 **Security — `govulncheck` in CI.** The GitHub Actions workflow now runs
 `govulncheck` as its own job on every push and pull request, scanning the
 code and its dependencies against the Go vulnerability database. It reports
