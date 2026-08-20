@@ -2,6 +2,21 @@ package units
 
 import "testing"
 
+// capsFor resolves role slugs into capabilities using only the fixed
+// system-role map — every test case here uses fixed slugs, so this avoids
+// needing a database connection (CapabilitiesForRoles' only DB-touching
+// path is looking up custom_roles for a slug that isn't a known system
+// role).
+func capsFor(roles []string) Capabilities {
+	caps := make(Capabilities)
+	for _, role := range roles {
+		for _, c := range systemRoleCapabilities[role] {
+			caps[c] = true
+		}
+	}
+	return caps
+}
+
 func TestCanEditUnitContent(t *testing.T) {
 	cases := []struct {
 		roles []string
@@ -20,7 +35,7 @@ func TestCanEditUnitContent(t *testing.T) {
 		{[]string{"parent", "scoutmaster"}, true},
 	}
 	for _, c := range cases {
-		if got := CanEditUnitContent(c.roles); got != c.want {
+		if got := CanEditUnitContent(capsFor(c.roles)); got != c.want {
 			t.Errorf("CanEditUnitContent(%v) = %v, want %v", c.roles, got, c.want)
 		}
 	}
@@ -38,7 +53,7 @@ func TestCanSubmitForApproval(t *testing.T) {
 		{[]string{"scoutmaster"}, false}, // adult leaders don't need the approval path
 	}
 	for _, c := range cases {
-		if got := CanSubmitForApproval(c.roles); got != c.want {
+		if got := CanSubmitForApproval(capsFor(c.roles)); got != c.want {
 			t.Errorf("CanSubmitForApproval(%v) = %v, want %v", c.roles, got, c.want)
 		}
 	}
@@ -57,7 +72,7 @@ func TestCanApprove(t *testing.T) {
 		{[]string{"cubmaster"}, false}, // per requirements: only SM/ASM/super_admin approve
 	}
 	for _, c := range cases {
-		if got := CanApprove(c.roles); got != c.want {
+		if got := CanApprove(capsFor(c.roles)); got != c.want {
 			t.Errorf("CanApprove(%v) = %v, want %v", c.roles, got, c.want)
 		}
 	}
@@ -69,12 +84,12 @@ func TestCanManageLedger(t *testing.T) {
 		want  bool
 	}{
 		{nil, false},
-		{[]string{"scoutmaster"}, false}, // deliberately narrower than AdultLeaderRoles
+		{[]string{"scoutmaster"}, false}, // deliberately narrower than content-edit access
 		{[]string{"treasurer"}, true},
 		{[]string{"super_admin"}, true},
 	}
 	for _, c := range cases {
-		if got := CanManageLedger(c.roles); got != c.want {
+		if got := CanManageLedger(capsFor(c.roles)); got != c.want {
 			t.Errorf("CanManageLedger(%v) = %v, want %v", c.roles, got, c.want)
 		}
 	}
@@ -92,7 +107,7 @@ func TestIsSuperAdmin(t *testing.T) {
 		{[]string{"parent", "super_admin"}, true},
 	}
 	for _, c := range cases {
-		if got := IsSuperAdmin(c.roles); got != c.want {
+		if got := IsSuperAdmin(capsFor(c.roles)); got != c.want {
 			t.Errorf("IsSuperAdmin(%v) = %v, want %v", c.roles, got, c.want)
 		}
 	}

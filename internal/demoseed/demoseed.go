@@ -1,5 +1,5 @@
 // Package demoseed creates a full set of test data — one login per
-// member_role, plus realistic calendar, ledger, fundraiser, and approval
+// system-defined role, plus realistic calendar, ledger, fundraiser, and approval
 // activity — so a fresh deployment can be clicked through and tested
 // without hand-creating a dozen accounts first. See cmd/server's
 // -seed-demo flag and DEMO_DATA.md.

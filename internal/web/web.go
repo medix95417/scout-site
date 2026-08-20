@@ -88,6 +88,8 @@ type Handlers struct {
 	advancementAdmin *template.Template
 
 	fileLibrary *template.Template
+
+	customRoles *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -206,6 +208,9 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.fileLibrary, err = parse("files.html"); err != nil {
 		return nil, err
 	}
+	if h.customRoles, err = parse("admin-custom-roles.html"); err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
@@ -312,6 +317,11 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /files/{id}/download", h.FileDownload)
 	mux.HandleFunc("POST /files/{id}/delete", h.FileDelete)
 	mux.HandleFunc("POST /files/{id}/link", h.FileSetEventLinks)
+
+	// Custom roles — super_admin only (internal/web/admin_roles.go).
+	mux.HandleFunc("GET /admin/custom-roles", h.AdminCustomRolesList)
+	mux.HandleFunc("POST /admin/custom-roles", h.AdminCustomRolesCreate)
+	mux.HandleFunc("POST /admin/custom-roles/{id}/delete", h.AdminCustomRolesDelete)
 }
 
 // baseData is embedded in every page's template data.
@@ -342,6 +352,20 @@ func (h *Handlers) rolesFor(ctx context.Context, user auth.User, unitID string) 
 		return units.RolesForMemberInUnit(ctx, h.Pool, *user.MemberID, unitID)
 	}
 	return units.RolesForFamilyInUnit(ctx, h.Pool, user.FamilyID, unitID)
+}
+
+// capabilitiesFor resolves the current login's roles in a unit straight
+// into the capabilities they grant (see units.CapabilitiesForRoles) — the
+// one call every permission check (CanEditUnitContent, CanManageLedger,
+// IsSuperAdmin, etc.) should go through, so a custom role's capabilities
+// count exactly the same as an equivalent fixed role's everywhere in the
+// app.
+func (h *Handlers) capabilitiesFor(ctx context.Context, user auth.User, unitID string) (units.Capabilities, error) {
+	roles, err := h.rolesFor(ctx, user, unitID)
+	if err != nil {
+		return nil, err
+	}
+	return units.CapabilitiesForRoles(ctx, h.Pool, unitID, roles)
 }
 
 // actingMember resolves which family.Member the current login's actions
@@ -398,15 +422,15 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 	user, loggedIn := auth.UserFromContext(r.Context())
 	data := baseData{Unit: unit, LoggedIn: loggedIn, PageTitle: pageTitle, CSRFToken: csrf.TokenFromContext(r.Context()), Version: version.Version}
 	if loggedIn {
-		roles, err := h.rolesFor(r.Context(), user, unit.ID)
+		caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 		if err != nil {
-			log.Printf("web: loading roles: %v", err)
+			log.Printf("web: loading capabilities: %v", err)
 		}
-		data.CanEditContent = units.CanEditUnitContent(roles)
-		data.CanManageLedger = units.CanManageLedger(roles)
-		data.IsSuperAdmin = units.IsSuperAdmin(roles)
+		data.CanEditContent = units.CanEditUnitContent(caps)
+		data.CanManageLedger = units.CanManageLedger(caps)
+		data.IsSuperAdmin = units.IsSuperAdmin(caps)
 
-		// Cross-unit check (not the per-unit `roles` above) — a login that's
+		// Cross-unit check (not the per-unit `caps` above) — a login that's
 		// Treasurer on only one of the two units still needs 2FA nudged
 		// everywhere, since single sign-on means one session already spans
 		// both subdomains. Short-circuits past the settings.Get call for
@@ -546,8 +570,8 @@ func (h *Handlers) HomeContentList(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?next=/admin/home", http.StatusSeeOther)
 		return
 	}
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
-	if err != nil || !units.CanEditUnitContent(roles) {
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
 		http.Error(w, "you don't have permission to edit this site's homepage", http.StatusForbidden)
 		return
 	}
@@ -582,8 +606,8 @@ func (h *Handlers) HomeContentSave(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
-	if err != nil || !units.CanEditUnitContent(roles) {
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
 		http.Error(w, "you don't have permission to edit this site's homepage", http.StatusForbidden)
 		return
 	}
@@ -816,14 +840,14 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 	var pendingViews []pendingApprovalView
 
 	if loggedIn {
-		roles, err := h.rolesFor(r.Context(), user, unit.ID)
+		caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 		if err != nil {
-			log.Printf("web: loading roles: %v", err)
+			log.Printf("web: loading capabilities: %v", err)
 		}
-		canCreate = units.CanEditUnitContent(roles) || units.CanSubmitForApproval(roles)
-		requiresApproval = !units.CanEditUnitContent(roles) && units.CanSubmitForApproval(roles)
-		canApprove = units.CanApprove(roles)
-		canManageFiles = units.CanEditUnitContent(roles)
+		canCreate = units.CanEditUnitContent(caps) || units.CanSubmitForApproval(caps)
+		requiresApproval = !units.CanEditUnitContent(caps) && units.CanSubmitForApproval(caps)
+		canApprove = units.CanApprove(caps)
+		canManageFiles = units.CanEditUnitContent(caps)
 
 		if canApprove {
 			pending, err := approval.PendingForUnit(r.Context(), h.Pool, unit.ID)
@@ -890,12 +914,12 @@ func (h *Handlers) CalendarCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if !units.CanEditUnitContent(roles) && !units.CanSubmitForApproval(roles) {
+	if !units.CanEditUnitContent(caps) && !units.CanSubmitForApproval(caps) {
 		http.Error(w, "you don't have permission to add events", http.StatusForbidden)
 		return
 	}
@@ -944,7 +968,7 @@ func (h *Handlers) CalendarCreate(w http.ResponseWriter, r *http.Request) {
 		EndsAt:      endsAt,
 		Visibility:  visibility,
 		CreatedBy:   actor.ID,
-	}, units.CanEditUnitContent(roles))
+	}, units.CanEditUnitContent(caps))
 	if err != nil {
 		log.Printf("web: creating event: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -988,8 +1012,8 @@ func (h *Handlers) ApprovalDecide(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
-	if err != nil || !units.CanApprove(roles) {
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanApprove(caps) {
 		http.Error(w, "you don't have permission to approve items", http.StatusForbidden)
 		return
 	}

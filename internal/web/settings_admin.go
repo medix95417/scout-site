@@ -32,8 +32,8 @@ func (h *Handlers) requireSuperAdmin(w http.ResponseWriter, r *http.Request, red
 		return family.Member{}, false
 	}
 
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
-	if err != nil || !units.IsSuperAdmin(roles) {
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.IsSuperAdmin(caps) {
 		http.Error(w, "you don't have permission to view site settings", http.StatusForbidden)
 		return family.Member{}, false
 	}

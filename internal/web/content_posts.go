@@ -208,8 +208,8 @@ func (h *Handlers) requireContentEditor(w http.ResponseWriter, r *http.Request, 
 		return unit, family.Member{}, false
 	}
 
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
-	if err != nil || !units.CanEditUnitContent(roles) {
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
 		http.Error(w, "you don't have permission to manage this site's content", http.StatusForbidden)
 		return unit, family.Member{}, false
 	}

@@ -20,7 +20,29 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
-Nothing yet.
+**Custom roles with admin-picked capabilities.** A super_admin can now
+create a role on the fly (`/admin/custom-roles`, per unit) and choose
+which capabilities it grants — edit content, approve submissions, submit
+for approval, manage the ledger, or site settings — instead of every role
+being one of the 9 fixed, code-defined ones. Under the hood, every
+permission check in the app (`CanEditUnitContent`, `CanManageLedger`,
+`CanApprove`, `CanSubmitForApproval`, `IsSuperAdmin`) now resolves a
+member/family's roles into a capability set (`internal/units.Capabilities`)
+rather than checking hardcoded role-name lists — the 9 existing roles'
+exact behavior is preserved byte-for-byte (verified against every
+`DEMO_DATA.md` persona, including the 2FA-enrolled ones), just re-expressed
+as which capabilities they grant. A custom role with a given capability is
+indistinguishable from a built-in role with that same capability to every
+check in the codebase.
+
+Multiple role assignments per member — including holding roles in both
+the Troop and Pack simultaneously — already worked at the data layer and
+in the existing "Add Role"/roster UI; nothing needed to change there.
+
+- **Migration:** `0013_custom_roles.sql` — widens `role_assignments.role`
+  from the fixed `member_role` enum to plain text (existing rows/values
+  unchanged) and adds `custom_roles` (per-unit role definitions with a
+  `capabilities` array, checked against the fixed capability set).
 
 ## [1.6.3] — 2026-08-20
 

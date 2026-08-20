@@ -219,7 +219,7 @@ func (h *Handlers) AdminRosterImportApply(w http.ResponseWriter, r *http.Request
 			skip("member type must be adult/parent/leader or youth/scout/child")
 			continue
 		}
-		if !roster.IsAllowedRole(unit.UnitType, scope, row.Role) {
+		if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, row.Role); err != nil || !allowed {
 			skip(fmt.Sprintf("you don't have permission to assign the role %q (or it isn't a recognized role)", row.Role))
 			continue
 		}

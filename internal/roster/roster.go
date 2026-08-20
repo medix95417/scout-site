@@ -15,13 +15,35 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/47-yonkers/scout-site/internal/audit"
 	"github.com/47-yonkers/scout-site/internal/auth"
+	"github.com/47-yonkers/scout-site/internal/units"
 )
+
+// slugify turns a human-entered label ("Committee Chair") into a stable,
+// URL/column-safe slug ("committee_chair") — lowercased, non-alphanumeric
+// runs collapsed to a single underscore, leading/trailing underscores
+// trimmed.
+func slugify(label string) string {
+	var b strings.Builder
+	lastWasUnderscore := false
+	for _, r := range strings.ToLower(label) {
+		switch {
+		case r >= 'a' && r <= 'z' || r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastWasUnderscore = false
+		case !lastWasUnderscore:
+			b.WriteByte('_')
+			lastWasUnderscore = true
+		}
+	}
+	return strings.Trim(b.String(), "_")
+}
 
 // --- Dens / patrols ---------------------------------------------------------
 
@@ -312,14 +334,15 @@ type RoleOption struct {
 	Label string
 }
 
-// AllowedRoles returns the roles the acting scope may assign, on this unit.
-// super_admin is deliberately never offered here — minting the highest
-// privilege tier stays a manual/bootstrap-only operation (see
-// internal/bootstrap), not something reachable from a web form. Unit-wide
-// leaders get the full set for their unit type; scoped Den Leaders are
-// limited to non-leadership roles so they can't promote a family to
-// Cubmaster from a roster form.
-func AllowedRoles(unitType string, scope Scope) []RoleOption {
+// fixedRoleOptions returns the roles the acting scope may assign, on this
+// unit, from the fixed code-defined set — everything AllowedRoles returned
+// before custom roles existed. super_admin is deliberately never offered
+// here — minting the highest privilege tier stays a manual/bootstrap-only
+// operation (see internal/bootstrap), not something reachable from a web
+// form. Unit-wide leaders get the full set for their unit type; scoped Den
+// Leaders are limited to non-leadership roles so they can't promote a
+// family to Cubmaster from a roster form.
+func fixedRoleOptions(unitType string, scope Scope) []RoleOption {
 	if !scope.UnitWide {
 		return []RoleOption{
 			{"parent", "Parent"},
@@ -346,16 +369,157 @@ func AllowedRoles(unitType string, scope Scope) []RoleOption {
 	}
 }
 
+// AllowedRoles returns every role the acting scope may assign on this
+// unit — the fixed code-defined set (see fixedRoleOptions) plus any
+// custom roles a super_admin has created for this unit (see
+// CreateCustomRole). Custom roles are only offered to unit-wide leaders,
+// same restriction as the leadership tier of the fixed set: a scoped Den
+// Leader can't grant a custom role that might carry real capabilities
+// (edit_content, manage_ledger, etc.) any more than they could promote
+// someone straight to Cubmaster.
+func AllowedRoles(ctx context.Context, pool *pgxpool.Pool, unitType, unitID string, scope Scope) ([]RoleOption, error) {
+	opts := fixedRoleOptions(unitType, scope)
+	if !scope.UnitWide {
+		return opts, nil
+	}
+	custom, err := ListCustomRoles(ctx, pool, unitID)
+	if err != nil {
+		return nil, err
+	}
+	for _, cr := range custom {
+		opts = append(opts, RoleOption{Value: cr.Slug, Label: cr.Label})
+	}
+	return opts, nil
+}
+
 // IsAllowedRole reports whether role is present in AllowedRoles — the
 // server-side check backing the client-side dropdown, since a scoped
 // leader could otherwise POST an arbitrary role value directly.
-func IsAllowedRole(unitType string, scope Scope, role string) bool {
-	for _, opt := range AllowedRoles(unitType, scope) {
+func IsAllowedRole(ctx context.Context, pool *pgxpool.Pool, unitType, unitID string, scope Scope, role string) (bool, error) {
+	opts, err := AllowedRoles(ctx, pool, unitType, unitID, scope)
+	if err != nil {
+		return false, err
+	}
+	for _, opt := range opts {
 		if opt.Value == role {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
+}
+
+// --- Custom roles -----------------------------------------------------
+
+// CustomRole is a per-unit role a super_admin created on the fly, with
+// whichever capabilities they chose to grant it (see internal/units'
+// capability constants).
+type CustomRole struct {
+	ID           string
+	UnitID       string
+	Slug         string
+	Label        string
+	Capabilities []string
+	CreatedAt    string
+}
+
+// ErrReservedRoleSlug is returned by CreateCustomRole when the requested
+// slug collides with one of the fixed system role slugs — allowing that
+// would make role_assignments.role ambiguous about which meaning applies.
+var ErrReservedRoleSlug = fmt.Errorf("roster: that role name is reserved")
+
+// CreateCustomRole adds a new role for a unit. label is slugified
+// (lowercased, spaces to underscores, stripped of anything not
+// alphanumeric/underscore) to produce a stable slug — the same
+// human-friendly-label-in, stable-slug-out pattern content sections
+// already use (see internal/content). capabilities is filtered to only
+// ever contain names from units.AllCapabilities; anything else is
+// silently dropped rather than erroring, since the admin form's checkbox
+// list is the only caller and can't produce an invalid name to begin with.
+func CreateCustomRole(ctx context.Context, pool *pgxpool.Pool, unitID, label string, capabilities []string, actorID string) (CustomRole, error) {
+	slug := slugify(label)
+	if slug == "" {
+		return CustomRole{}, fmt.Errorf("roster: role name %q doesn't produce a usable slug", label)
+	}
+	if units.ReservedRoleSlugs[slug] {
+		return CustomRole{}, ErrReservedRoleSlug
+	}
+
+	var granted []string
+	valid := make(map[string]bool, len(units.AllCapabilities))
+	for _, c := range units.AllCapabilities {
+		valid[c] = true
+	}
+	for _, c := range capabilities {
+		if valid[c] {
+			granted = append(granted, c)
+		}
+	}
+
+	var cr CustomRole
+	err := pool.QueryRow(ctx, `
+		INSERT INTO custom_roles (unit_id, slug, label, capabilities, created_by)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, unit_id, slug, label, capabilities, created_at::text
+	`, unitID, slug, label, granted, actorID).Scan(&cr.ID, &cr.UnitID, &cr.Slug, &cr.Label, &cr.Capabilities, &cr.CreatedAt)
+	if err != nil {
+		return CustomRole{}, err
+	}
+
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "custom_role",
+		EntityID:   cr.ID,
+		ActorID:    &actorID,
+		Action:     "create",
+		After:      cr,
+	})
+	return cr, nil
+}
+
+// ListCustomRoles returns every custom role defined for a unit, most
+// recently created first.
+func ListCustomRoles(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]CustomRole, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, unit_id, slug, label, capabilities, created_at::text
+		FROM custom_roles WHERE unit_id = $1 ORDER BY created_at DESC
+	`, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []CustomRole
+	for rows.Next() {
+		var cr CustomRole
+		if err := rows.Scan(&cr.ID, &cr.UnitID, &cr.Slug, &cr.Label, &cr.Capabilities, &cr.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, cr)
+	}
+	return out, rows.Err()
+}
+
+// DeleteCustomRole removes a custom role definition, scoped to unitID so
+// one unit can't delete another's. Existing role_assignments rows using
+// this slug are left in place (harmless — CapabilitiesForRoles simply
+// finds nothing for a slug with no matching custom_roles row, so anyone
+// still holding the deleted role reverts to having no extra capabilities
+// from it, same as if they'd never had a role assigned); a leader who
+// wants those members' role reassigned handles that separately.
+func DeleteCustomRole(ctx context.Context, pool *pgxpool.Pool, roleID, unitID, actorID string) error {
+	tag, err := pool.Exec(ctx, `DELETE FROM custom_roles WHERE id = $1 AND unit_id = $2`, roleID, unitID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil
+	}
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "custom_role",
+		EntityID:   roleID,
+		ActorID:    &actorID,
+		Action:     "delete",
+	})
+	return nil
 }
 
 // --- Families & members -----------------------------------------------
