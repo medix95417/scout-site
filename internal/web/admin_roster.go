@@ -41,8 +41,8 @@ func (h *Handlers) requireRosterEditor(w http.ResponseWriter, r *http.Request, r
 		return unit, family.Member{}, roster.Scope{}, false
 	}
 
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
-	if err != nil || !units.CanEditUnitContent(roles) {
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
 		http.Error(w, "you don't have permission to manage the roster", http.StatusForbidden)
 		return unit, family.Member{}, roster.Scope{}, false
 	}
@@ -160,6 +160,11 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, rosterRow{RosterEntry: e, Editable: scope.UnitWide || manageable[e.ID]})
 	}
 
+	allowedRoles, err := roster.AllowedRoles(r.Context(), h.Pool, unit.UnitType, unit.ID, scope)
+	if err != nil {
+		log.Printf("web: loading allowed roles: %v", err)
+	}
+
 	data := struct {
 		baseData
 		Scope            roster.Scope
@@ -176,7 +181,7 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 		SubGroups:        subGroups,
 		AddableSubGroups: addableSubGroups,
 		Families:         families,
-		Roles:            roster.AllowedRoles(unit.UnitType, scope),
+		Roles:            allowedRoles,
 		Roster:           rows,
 	}
 	h.render(w, h.rosterAdmin, data)
@@ -196,7 +201,7 @@ func (h *Handlers) AdminRosterCreateFamily(w http.ResponseWriter, r *http.Reques
 	}
 
 	role := r.FormValue("role")
-	if !roster.IsAllowedRole(unit.UnitType, scope, role) {
+	if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, role); err != nil || !allowed {
 		http.Error(w, "you don't have permission to assign that role", http.StatusForbidden)
 		return
 	}
@@ -247,7 +252,7 @@ func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	role := r.FormValue("role")
-	if !roster.IsAllowedRole(unit.UnitType, scope, role) {
+	if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, role); err != nil || !allowed {
 		http.Error(w, "you don't have permission to assign that role", http.StatusForbidden)
 		return
 	}
@@ -353,6 +358,11 @@ func (h *Handlers) AdminRosterMemberEdit(w http.ResponseWriter, r *http.Request)
 		log.Printf("web: loading individual login state: %v", err)
 	}
 
+	allowedRoles, err := roster.AllowedRoles(r.Context(), h.Pool, unit.UnitType, unit.ID, scope)
+	if err != nil {
+		log.Printf("web: loading allowed roles: %v", err)
+	}
+
 	data := struct {
 		baseData
 		Scope                roster.Scope
@@ -369,7 +379,7 @@ func (h *Handlers) AdminRosterMemberEdit(w http.ResponseWriter, r *http.Request)
 		SubGroupNoun:         subGroupNoun(unit.UnitType),
 		Member:               member,
 		Roles:                memberRoles,
-		AllowedRoles:         roster.AllowedRoles(unit.UnitType, scope),
+		AllowedRoles:         allowedRoles,
 		AddableSubGroups:     addableSubGroups,
 		HasIndividualLogin:   hasIndividualLogin,
 		IndividualLoginEmail: individualLoginEmail,
@@ -525,7 +535,7 @@ func (h *Handlers) AdminRosterAssignRole(w http.ResponseWriter, r *http.Request)
 	}
 
 	role := r.FormValue("role")
-	if !roster.IsAllowedRole(unit.UnitType, scope, role) {
+	if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, role); err != nil || !allowed {
 		http.Error(w, "you don't have permission to assign that role", http.StatusForbidden)
 		return
 	}

@@ -56,11 +56,11 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 	if err != nil {
-		log.Printf("web: loading roles: %v", err)
+		log.Printf("web: loading capabilities: %v", err)
 	}
-	canManage := units.CanEditUnitContent(roles)
+	canManage := units.CanEditUnitContent(caps)
 
 	all, err := files.ListForUnit(r.Context(), h.Pool, unit.ID)
 	if err != nil {
@@ -119,8 +119,8 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
-	if err != nil || !units.CanEditUnitContent(roles) {
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
 		http.Error(w, "you don't have permission to upload files", http.StatusForbidden)
 		return
 	}
@@ -256,8 +256,8 @@ func (h *Handlers) FileDelete(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
-	if err != nil || !units.CanEditUnitContent(roles) {
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
 		http.Error(w, "you don't have permission to delete files", http.StatusForbidden)
 		return
 	}
@@ -300,8 +300,8 @@ func (h *Handlers) FileSetEventLinks(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
-	if err != nil || !units.CanEditUnitContent(roles) {
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
 		http.Error(w, "you don't have permission to manage files", http.StatusForbidden)
 		return
 	}

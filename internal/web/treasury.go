@@ -123,8 +123,8 @@ func (h *Handlers) requireTreasurer(w http.ResponseWriter, r *http.Request, redi
 		return unit, family.Member{}, false
 	}
 
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
-	if err != nil || !units.CanManageLedger(roles) {
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanManageLedger(caps) {
 		http.Error(w, "you don't have permission to manage the treasury", http.StatusForbidden)
 		return unit, family.Member{}, false
 	}
@@ -449,13 +449,13 @@ func (h *Handlers) TreasuryAccountView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 	if err != nil {
-		log.Printf("web: loading roles: %v", err)
+		log.Printf("web: loading capabilities: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	canManage := units.CanManageLedger(roles)
+	canManage := units.CanManageLedger(caps)
 
 	isOwner := false
 	if account.AccountType == "scout_individual" {
@@ -552,9 +552,9 @@ func (h *Handlers) TreasuryRequestTransfer(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 	if err != nil {
-		log.Printf("web: loading roles: %v", err)
+		log.Printf("web: loading capabilities: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -564,7 +564,7 @@ func (h *Handlers) TreasuryRequestTransfer(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if !owns && !units.CanManageLedger(roles) {
+	if !owns && !units.CanManageLedger(caps) {
 		http.Error(w, "you don't have permission to move money from this account", http.StatusForbidden)
 		return
 	}

@@ -61,13 +61,13 @@ func (h *Handlers) PermissionSlipView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 	if err != nil {
-		log.Printf("web: loading roles: %v", err)
+		log.Printf("web: loading capabilities: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	canEdit := units.CanEditUnitContent(roles)
+	canEdit := units.CanEditUnitContent(caps)
 
 	slip, hasSlip, err := permission.GetSlipForEvent(r.Context(), h.Pool, eventID, unit.ID)
 	if err != nil {

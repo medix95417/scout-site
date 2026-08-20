@@ -91,8 +91,8 @@ func (h *Handlers) requireAuditViewer(w http.ResponseWriter, r *http.Request) (u
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return units.Unit{}, false
 	}
-	roles, err := h.rolesFor(r.Context(), user, unit.ID)
-	if err != nil || (!units.CanEditUnitContent(roles) && !units.CanManageLedger(roles)) {
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || (!units.CanEditUnitContent(caps) && !units.CanManageLedger(caps)) {
 		http.Error(w, "you don't have permission to view the activity log", http.StatusForbidden)
 		return units.Unit{}, false
 	}

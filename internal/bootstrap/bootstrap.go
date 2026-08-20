@@ -16,10 +16,13 @@ import (
 	"github.com/47-yonkers/scout-site/internal/units"
 )
 
-// validRoles mirrors the member_role Postgres enum (internal/db/migrations
-// /0001_init.sql). Kept as a Go-side allowlist so GrantRole can reject a
-// typo'd role with a clear error instead of a raw Postgres constraint
-// violation.
+// validRoles is the fixed set of system-defined roles (see
+// internal/units' systemRoleCapabilities) GrantRole accepts — this CLI
+// tool is for bootstrapping the first foothold in a unit, not for
+// granting a per-unit custom role (see roster.CreateCustomRole), which
+// needs a unit already reachable via the web admin UI to create anyway.
+// Kept as a Go-side allowlist so GrantRole can reject a typo'd role with
+// a clear error instead of a raw constraint violation.
 var validRoles = map[string]bool{
 	"super_admin":           true,
 	"cubmaster":             true,
