@@ -1,0 +1,30 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-1">Family Directory</h1>
+  <p class="text-sm text-gray-500 mb-6">
+    Only shows what each family has chosen to share — see
+    <a href="/my-family" class="underline" style="color: var(--unit-color);">My Family</a> to manage your own.
+  </p>
+
+  {{if .Entries}}
+    <div class="grid gap-4 sm:grid-cols-2">
+      {{range .Entries}}
+        <section class="rounded-lg border border-gray-200 bg-white p-4">
+          <h2 class="text-lg font-semibold mb-1">{{.FamilyName}}</h2>
+          {{if .Address}}<p class="text-sm text-gray-600 mb-2">{{.Address}}</p>{{end}}
+          <ul class="space-y-1 text-sm">
+            {{range .Members}}
+              <li>
+                <span class="font-medium">{{.FirstName}} {{.LastName}}</span>
+                {{if .Email}} — <a href="mailto:{{.Email}}" class="underline" style="color: var(--unit-color);">{{.Email}}</a>{{end}}
+                {{if .HomePhone}} — home {{.HomePhone}}{{end}}
+                {{if .CellPhone}} — cell {{.CellPhone}}{{end}}
+              </li>
+            {{end}}
+          </ul>
+        </section>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="text-sm text-gray-500">No families on the roster yet.</p>
+  {{end}}
+{{end}}

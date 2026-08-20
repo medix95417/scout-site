@@ -90,6 +90,9 @@ type Handlers struct {
 	fileLibrary *template.Template
 
 	customRoles *template.Template
+
+	myFamily        *template.Template
+	familyDirectory *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -211,6 +214,12 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.customRoles, err = parse("admin-custom-roles.html"); err != nil {
 		return nil, err
 	}
+	if h.myFamily, err = parse("my-family.html"); err != nil {
+		return nil, err
+	}
+	if h.familyDirectory, err = parse("family-directory.html"); err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
@@ -323,6 +332,12 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/custom-roles", h.AdminCustomRolesList)
 	mux.HandleFunc("POST /admin/custom-roles", h.AdminCustomRolesCreate)
 	mux.HandleFunc("POST /admin/custom-roles/{id}/delete", h.AdminCustomRolesDelete)
+
+	// Self-service contact info and the family directory it feeds (internal/web/my_family.go).
+	mux.HandleFunc("GET /my-family", h.MyFamily)
+	mux.HandleFunc("POST /my-family/members/{id}", h.MyFamilyUpdateMember)
+	mux.HandleFunc("POST /my-family/address", h.MyFamilyUpdateAddress)
+	mux.HandleFunc("GET /directory", h.FamilyDirectory)
 }
 
 // baseData is embedded in every page's template data.

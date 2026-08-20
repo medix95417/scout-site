@@ -39,9 +39,11 @@
           {{if .LoggedIn}}
             <div class="border-t border-gray-100 my-1"></div>
             <a href="/roster" class="block px-4 py-2 hover:bg-gray-100">Roster</a>
+            <a href="/directory" class="block px-4 py-2 hover:bg-gray-100">Family Directory</a>
             {{if .AdvancementEnabled}}<a href="/advancement" class="block px-4 py-2 hover:bg-gray-100">Advancement</a>{{end}}
             <a href="/files" class="block px-4 py-2 hover:bg-gray-100">Files</a>
             <a href="/accounts" class="block px-4 py-2 hover:bg-gray-100">My Accounts</a>
+            <a href="/my-family" class="block px-4 py-2 hover:bg-gray-100">My Family</a>
             {{if or .CanEditContent .CanManageLedger .IsSuperAdmin}}
               <div class="border-t border-gray-100 my-1"></div>
               <div class="px-4 pt-1 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">Admin</div>

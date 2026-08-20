@@ -16,6 +16,26 @@
           <label class="flex items-center gap-1"><input type="radio" name="member_type" value="youth" {{if eq .Member.MemberType "youth"}}checked{{end}}> Youth</label>
           <label class="flex items-center gap-1"><input type="radio" name="member_type" value="adult" {{if eq .Member.MemberType "adult"}}checked{{end}}> Adult</label>
         </div>
+
+        <div class="pt-2 border-t border-gray-100">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Contact Info (this person)</p>
+          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm mb-2" type="email" name="email" placeholder="Email" value="{{.Member.Email}}">
+          <div class="flex gap-2 mb-2">
+            <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="tel" name="home_phone" placeholder="Home phone" value="{{.Member.HomePhone}}">
+            <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="tel" name="cell_phone" placeholder="Cell phone" value="{{.Member.CellPhone}}">
+          </div>
+          <div class="flex gap-4 text-xs text-gray-600">
+            <label class="flex items-center gap-1"><input type="checkbox" name="release_email" value="1" {{if .Member.ReleaseEmail}}checked{{end}}> Share email with the rest of the unit</label>
+            <label class="flex items-center gap-1"><input type="checkbox" name="release_phone" value="1" {{if .Member.ReleasePhone}}checked{{end}}> Share phone with the rest of the unit</label>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-gray-100">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Household Address (shared by {{.Member.FamilyName}})</p>
+          <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm mb-2" name="family_address" rows="2" placeholder="Street, City, State ZIP">{{.Member.FamilyAddress}}</textarea>
+          <label class="flex items-center gap-1 text-xs text-gray-600"><input type="checkbox" name="release_address" value="1" {{if .Member.ReleaseAddress}}checked{{end}}> Share address with the rest of the unit</label>
+        </div>
+
         <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
           Save
         </button>
