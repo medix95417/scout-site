@@ -10,4 +10,4 @@ package version
 // `docker compose up -d --build`), so there's no build step to inject
 // anything into — a constant kept next to the changelog entry it
 // corresponds to is the simplest thing that could work.
-const Version = "1.7.0"
+const Version = "1.7.1"

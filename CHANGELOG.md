@@ -18,7 +18,22 @@ the date range between the `v1.0.0` commit and the `v1.4.0` catch-up
 commit. Every version from `v1.4.0` onward is a real, individually
 tagged commit with an accurate date.
 
-## [Unreleased]
+## [1.7.1] — 2026-08-20
+
+**Fix — deploy-blocking migration error (`events.sub_group_id` already
+exists).** `docker compose run --rm app -migrate` failed on
+`0018_calendar_sub_groups.sql` with `column "sub_group_id" of relation
+"events" already exists`. Root cause: that column has existed since
+`0001_init.sql` (defined inline with `ON DELETE CASCADE`), but 0018
+mistakenly tried to `ADD` it again — which fails on every real database,
+since they're all created from 0001. Local testing had masked it by
+dropping the column before re-running. 0018 no longer adds the column; it
+now just corrects the foreign key from `ON DELETE CASCADE` to the intended
+`ON DELETE SET NULL` (deleting a patrol/den widens its events back to
+whole-unit scope instead of deleting them), written idempotently. Verified
+by reproducing the exact production failure on a fresh database built from
+the committed migrations, then confirming the corrected migration applies
+cleanly both there and through a full 0001→0018 chain.
 
 **Security — stored-XSS fix in the newsletter sanitizer.** A full security
 audit found that the newsletter HTML sanitizer (`internal/newsletter.Sanitize`,
