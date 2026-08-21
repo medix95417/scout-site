@@ -85,7 +85,12 @@ func All(ctx context.Context, pool *pgxpool.Pool) (map[string]bool, error) {
 		values[t.Key] = t.Default
 	}
 
-	rows, err := pool.Query(ctx, `SELECT key, value FROM system_settings`)
+	// value IS NOT NULL excludes a text-setting row (see TextSettings
+	// below) — since migration 0009 relaxed value to nullable so a
+	// text-setting row doesn't need a meaningless boolean placeholder,
+	// this table can hold both kinds of row, and this query only wants
+	// the boolean ones.
+	rows, err := pool.Query(ctx, `SELECT key, value FROM system_settings WHERE value IS NOT NULL`)
 	if err != nil {
 		return nil, err
 	}
@@ -189,16 +194,39 @@ const AdvancementEnabled = "advancement_enabled"
 // browsing balances turn that off without dropping the treasury feature.
 const ScoutAccountSelfService = "scout_account_self_service"
 
-// UnitToggle is a per-unit sibling of Toggle.
+// Payments toggles — whether this unit accepts online payments through
+// each processor. Off by default: a unit shouldn't start accepting real
+// payments just because it upgraded to a version of the app that added
+// this feature, and (per PaymentsStripeEnabled/PaymentsPayPalEnabled's
+// own gate) enabling one is only meaningful once its credentials are
+// actually filled in below.
+const (
+	PaymentsStripeEnabled = "payments_stripe_enabled"
+	PaymentsPayPalEnabled = "payments_paypal_enabled"
+	// PayPalLiveMode picks which of PayPal's two separate API environments
+	// PayPalClientID/PayPalClientSecret are checked against — sandbox
+	// (default; PayPal's test environment, no real money moves) or live.
+	// PayPal, unlike Stripe, uses entirely separate credentials per
+	// environment rather than a key prefix that implies it, so the app
+	// needs this told to it explicitly to know which API base URL to call.
+	PayPalLiveMode = "payments_paypal_live_mode"
+)
+
+// UnitToggle is a per-unit sibling of Toggle. Section groups related
+// toggles under their own heading on /admin/settings — "" renders under
+// the generic "This Unit's Settings" heading; "payments" renders under
+// the dedicated "Payments" heading alongside the credential fields in
+// UnitTextSettings below.
 type UnitToggle struct {
 	Key         string
 	Label       string
 	Description string
 	Default     bool
+	Section     string
 }
 
-// UnitToggles is every per-unit setting the "This Unit's Settings"
-// section of /admin/settings shows, in display order.
+// UnitToggles is every per-unit setting the "This Unit's Settings" and
+// "Payments" sections of /admin/settings show, in display order.
 var UnitToggles = []UnitToggle{
 	{
 		Key:         AdvancementEnabled,
@@ -211,6 +239,27 @@ var UnitToggles = []UnitToggle{
 		Label:       "Family access to Scout account balances",
 		Description: "Lets a family (or a Scout's own login) view their own Scout account balance and history under \"My Accounts\". Turn off to keep account balances treasurer-only — the Treasury area is unchanged, this just shuts off the family-facing self-service view.",
 		Default:     true,
+	},
+	{
+		Key:         PaymentsStripeEnabled,
+		Label:       "Accept payments via Stripe",
+		Description: "Turns Stripe on for this unit once its keys are filled in below. Troop and Pack each connect their own Stripe account — this only affects this unit's own payments.",
+		Default:     false,
+		Section:     "payments",
+	},
+	{
+		Key:         PaymentsPayPalEnabled,
+		Label:       "Accept payments via PayPal",
+		Description: "Turns PayPal on for this unit once its credentials are filled in below. Troop and Pack each connect their own PayPal account — this only affects this unit's own payments.",
+		Default:     false,
+		Section:     "payments",
+	},
+	{
+		Key:         PayPalLiveMode,
+		Label:       "PayPal live mode",
+		Description: "Off (default) checks the sandbox credentials below — PayPal's test environment, no real money moves. Turn on only once you've entered real, live PayPal credentials and are ready to accept actual payments.",
+		Default:     false,
+		Section:     "payments",
 	},
 }
 
@@ -236,7 +285,10 @@ func AllForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (map[str
 		values[t.Key] = t.Default
 	}
 
-	rows, err := pool.Query(ctx, `SELECT key, value FROM unit_settings WHERE unit_id = $1`, unitID)
+	// value IS NOT NULL excludes a per-unit text-setting row (e.g. the
+	// payment credential fields below) — see All's identical filter for
+	// why this table can hold both kinds of row.
+	rows, err := pool.Query(ctx, `SELECT key, value FROM unit_settings WHERE unit_id = $1 AND value IS NOT NULL`, unitID)
 	if err != nil {
 		return nil, err
 	}
@@ -493,4 +545,244 @@ func SetText(ctx context.Context, pool *pgxpool.Pool, key, value, actorID string
 		After:      map[string]any{"key": key, "value": after},
 	})
 	return nil
+}
+
+// --- Per-unit text settings (incl. payment credentials) -----------------
+//
+// A per-unit sibling to TextSettings above — for a setting that needs an
+// actual value rather than on/off AND that Troop and Pack should answer
+// independently, the same per-unit rationale as UnitToggle. So far this
+// is exclusively the Stripe/PayPal credentials backing
+// PaymentsStripeEnabled/PaymentsPayPalEnabled above.
+//
+// Some of these values (Secret: true) are real financial credentials —
+// unlike the SMTP host/port/username above, "leave it in an environment
+// variable instead" isn't practical here (Troop and Pack would each need
+// their own separate container/environment just to have separate keys,
+// defeating the point of one shared install), so this package does store
+// them in the database — the same trust boundary internal/auth's TOTP
+// secrets already sit inside. What IS different from every other setting
+// in this package: a Secret value is never read back for display (see
+// UnitTextSettingIsSet, not GetUnitText, for what the admin page shows),
+// and a blank submission on the Payments form leaves a Secret field's
+// stored value alone rather than clearing it (see SetUnitText) — so
+// resubmitting the whole form to change one field never accidentally
+// wipes another credential the admin just didn't feel like retyping.
+
+// Known per-unit text setting keys — see migration 0023's value_text
+// column.
+const (
+	StripePublishableKey       = "stripe_publishable_key"
+	StripeSecretKey            = "stripe_secret_key"
+	StripeWebhookSigningSecret = "stripe_webhook_signing_secret"
+
+	PayPalClientID     = "paypal_client_id"
+	PayPalClientSecret = "paypal_client_secret"
+)
+
+// UnitTextSetting describes one per-unit text setting for the "Payments"
+// section of /admin/settings. Secret marks a real credential: the admin
+// page never re-displays its actual value once saved, and leaving the
+// field blank on submit leaves the stored value unchanged instead of
+// clearing it (see SetUnitText).
+type UnitTextSetting struct {
+	Key         string
+	Label       string
+	Description string
+	Placeholder string
+	Secret      bool
+}
+
+// UnitTextSettings is every per-unit text/credential setting the
+// "Payments" section of /admin/settings shows, in display order.
+var UnitTextSettings = []UnitTextSetting{
+	{
+		Key:         StripePublishableKey,
+		Label:       "Stripe publishable key",
+		Description: "Starts with pk_test_ (sandbox) or pk_live_ — safe to expose in a browser, this is what a Stripe Checkout page needs client-side.",
+		Placeholder: "pk_live_...",
+	},
+	{
+		Key:         StripeSecretKey,
+		Label:       "Stripe secret key",
+		Description: "Starts with sk_test_ or sk_live_ — grants real account access; never share it outside this form.",
+		Placeholder: "sk_live_...",
+		Secret:      true,
+	},
+	{
+		Key:         StripeWebhookSigningSecret,
+		Label:       "Stripe webhook signing secret",
+		Description: "Starts with whsec_ — from the webhook endpoint's settings in the Stripe Dashboard, once a checkout integration is wired up to verify incoming events actually came from Stripe.",
+		Placeholder: "whsec_...",
+		Secret:      true,
+	},
+	{
+		Key:         PayPalClientID,
+		Label:       "PayPal client ID",
+		Description: "From your PayPal app's credentials — the sandbox or live one, matching the PayPal live mode toggle above.",
+		Placeholder: "",
+	},
+	{
+		Key:         PayPalClientSecret,
+		Label:       "PayPal client secret",
+		Description: "From the same PayPal app — grants real account access; never share it outside this form.",
+		Placeholder: "",
+		Secret:      true,
+	},
+}
+
+func isKnownUnitText(key string) bool {
+	for _, t := range UnitTextSettings {
+		if t.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+func unitTextSettingIsSecret(key string) bool {
+	for _, t := range UnitTextSettings {
+		if t.Key == key {
+			return t.Secret
+		}
+	}
+	return false
+}
+
+// GetUnitText reads one per-unit text setting's actual stored value —
+// meant for server-side use (e.g. a future checkout integration actually
+// calling Stripe/PayPal), not for rendering back into an HTML form. See
+// UnitTextSettingIsSet for what the admin page should show instead for a
+// Secret setting.
+func GetUnitText(ctx context.Context, pool *pgxpool.Pool, unitID, key string) (string, error) {
+	var value *string
+	err := pool.QueryRow(ctx, `SELECT value_text FROM unit_settings WHERE unit_id = $1 AND key = $2`, unitID, key).Scan(&value)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	if value == nil {
+		return "", nil
+	}
+	return *value, nil
+}
+
+// AllUnitText returns every known UnitTextSetting's current stored value
+// for a unit ("" for anything unset) — the raw values, including
+// secrets. Callers building an admin page must not render a Secret one's
+// value back into a form; see UnitTextSettingIsSet.
+func AllUnitText(ctx context.Context, pool *pgxpool.Pool, unitID string) (map[string]string, error) {
+	values := make(map[string]string, len(UnitTextSettings))
+	for _, t := range UnitTextSettings {
+		values[t.Key] = ""
+	}
+
+	rows, err := pool.Query(ctx, `SELECT key, value_text FROM unit_settings WHERE unit_id = $1 AND value_text IS NOT NULL`, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, err
+		}
+		if _, known := values[key]; known {
+			values[key] = value
+		}
+	}
+	return values, rows.Err()
+}
+
+// UnitTextSettingIsSet reports whether a per-unit text setting has any
+// stored value — what the admin page shows in place of a Secret
+// setting's actual value ("already set" vs. "not set"), so a credential
+// never round-trips back into rendered HTML once saved.
+func UnitTextSettingIsSet(ctx context.Context, pool *pgxpool.Pool, unitID, key string) (bool, error) {
+	var exists bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM unit_settings WHERE unit_id = $1 AND key = $2 AND value_text IS NOT NULL)
+	`, unitID, key).Scan(&exists)
+	return exists, err
+}
+
+// SetUnitText writes a per-unit text setting's value, audit-logged the
+// same way SetText does — except a Secret setting's actual value is
+// never written to the audit log (just whether it changed), and a blank
+// submission for a Secret setting is a no-op (leaves whatever's already
+// stored alone) rather than clearing it, so resubmitting the whole
+// Payments form to change one field never silently wipes another
+// credential that just happened to be left blank because the admin
+// didn't want to retype it.
+func SetUnitText(ctx context.Context, pool *pgxpool.Pool, unitID, key, value, actorID string) error {
+	if !isKnownUnitText(key) {
+		return ErrUnknownSetting
+	}
+	trimmed := strings.TrimSpace(value)
+	secret := unitTextSettingIsSecret(key)
+
+	if secret && trimmed == "" {
+		return nil // leave the existing credential untouched
+	}
+
+	var existing *string
+	err := pool.QueryRow(ctx, `SELECT value_text FROM unit_settings WHERE unit_id = $1 AND key = $2`, unitID, key).Scan(&existing)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	hadValue := existing != nil
+
+	var textArg any
+	if trimmed != "" {
+		textArg = trimmed
+	}
+
+	var id string
+	err = pool.QueryRow(ctx, `
+		INSERT INTO unit_settings (unit_id, key, value_text, updated_by)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (unit_id, key) DO UPDATE SET value_text = EXCLUDED.value_text, updated_at = now(), updated_by = EXCLUDED.updated_by
+		RETURNING id
+	`, unitID, key, textArg, actorID).Scan(&id)
+	if err != nil {
+		return err
+	}
+
+	before := map[string]any{"key": key}
+	after := map[string]any{"key": key}
+	if secret {
+		// Never write a credential's actual value to the audit log — just
+		// enough to show whether something changed.
+		before["value"] = redactedIfSet(hadValue)
+		after["value"] = redactedIfSet(trimmed != "")
+	} else {
+		if hadValue {
+			before["value"] = *existing
+		}
+		if trimmed != "" {
+			after["value"] = trimmed
+		}
+	}
+
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "unit_setting",
+		EntityID:   id,
+		ActorID:    &actorID,
+		Action:     "update_text",
+		Before:     before,
+		After:      after,
+	})
+	return nil
+}
+
+// redactedIfSet renders a Secret setting's presence for the audit log
+// without ever including its actual value.
+func redactedIfSet(set bool) string {
+	if set {
+		return "(set)"
+	}
+	return "(not set)"
 }

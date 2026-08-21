@@ -68,6 +68,18 @@ type textSettingView struct {
 	Value string
 }
 
+// unitTextSettingView decorates a settings.UnitTextSetting for the
+// Payments section of /admin/settings. Value holds the actual stored
+// value for a normal field, but is always "" for a Secret one — a
+// credential is never rendered back into the page once saved (see
+// settings.UnitTextSettingIsSet); HasValue is what the template shows in
+// its place ("already set" vs. "not set").
+type unitTextSettingView struct {
+	settings.UnitTextSetting
+	Value    string
+	HasValue bool
+}
+
 func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
 	if _, ok := h.requireSuperAdmin(w, r, "/admin/settings"); !ok {
@@ -92,6 +104,12 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	unitTextValues, err := settings.AllUnitText(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading unit payment settings: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 
 	views := make([]toggleView, 0, len(settings.Toggles))
 	for _, t := range settings.Toggles {
@@ -101,21 +119,45 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 	for _, t := range settings.TextSettings {
 		textViews = append(textViews, textSettingView{TextSetting: t, Value: textValues[t.Key]})
 	}
-	unitViews := make([]unitToggleView, 0, len(settings.UnitToggles))
+
+	// Split UnitToggles by Section so "This Unit's Settings" and
+	// "Payments" render as two distinct groups on the page, even though
+	// both are stored/toggled through the exact same mechanism.
+	var unitViews, paymentToggleViews []unitToggleView
 	for _, t := range settings.UnitToggles {
-		unitViews = append(unitViews, unitToggleView{UnitToggle: t, Enabled: unitValues[t.Key]})
+		v := unitToggleView{UnitToggle: t, Enabled: unitValues[t.Key]}
+		if t.Section == "payments" {
+			paymentToggleViews = append(paymentToggleViews, v)
+		} else {
+			unitViews = append(unitViews, v)
+		}
+	}
+
+	unitTextViews := make([]unitTextSettingView, 0, len(settings.UnitTextSettings))
+	for _, t := range settings.UnitTextSettings {
+		v := unitTextSettingView{UnitTextSetting: t}
+		if t.Secret {
+			v.HasValue = unitTextValues[t.Key] != ""
+		} else {
+			v.Value = unitTextValues[t.Key]
+		}
+		unitTextViews = append(unitTextViews, v)
 	}
 
 	data := struct {
 		baseData
-		Toggles      []toggleView
-		TextSettings []textSettingView
-		UnitToggles  []unitToggleView
+		Toggles             []toggleView
+		TextSettings        []textSettingView
+		UnitToggles         []unitToggleView
+		PaymentToggles      []unitToggleView
+		PaymentTextSettings []unitTextSettingView
 	}{
-		baseData:     h.base(r, "Site Settings"),
-		Toggles:      views,
-		TextSettings: textViews,
-		UnitToggles:  unitViews,
+		baseData:            h.base(r, "Site Settings"),
+		Toggles:             views,
+		TextSettings:        textViews,
+		UnitToggles:         unitViews,
+		PaymentToggles:      paymentToggleViews,
+		PaymentTextSettings: unitTextViews,
 	}
 	h.render(w, h.systemSettings, data)
 }
@@ -175,6 +217,35 @@ func (h *Handlers) SystemSettingsToggle(w http.ResponseWriter, r *http.Request) 
 		log.Printf("web: updating setting %q: %v", key, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+}
+
+// UnitSettingsUpdateText saves every per-unit text setting (currently
+// the Stripe/PayPal credential fields — see settings.UnitTextSettings)
+// from one combined Payments-section form submission, mirroring
+// SystemSettingsUpdateText's shape. A Secret field left blank is a no-op
+// (see settings.SetUnitText) rather than clearing it, so resubmitting the
+// form to change one credential never wipes another the admin didn't
+// retype.
+func (h *Handlers) UnitSettingsUpdateText(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	actor, ok := h.requireSuperAdmin(w, r, "/admin/settings")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	for _, t := range settings.UnitTextSettings {
+		if err := settings.SetUnitText(r.Context(), h.Pool, unit.ID, t.Key, r.FormValue(t.Key), actor.ID); err != nil {
+			log.Printf("web: updating unit text setting %q: %v", t.Key, err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)

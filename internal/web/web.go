@@ -367,6 +367,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/settings/{key}/toggle", h.SystemSettingsToggle)
 	mux.HandleFunc("POST /admin/settings/text", h.SystemSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/{key}/toggle", h.UnitSettingsToggle)
+	mux.HandleFunc("POST /admin/settings/unit/text", h.UnitSettingsUpdateText)
 
 	// News/announcements and photo galleries (internal/web/content_posts.go).
 	mux.HandleFunc("GET /news", h.NewsList)

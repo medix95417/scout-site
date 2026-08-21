@@ -63,6 +63,56 @@
     <p class="text-sm text-gray-500">No unit settings yet.</p>
   {{end}}
 
+  <h2 class="text-lg font-semibold mt-10 mb-2">Payments — {{.Unit.Name}}</h2>
+  <p class="text-sm text-gray-600 mb-4 max-w-2xl">
+    Accept online payments for {{.Unit.Name}}. Troop and Pack each connect their own Stripe/PayPal account —
+    nothing here is shared between units. Turning a method on only takes effect once its credentials below are
+    filled in.
+  </p>
+  {{if .PaymentToggles}}
+    <div class="space-y-3 max-w-2xl mb-6">
+      {{range .PaymentToggles}}
+        <div class="rounded-lg border border-gray-200 bg-white p-4 flex items-start justify-between gap-4">
+          <div>
+            <p class="font-medium text-sm">{{.Label}}</p>
+            <p class="text-xs text-gray-500 mt-1">{{.Description}}</p>
+          </div>
+          <form method="post" action="/admin/settings/unit/{{.Key}}/toggle" class="flex-shrink-0">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            {{if .Enabled}}
+              <button type="submit" class="rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1.5 hover:bg-green-200">
+                ON — turn off
+              </button>
+            {{else}}
+              <button type="submit" class="rounded-full bg-gray-100 text-gray-600 text-xs font-medium px-3 py-1.5 hover:bg-gray-200">
+                OFF — turn on
+              </button>
+            {{end}}
+          </form>
+        </div>
+      {{end}}
+    </div>
+  {{end}}
+
+  <form method="post" action="/admin/settings/unit/text" class="max-w-2xl space-y-3">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    {{range .PaymentTextSettings}}
+      <div class="rounded-lg border border-gray-200 bg-white p-4">
+        <label class="block text-sm font-medium mb-1" for="{{.Key}}">{{.Label}}</label>
+        {{if .Secret}}
+          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="password" id="{{.Key}}" name="{{.Key}}"
+                 value="" autocomplete="off" placeholder="{{if .HasValue}}●●●●●●●● (already set — leave blank to keep it){{else}}{{.Placeholder}}{{end}}">
+        {{else}}
+          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" id="{{.Key}}" name="{{.Key}}" value="{{.Value}}" placeholder="{{.Placeholder}}">
+        {{end}}
+        <p class="text-xs text-gray-500 mt-1">{{.Description}}</p>
+      </div>
+    {{end}}
+    <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">
+      Save Payment Credentials
+    </button>
+  </form>
+
   <h2 class="text-lg font-semibold mt-10 mb-2">Email (SMTP) Server</h2>
   <p class="text-sm text-gray-600 mb-4 max-w-2xl">
     Where outgoing mail (password reset links, event reminders) gets sent from. Leave any field blank to fall back
