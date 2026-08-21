@@ -110,6 +110,9 @@ type Handlers struct {
 	groupAdmin *template.Template
 
 	resourcesList *template.Template
+
+	treasuryReports    *template.Template
+	treasuryReportView *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -284,6 +287,12 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.resourcesList, err = parse("resources.html"); err != nil {
 		return nil, err
 	}
+	if h.treasuryReports, err = parse("treasury-reports.html"); err != nil {
+		return nil, err
+	}
+	if h.treasuryReportView, err = parse("treasury-report-view.html"); err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
@@ -352,6 +361,12 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 
 	// Phase 2: fund accounting — Treasurer-only unless noted.
 	mux.HandleFunc("GET /treasury", h.TreasuryDashboard)
+	mux.HandleFunc("GET /treasury/reports", h.TreasuryReportsList)
+	mux.HandleFunc("GET /treasury/reports/view", h.TreasuryReportView)
+	mux.HandleFunc("GET /treasury/reports/export.pdf", h.TreasuryReportExportPDF)
+	mux.HandleFunc("POST /treasury/reports/save", h.TreasuryReportSave)
+	mux.HandleFunc("GET /treasury/reports/saved/{id}/run", h.TreasuryReportRunSaved)
+	mux.HandleFunc("POST /treasury/reports/saved/{id}/delete", h.TreasuryReportDeleteSaved)
 	mux.HandleFunc("POST /treasury/transactions", h.TreasuryPostTransaction)
 	mux.HandleFunc("POST /treasury/trip-funds", h.TreasuryCreateTripFund)
 	mux.HandleFunc("POST /treasury/accounts/{id}/close", h.TreasuryCloseTripFund)

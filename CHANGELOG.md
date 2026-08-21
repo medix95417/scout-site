@@ -20,6 +20,27 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Treasury Reports — a dedicated reports page, four report types, and named
+saved presets.** A new "Reports" page under Treasury (`/treasury/reports`)
+adds:
+- **Income & Expense Summary**, with This Period / Prior Month / Year-to-Date
+  columns, computed from real deposits and expenses only — an internal
+  transfer (a fundraiser allocation, a trip-fund push) never counts as
+  income or an expense, only money that actually crossed in or out of the
+  unit's books.
+- **Account Balances** — every account and its current balance.
+- **Transaction Detail (General Ledger)** — every posting in a date range,
+  narrowable to specific account(s) and/or transaction type(s).
+- **Fundraiser Proceeds Summary** — gross vs. credited proceeds per
+  fundraiser, narrowable to specific fundraiser(s).
+
+Every report has a "Download PDF" link and a "Save this report" action —
+saved reports are named and shared across the whole unit (not tied to
+whoever saved them), so any Treasurer/Admin can re-run one with one click
+instead of reselecting the same filters each time. Not built yet, flagged
+for later: per-ledger budgets and a budget-vs-actual column on these
+reports.
+
 **Print a calendar date range, optionally narrowed to specific dens/patrols.**
 `/calendar` gained a "Print Events" section: pick a date range (either end
 optional) and, if the unit has any dens/patrols, choose specific ones to
