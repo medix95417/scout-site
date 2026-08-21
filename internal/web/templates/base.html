@@ -8,7 +8,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.3/htmx.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    :root { --unit-color: {{.Unit.ThemeColor}}; }
+    :root { --unit-color: {{.Unit.ThemeColor}}; --accent-color: {{.Unit.AccentColor}}; }
   </style>
   {{block "extrahead" .}}{{end}}
 </head>
@@ -19,7 +19,10 @@
        sections, which break out of the centered <main> column. -->
   <header class="text-white" style="background-color: var(--unit-color);">
     <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-      <a href="/" class="text-lg font-semibold">{{.Unit.Name}}</a>
+      <a href="/" class="text-lg font-semibold flex items-center gap-2">
+        {{if .Unit.LogoURL}}<img src="{{.Unit.LogoURL}}" alt="" class="h-9 w-auto">{{end}}
+        {{.Unit.Name}}
+      </a>
 
       <!-- A <details>/<summary> disclosure needs no JS to open/close —
            see menu.js below for the small enhancement that auto-closes it

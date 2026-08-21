@@ -76,7 +76,7 @@
         </select>
         <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="amount" placeholder="Amount, e.g. 50.00" required>
         <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="description" placeholder="Description, e.g. Dues — Smith family" required>
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--unit-color);">Record Deposit</button>
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Record Deposit</button>
       </form>
     </section>
 
@@ -91,7 +91,7 @@
         </select>
         <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="amount" placeholder="Amount, e.g. 50.00" required>
         <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="description" placeholder="Description, e.g. Camp site fee" required>
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--unit-color);">Record Expense</button>
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Record Expense</button>
       </form>
     </section>
 
@@ -110,7 +110,7 @@
         </select>
         <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="amount" placeholder="Amount, e.g. 50.00" required>
         <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="description" placeholder="Description, e.g. Fundraiser proceeds to General Fund" required>
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--unit-color);">Transfer</button>
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Transfer</button>
       </form>
     </section>
 
@@ -124,7 +124,7 @@
             {{range .UpcomingEvents}}<option value="{{.ID}}">{{.Title}} — {{.DateRangeDisplay}}</option>{{end}}
           </select>
           <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="Fund name, e.g. Summer Camp 2026" required>
-          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--unit-color);">Create Trip Fund</button>
+          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Create Trip Fund</button>
         </form>
       {{else}}
         <p class="text-sm text-gray-500">No upcoming events yet — add one on the Calendar page first.</p>
@@ -161,7 +161,7 @@
           <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. Fall Popcorn Sale 2026" required>
           <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="allocation_percent" placeholder="% credited per Scout, e.g. 10" required>
           <p class="text-xs text-amber-700">Confirm your council's current allowed percentage before relying on this — see the fundraiser page after creating it.</p>
-          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--unit-color);">Create</button>
+          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Create</button>
         </form>
       </div>
       <div class="rounded-lg border border-gray-200 bg-white p-4">
@@ -172,7 +172,7 @@
           <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. Mulch Sale 2026" required>
           <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="allocation_fixed_amount" placeholder="$ credited per item sold, e.g. 2.00" required>
           <p class="text-xs text-amber-700">Confirm your council's current allowed amount before relying on this — see the fundraiser page after creating it.</p>
-          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--unit-color);">Create</button>
+          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Create</button>
         </form>
       </div>
     </div>

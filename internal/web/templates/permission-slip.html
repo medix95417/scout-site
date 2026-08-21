@@ -16,7 +16,7 @@
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="title" placeholder="Title, e.g. Fall Campout Permission Slip" value="{{.Slip.Title}}" required>
         <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="body" rows="8" placeholder="Consent text families will read before signing...">{{.Slip.Body}}</textarea>
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">
           {{if .HasSlip}}Save Changes{{else}}Create Permission Slip{{end}}
         </button>
       </form>
@@ -78,7 +78,7 @@
                     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                     <input type="hidden" name="scout_member_id" value="{{.ScoutMemberID}}">
                     <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="signer_name" placeholder="Type your full name to sign" required>
-                    <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">Re-sign</button>
+                    <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">Re-sign</button>
                   </form>
                 </details>
               {{end}}
@@ -87,7 +87,7 @@
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="scout_member_id" value="{{.ScoutMemberID}}">
                 <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="signer_name" placeholder="Type your full name to sign" required>
-                <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">Sign</button>
+                <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">Sign</button>
               </form>
             {{else}}
               <p class="text-sm text-amber-700">Not yet signed — only a parent/guardian's login can sign this.</p>

@@ -14,13 +14,14 @@ import (
 )
 
 type Unit struct {
-	ID         string
-	Slug       string
-	Name       string
-	UnitType   string // "troop" | "pack"
-	Hostname   string
-	ThemeColor string
-	LogoURL    string
+	ID          string
+	Slug        string
+	Name        string
+	UnitType    string // "troop" | "pack"
+	Hostname    string
+	ThemeColor  string // primary/structural color — header, hero bands, calendar highlights
+	AccentColor string // action color — buttons and other calls-to-action
+	LogoURL     string
 }
 
 // ByHostname resolves a Unit from the incoming request's Host header.
@@ -36,9 +37,9 @@ func ByHostname(ctx context.Context, pool *pgxpool.Pool, host string) (Unit, boo
 
 	var u Unit
 	err := pool.QueryRow(ctx, `
-		SELECT id, slug, name, unit_type::text, hostname, theme_color, COALESCE(logo_url, '')
+		SELECT id, slug, name, unit_type::text, hostname, theme_color, accent_color, COALESCE(logo_url, '')
 		FROM units WHERE hostname = $1
-	`, host).Scan(&u.ID, &u.Slug, &u.Name, &u.UnitType, &u.Hostname, &u.ThemeColor, &u.LogoURL)
+	`, host).Scan(&u.ID, &u.Slug, &u.Name, &u.UnitType, &u.Hostname, &u.ThemeColor, &u.AccentColor, &u.LogoURL)
 
 	if err != nil {
 		return Unit{}, false, nil //nolint:nilerr // "no unit for this host" is a normal, expected outcome
@@ -52,9 +53,9 @@ func ByHostname(ctx context.Context, pool *pgxpool.Pool, host string) (Unit, boo
 func BySlug(ctx context.Context, pool *pgxpool.Pool, slug string) (Unit, bool, error) {
 	var u Unit
 	err := pool.QueryRow(ctx, `
-		SELECT id, slug, name, unit_type::text, hostname, theme_color, COALESCE(logo_url, '')
+		SELECT id, slug, name, unit_type::text, hostname, theme_color, accent_color, COALESCE(logo_url, '')
 		FROM units WHERE slug = $1
-	`, slug).Scan(&u.ID, &u.Slug, &u.Name, &u.UnitType, &u.Hostname, &u.ThemeColor, &u.LogoURL)
+	`, slug).Scan(&u.ID, &u.Slug, &u.Name, &u.UnitType, &u.Hostname, &u.ThemeColor, &u.AccentColor, &u.LogoURL)
 
 	if err != nil {
 		return Unit{}, false, nil //nolint:nilerr // "no unit with that slug" is a normal, expected outcome

@@ -37,7 +37,7 @@
             {{range .OpenTripFunds}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
           </select>
           <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="amount" placeholder="Amount, e.g. 25.00" required>
-          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--unit-color);">
+          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">
             Submit for Treasurer Approval
           </button>
           <p class="text-xs text-gray-500">This won't move any money until a Treasurer approves it — you'll see it here as "pending" until then.</p>
