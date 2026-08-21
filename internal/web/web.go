@@ -330,6 +330,8 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/roster/members/{id}", h.AdminRosterMemberUpdate)
 	mux.HandleFunc("POST /admin/roster/members/{id}/roles", h.AdminRosterAssignRole)
 	mux.HandleFunc("POST /admin/roster/members/{id}/reset-password", h.AdminRosterResetPassword)
+	mux.HandleFunc("POST /admin/roster/members/{id}/deactivate", h.AdminRosterMemberDeactivate)
+	mux.HandleFunc("POST /admin/roster/members/{id}/reactivate", h.AdminRosterMemberReactivate)
 	mux.HandleFunc("POST /admin/roster/members/{id}/login", h.AdminRosterCreateMemberLogin)
 	mux.HandleFunc("POST /admin/roster/members/{id}/login/reset-password", h.AdminRosterResetMemberLoginPassword)
 	mux.HandleFunc("POST /admin/roster/roles/{id}/delete", h.AdminRosterRemoveRole)

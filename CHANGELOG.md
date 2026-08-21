@@ -20,6 +20,20 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Deactivate/reactivate a member, and admins no longer clutter the roster.**
+Roster admins can now take a member off the roster without losing anything —
+"Deactivate" on a member's edit page hides them from `/roster` and
+`/admin/roster` while keeping their record, contact info, and every role
+assignment completely intact; "Reactivate" (from the new "Inactive members"
+section at the bottom of `/admin/roster`) instantly restores them exactly as
+they were, with nothing to reassign. Deactivating a member with an open Scout
+account is blocked until that account's balance is exactly $0.00 — the admin
+sees the current balance and which unit it's in, so it can be resolved
+(spent down, refunded, or transferred out) first. Separately, a member whose
+only role in a unit is `super_admin` (a site-wide configuration grant, not a
+real membership) no longer shows up on that unit's roster at all — anyone
+who also holds a real membership/leadership role still appears normally.
+
 **On-brand colors and official trademarks for both sites.** Troop 47 and
 Pack 47 now match the Scouting America Brand Guidelines instead of an
 arbitrary green/blue: Troop 47 uses Scouts BSA's olive + red, Pack 47 uses

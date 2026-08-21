@@ -22,6 +22,7 @@ import (
 
 	"github.com/47-yonkers/scout-site/internal/audit"
 	"github.com/47-yonkers/scout-site/internal/auth"
+	"github.com/47-yonkers/scout-site/internal/ledger"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
 
@@ -68,7 +69,7 @@ func DirectoryForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([
 		FROM families
 		JOIN members ON members.family_id = families.id
 		JOIN role_assignments ON role_assignments.member_id = members.id
-		WHERE role_assignments.unit_id = $1
+		WHERE role_assignments.unit_id = $1 AND members.active
 		GROUP BY families.id, families.name, families.release_address, families.address,
 			members.id, members.first_name, members.last_name, members.member_type,
 			members.release_email, members.release_phone, members.email, members.home_phone, members.cell_phone
@@ -1280,6 +1281,7 @@ type MemberDetail struct {
 	FirstName      string
 	LastName       string
 	MemberType     string
+	Active         bool
 	Email          string
 	HomePhone      string
 	CellPhone      string
@@ -1296,6 +1298,7 @@ func GetMember(ctx context.Context, pool *pgxpool.Pool, memberID string) (Member
 	var m MemberDetail
 	err := pool.QueryRow(ctx, `
 		SELECT members.id, members.family_id, families.name, members.first_name, members.last_name, members.member_type::text,
+			members.active,
 			COALESCE(members.email, ''), COALESCE(members.home_phone, ''), COALESCE(members.cell_phone, ''),
 			members.release_email, members.release_phone,
 			COALESCE(families.address, ''), families.release_address
@@ -1303,10 +1306,89 @@ func GetMember(ctx context.Context, pool *pgxpool.Pool, memberID string) (Member
 		JOIN families ON families.id = members.family_id
 		WHERE members.id = $1
 	`, memberID).Scan(&m.ID, &m.FamilyID, &m.FamilyName, &m.FirstName, &m.LastName, &m.MemberType,
+		&m.Active,
 		&m.Email, &m.HomePhone, &m.CellPhone, &m.ReleaseEmail, &m.ReleasePhone,
 		&m.FamilyAddress, &m.ReleaseAddress)
 	if err != nil {
 		return MemberDetail{}, false, nil //nolint:nilerr // "not found" is a normal, expected outcome
 	}
 	return m, true, nil
+}
+
+// --- Active status (deactivate/reactivate) -----------------------------
+
+// NonZeroBalanceError is returned by SetMemberActive when deactivating a
+// member whose Scout account(s) still carry a nonzero balance. Balances
+// holds only the nonzero ones, across every unit the member has an
+// individual account in (see ledger.ScoutAccountBalancesForMember) — the
+// caller (internal/web/admin_roster.go) uses it to tell the admin exactly
+// which unit(s)/amount(s) need to be resolved (spent down, refunded, or
+// transferred out) before this member can come off the rolls.
+type NonZeroBalanceError struct {
+	Balances []ledger.ScoutAccountBalance
+}
+
+func (e NonZeroBalanceError) Error() string {
+	return "roster: member still has a nonzero Scout account balance"
+}
+
+// SetMemberActive deactivates or reactivates a member — the "remove from
+// the rolls, but keep their info" operation. Deactivating only flips
+// members.active to false (see migration 0022): every role_assignment,
+// advancement record, and past ledger transaction stays exactly as it
+// was, which is what lets reactivating (flipping it back to true) restore
+// a member to the roster with zero repair work. This is deliberately a
+// member-wide flag, not scoped to one unit — a member who's off the rolls
+// is off every unit's roster at once (see family.RosterForUnit's doc
+// comment); the much more common case of a Scout crossing over from Pack
+// to Troop is handled by assigning them a new role in the other unit, not
+// by deactivating.
+//
+// Deactivating is refused (NonZeroBalanceError) if the member holds a
+// Scout account anywhere with a nonzero balance — the requirements this
+// codebase already treats as non-negotiable for a real financial ledger
+// (see internal/ledger's package doc) extend to this: money doesn't just
+// disappear from view because the person it belongs to came off the
+// roster.
+func SetMemberActive(ctx context.Context, pool *pgxpool.Pool, memberID string, active bool, actorID string) error {
+	if !active {
+		balances, err := ledger.ScoutAccountBalancesForMember(ctx, pool, memberID)
+		if err != nil {
+			return err
+		}
+		var nonzero []ledger.ScoutAccountBalance
+		for _, b := range balances {
+			if b.BalanceCents != 0 {
+				nonzero = append(nonzero, b)
+			}
+		}
+		if len(nonzero) > 0 {
+			return NonZeroBalanceError{Balances: nonzero}
+		}
+	}
+
+	var before struct{ Active bool }
+	_ = pool.QueryRow(ctx, `SELECT active FROM members WHERE id = $1`, memberID).Scan(&before.Active)
+
+	tag, err := pool.Exec(ctx, `UPDATE members SET active = $1 WHERE id = $2`, active, memberID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("member %s not found", memberID)
+	}
+
+	action := "deactivate"
+	if active {
+		action = "reactivate"
+	}
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "member",
+		EntityID:   memberID,
+		ActorID:    &actorID,
+		Action:     action,
+		Before:     before,
+		After:      map[string]bool{"active": active},
+	})
+	return nil
 }
