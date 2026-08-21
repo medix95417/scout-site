@@ -45,6 +45,7 @@ import (
 var reportTypeLabels = []struct{ Type, Label string }{
 	{"income_expense", "Income & Expense Summary"},
 	{"account_balances", "Account Balances"},
+	{"scout_accounts", "Scout Accounts"},
 	{"transaction_detail", "Transaction Detail (General Ledger)"},
 	{"fundraiser_proceeds", "Fundraiser Proceeds Summary"},
 }
@@ -154,10 +155,12 @@ type reportViewData struct {
 	Label          string
 	DateRangeLabel string
 
-	Periods     []periodColumn              // income_expense
-	Accounts    []accountBalanceRow         // account_balances
-	LedgerRows  []ledgerDetailRow           // transaction_detail
-	Fundraisers []fundraiserProceedsRowView // fundraiser_proceeds
+	Periods            []periodColumn              // income_expense
+	Accounts           []accountBalanceRow         // account_balances
+	ScoutAccounts      []accountBalanceRow         // scout_accounts
+	ScoutAccountsTotal string                      // scout_accounts
+	LedgerRows         []ledgerDetailRow           // transaction_detail
+	Fundraisers        []fundraiserProceedsRowView // fundraiser_proceeds
 }
 
 // buildReport loads and formats one report — the shared logic behind
@@ -200,6 +203,21 @@ func (h *Handlers) buildReport(ctx context.Context, unitID string, req reportReq
 		for _, a := range accounts {
 			view.Accounts = append(view.Accounts, accountBalanceRow{AccountWithBalance: a, BalanceDisplay: formatCents(a.BalanceCents)})
 		}
+
+	case "scout_accounts":
+		accounts, err := ledger.ListAccountsForUnit(ctx, h.Pool, unitID)
+		if err != nil {
+			return view, err
+		}
+		var total int64
+		for _, a := range accounts {
+			if a.AccountType != "scout_individual" {
+				continue
+			}
+			view.ScoutAccounts = append(view.ScoutAccounts, accountBalanceRow{AccountWithBalance: a, BalanceDisplay: formatCents(a.BalanceCents)})
+			total += a.BalanceCents
+		}
+		view.ScoutAccountsTotal = formatCents(total)
 
 	case "transaction_detail":
 		txs, err := ledger.TransactionsForUnitFiltered(ctx, h.Pool, unitID, req.From, req.To, req.AccountIDs, req.TransactionTypes)

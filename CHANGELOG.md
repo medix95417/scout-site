@@ -20,6 +20,33 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Scout Accounts report, fundraiser-to-event linkage, roster and event
+attendee PDFs, and clearer council-confirmation wording.**
+- **Scout Accounts report** — a 5th report type under `/treasury/reports`
+  listing every Scout's individual account balance plus a grand total held
+  for Scouts, right now (not a date range). Has its own PDF export like the
+  other four report types.
+- **Fundraisers can optionally be tied to a specific calendar event** —
+  useful since the council-approved rate is frequently set per-fundraiser
+  (a car wash vs. a popcorn sale vs. a campership drive), and a unit
+  commonly runs a fundraiser as one specific event. Both fundraiser-creation
+  forms on `/treasury` gained an optional "tie to event" picker (mirroring
+  the existing trip-fund-to-event picker); the linked event, if any, shows
+  on the fundraiser's own page and in the Treasury fundraisers list. Not
+  every fundraiser maps to one discrete event (an ongoing donation drive,
+  e.g.), so linkage is optional, not required.
+- **Print a roster.** `/roster` gained a "Download PDF" link — the same
+  member list shown on-screen (name, type, den/patrol, roles), available to
+  any logged-in family, not just leaders.
+- **Print an event's attendee roster.** Each event on `/calendar` gained a
+  "Print attendee roster" link (visible to unit-content editors, same as
+  "Attach a file") producing a PDF of who RSVP'd yes/maybe, alongside their
+  family — the first place attendee identity is shown to anyone but the
+  RSVP'ing family itself.
+- **Cleaned up the council-confirmation wording** on `/treasury` and a
+  fundraiser's own page — shorter, less repetitive copy for the
+  "you'll need to confirm the actual rate with your council" messaging.
+
 **Treasury Reports — a dedicated reports page, four report types, and named
 saved presets.** A new "Reports" page under Treasury (`/treasury/reports`)
 adds:

@@ -315,6 +315,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /reset-password", h.ResetPasswordForm)
 	mux.HandleFunc("POST /reset-password", h.ResetPasswordSubmit)
 	mux.HandleFunc("GET /roster", h.Roster)
+	mux.HandleFunc("GET /roster/export.pdf", h.RosterExportPDF)
 	mux.HandleFunc("GET /advancement", h.Advancement)
 	mux.HandleFunc("GET /admin/advancement", h.AdminAdvancementList)
 	mux.HandleFunc("POST /admin/advancement", h.AdminAdvancementCreate)
@@ -324,6 +325,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /calendar/export.pdf", h.CalendarExportPDF)
 	mux.HandleFunc("POST /calendar", h.CalendarCreate)
 	mux.HandleFunc("POST /calendar/{id}/rsvp", h.CalendarRSVP)
+	mux.HandleFunc("GET /calendar/{id}/attendees.pdf", h.CalendarEventAttendeesExportPDF)
 	mux.HandleFunc("POST /calendar/approvals/{id}/decide", h.ApprovalDecide)
 	mux.HandleFunc("GET /calendar/{id}/permission-slip", h.PermissionSlipView)
 	mux.HandleFunc("POST /calendar/{id}/permission-slip", h.PermissionSlipSave)
@@ -1022,6 +1024,42 @@ func (h *Handlers) Roster(w http.ResponseWriter, r *http.Request) {
 	h.render(w, h.roster, data)
 }
 
+// RosterExportPDF is Roster's printable sibling — same data, same "must
+// be logged in" gate, rendered as a downloadable PDF.
+func (h *Handlers) RosterExportPDF(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	if _, loggedIn := auth.UserFromContext(r.Context()); !loggedIn {
+		http.Redirect(w, r, "/login?next=/roster", http.StatusSeeOther)
+		return
+	}
+
+	roster, err := family.RosterForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading roster: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	rows := make([][]string, 0, len(roster))
+	for _, e := range roster {
+		subGroup := e.SubGroupName
+		if subGroup == "" {
+			subGroup = "—"
+		}
+		rows = append(rows, []string{e.FirstName + " " + e.LastName, e.MemberType, subGroup, strings.Join(e.Roles, ", ")})
+	}
+
+	data, err := simpleTablePDF(unit.Name+" — Roster", "",
+		[]string{"Name", "Type", "Den/Patrol", "Roles"},
+		[]float64{50, 25, 40, 65}, []string{"L", "L", "L", "L"}, rows)
+	if err != nil {
+		log.Printf("web: rendering roster PDF: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	writePDF(w, "roster.pdf", data)
+}
+
 // --- Calendar ---------------------------------------------------------------
 
 type pendingApprovalView struct {
@@ -1514,6 +1552,59 @@ func (h *Handlers) CalendarExportPDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writePDF(w, "calendar.pdf", data)
+}
+
+// CalendarEventAttendeesExportPDF prints who's attending one event — the
+// first place RSVP identity is ever shown to anyone but the RSVP'ing
+// family itself, so it's gated to unit-content editors rather than the
+// calendar's usual read-your-own-den visibility.
+func (h *Handlers) CalendarEventAttendeesExportPDF(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	user, loggedIn := auth.UserFromContext(r.Context())
+	if !loggedIn {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
+		http.Error(w, "you don't have permission to print this event's attendee roster", http.StatusForbidden)
+		return
+	}
+
+	eventID := r.PathValue("id")
+	event, found, err := calendar.GetEvent(r.Context(), h.Pool, eventID, unit.ID)
+	if err != nil {
+		log.Printf("web: loading event for attendee PDF: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+
+	attendees, err := calendar.AttendeesForEvent(r.Context(), h.Pool, eventID)
+	if err != nil {
+		log.Printf("web: loading attendees: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	responseLabels := map[string]string{"yes": "Yes", "maybe": "Maybe", "no": "No"}
+	rows := make([][]string, 0, len(attendees))
+	for _, a := range attendees {
+		rows = append(rows, []string{a.FirstName + " " + a.LastName, a.MemberType, a.FamilyName, responseLabels[a.Response]})
+	}
+
+	data, err := simpleTablePDF(unit.Name+" — "+event.Title+" — Attendee Roster", event.DateRangeDisplay(),
+		[]string{"Name", "Type", "Family", "RSVP"},
+		[]float64{55, 25, 55, 25}, []string{"L", "L", "L", "L"}, rows)
+	if err != nil {
+		log.Printf("web: rendering attendee roster PDF: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	writePDF(w, "attendees.pdf", data)
 }
 
 // --- Audit — see internal/web/audit.go for AuditView/AuditExport -----------

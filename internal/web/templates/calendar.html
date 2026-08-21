@@ -153,6 +153,7 @@
             <button name="response" value="no" class="text-xs rounded-full border px-2 py-1">Can't make it</button>
             <a href="/calendar/{{.ID}}/permission-slip" class="text-xs underline ml-1" style="color: var(--unit-color);">Permission slip</a>
             {{if $.CanManageFiles}}<a href="/files" class="text-xs underline ml-1" style="color: var(--unit-color);">Attach a file</a>{{end}}
+            {{if $.CanManageFiles}}<a href="/calendar/{{.ID}}/attendees.pdf" class="text-xs underline ml-1" style="color: var(--unit-color);">Print attendee roster</a>{{end}}
           </form>
 
           {{if .Files}}

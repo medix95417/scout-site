@@ -106,6 +106,8 @@ type Fundraiser struct {
 	AllocationFixedCents     int64  // e.g. 200 = $2.00/item; 0 unless AllocationMode == "fixed_per_item"
 	NeedsCouncilConfirmation bool
 	CreatedBy                string
+	EventID                  string // "" unless tied to a specific calendar event
+	EventTitle               string // "" unless EventID is set — joined in for display, not stored
 }
 
 // FundraiserAllocation is one Scout's credited share from a Fundraiser,
@@ -769,27 +771,35 @@ func (t TransactionDetail) AmountForAccount(accountID string) int64 {
 // sold — see scout-website-requirements.md Section 3.4's compliance
 // flag). needs_council_confirmation always starts true — see
 // 0006_ledger.sql's column comment and ConfirmFundraiserCap below.
-func CreateFundraiser(ctx context.Context, pool *pgxpool.Pool, unitID, name, allocationMode, allocationPercent string, allocationFixedCents int64, createdBy string) (Fundraiser, error) {
+// eventID ties this fundraiser to a specific calendar event — pass "" to
+// leave it unlinked, since not every fundraiser (e.g. an ongoing
+// donation drive) maps to one discrete event.
+func CreateFundraiser(ctx context.Context, pool *pgxpool.Pool, unitID, name, allocationMode, allocationPercent string, allocationFixedCents int64, eventID, createdBy string) (Fundraiser, error) {
+	var eventIDArg *string
+	if eventID != "" {
+		eventIDArg = &eventID
+	}
+
 	var row pgx.Row
 	switch allocationMode {
 	case "percentage":
 		row = pool.QueryRow(ctx, `
-			INSERT INTO fundraisers (unit_id, name, allocation_mode, allocation_percent, created_by)
-			VALUES ($1, $2, 'percentage', $3, $4)
-			RETURNING id, unit_id, name, allocation_mode::text, COALESCE(allocation_percent::text, ''), COALESCE(allocation_fixed_cents, 0), needs_council_confirmation, created_by
-		`, unitID, name, allocationPercent, createdBy)
+			INSERT INTO fundraisers (unit_id, name, allocation_mode, allocation_percent, event_id, created_by)
+			VALUES ($1, $2, 'percentage', $3, $4, $5)
+			RETURNING id, unit_id, name, allocation_mode::text, COALESCE(allocation_percent::text, ''), COALESCE(allocation_fixed_cents, 0), needs_council_confirmation, created_by, COALESCE(event_id::text, '')
+		`, unitID, name, allocationPercent, eventIDArg, createdBy)
 	case "fixed_per_item":
 		row = pool.QueryRow(ctx, `
-			INSERT INTO fundraisers (unit_id, name, allocation_mode, allocation_fixed_cents, created_by)
-			VALUES ($1, $2, 'fixed_per_item', $3, $4)
-			RETURNING id, unit_id, name, allocation_mode::text, COALESCE(allocation_percent::text, ''), COALESCE(allocation_fixed_cents, 0), needs_council_confirmation, created_by
-		`, unitID, name, allocationFixedCents, createdBy)
+			INSERT INTO fundraisers (unit_id, name, allocation_mode, allocation_fixed_cents, event_id, created_by)
+			VALUES ($1, $2, 'fixed_per_item', $3, $4, $5)
+			RETURNING id, unit_id, name, allocation_mode::text, COALESCE(allocation_percent::text, ''), COALESCE(allocation_fixed_cents, 0), needs_council_confirmation, created_by, COALESCE(event_id::text, '')
+		`, unitID, name, allocationFixedCents, eventIDArg, createdBy)
 	default:
 		return Fundraiser{}, fmt.Errorf("ledger: unknown allocation mode %q", allocationMode)
 	}
 
 	var f Fundraiser
-	if err := row.Scan(&f.ID, &f.UnitID, &f.Name, &f.AllocationMode, &f.AllocationPercent, &f.AllocationFixedCents, &f.NeedsCouncilConfirmation, &f.CreatedBy); err != nil {
+	if err := row.Scan(&f.ID, &f.UnitID, &f.Name, &f.AllocationMode, &f.AllocationPercent, &f.AllocationFixedCents, &f.NeedsCouncilConfirmation, &f.CreatedBy, &f.EventID); err != nil {
 		return Fundraiser{}, err
 	}
 
@@ -829,8 +839,10 @@ func ConfirmFundraiserCap(ctx context.Context, pool *pgxpool.Pool, fundraiserID,
 // created first.
 func ListFundraisersForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Fundraiser, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, unit_id, name, allocation_mode::text, COALESCE(allocation_percent::text, ''), COALESCE(allocation_fixed_cents, 0), needs_council_confirmation, created_by
-		FROM fundraisers WHERE unit_id = $1 ORDER BY created_at DESC
+		SELECT f.id, f.unit_id, f.name, f.allocation_mode::text, COALESCE(f.allocation_percent::text, ''), COALESCE(f.allocation_fixed_cents, 0), f.needs_council_confirmation, f.created_by, COALESCE(f.event_id::text, ''), COALESCE(e.title, '')
+		FROM fundraisers f
+		LEFT JOIN events e ON e.id = f.event_id
+		WHERE f.unit_id = $1 ORDER BY f.created_at DESC
 	`, unitID)
 	if err != nil {
 		return nil, err
@@ -840,7 +852,7 @@ func ListFundraisersForUnit(ctx context.Context, pool *pgxpool.Pool, unitID stri
 	var out []Fundraiser
 	for rows.Next() {
 		var f Fundraiser
-		if err := rows.Scan(&f.ID, &f.UnitID, &f.Name, &f.AllocationMode, &f.AllocationPercent, &f.AllocationFixedCents, &f.NeedsCouncilConfirmation, &f.CreatedBy); err != nil {
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Name, &f.AllocationMode, &f.AllocationPercent, &f.AllocationFixedCents, &f.NeedsCouncilConfirmation, &f.CreatedBy, &f.EventID, &f.EventTitle); err != nil {
 			return nil, err
 		}
 		out = append(out, f)
@@ -852,9 +864,11 @@ func ListFundraisersForUnit(ctx context.Context, pool *pgxpool.Pool, unitID stri
 func GetFundraiser(ctx context.Context, pool *pgxpool.Pool, fundraiserID string) (Fundraiser, error) {
 	var f Fundraiser
 	err := pool.QueryRow(ctx, `
-		SELECT id, unit_id, name, allocation_mode::text, COALESCE(allocation_percent::text, ''), COALESCE(allocation_fixed_cents, 0), needs_council_confirmation, created_by
-		FROM fundraisers WHERE id = $1
-	`, fundraiserID).Scan(&f.ID, &f.UnitID, &f.Name, &f.AllocationMode, &f.AllocationPercent, &f.AllocationFixedCents, &f.NeedsCouncilConfirmation, &f.CreatedBy)
+		SELECT f.id, f.unit_id, f.name, f.allocation_mode::text, COALESCE(f.allocation_percent::text, ''), COALESCE(f.allocation_fixed_cents, 0), f.needs_council_confirmation, f.created_by, COALESCE(f.event_id::text, ''), COALESCE(e.title, '')
+		FROM fundraisers f
+		LEFT JOIN events e ON e.id = f.event_id
+		WHERE f.id = $1
+	`, fundraiserID).Scan(&f.ID, &f.UnitID, &f.Name, &f.AllocationMode, &f.AllocationPercent, &f.AllocationFixedCents, &f.NeedsCouncilConfirmation, &f.CreatedBy, &f.EventID, &f.EventTitle)
 	return f, err
 }
 
