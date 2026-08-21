@@ -20,6 +20,25 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Forced password change on first use of a temporary password, and password
+complexity requirements.**
+- **A leader-issued temporary password must be replaced before it can be
+  used to do anything else.** Whenever a leader creates a new family, adds
+  an individual Scout login, or resets a family's/Scout's password from
+  `/admin/roster`, the next login with that temporary password is
+  interrupted by a "Set a New Password" step — no real session (and no
+  two-factor prompt, for accounts with that enrolled) is issued until a new
+  password is set. A self-service password reset via "Forgot your
+  password?" also clears this requirement, since choosing a new password
+  yourself already accomplishes the same thing.
+- **Password complexity is now enforced everywhere a person chooses their
+  own password** (the forced-change step above, and the existing
+  self-service reset-password flow): at least 8 characters, with a mix of
+  at least 3 of lowercase letters, uppercase letters, numbers, and symbols —
+  enough to rule out something like "password" or "12345678" without being
+  needlessly picky. System-generated temporary passwords are unaffected —
+  they're already random with plenty of entropy.
+
 **My Family page cleanup, roster search, and single-page den/patrol sites
 with events, news, and photos.**
 - **Removed the "Print / Download PDF" link from `/my-family`** — it

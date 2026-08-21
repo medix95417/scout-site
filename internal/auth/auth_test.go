@@ -21,6 +21,30 @@ func TestNormalizeEmail(t *testing.T) {
 	}
 }
 
+func TestValidatePasswordComplexity(t *testing.T) {
+	cases := []struct {
+		password string
+		wantOK   bool
+	}{
+		{"short1A", false},                   // under MinPasswordLength
+		{"alllowercase", false},              // only 1 class (lowercase)
+		{"ALLUPPERCASE", false},              // only 1 class (uppercase)
+		{"12345678", false},                  // only 1 class (digits)
+		{"password", false},                  // classic weak password, only 1 class
+		{"lowercase123", false},              // lowercase + digit = only 2 classes
+		{"Lowercase123", true},               // lower + upper + digit = 3 classes
+		{"Sc0utTr00p!", true},                // lower + upper + digit + symbol = 4 classes
+		{"correcthorsebatterystaple", false}, // long, but only 1 class
+	}
+	for _, c := range cases {
+		err := ValidatePasswordComplexity(c.password)
+		gotOK := err == nil
+		if gotOK != c.wantOK {
+			t.Errorf("ValidatePasswordComplexity(%q): got ok=%v (err=%v), want ok=%v", c.password, gotOK, err, c.wantOK)
+		}
+	}
+}
+
 func TestHashPassword_ValidBcryptHash(t *testing.T) {
 	hash, err := HashPassword("correct horse battery staple")
 	if err != nil {

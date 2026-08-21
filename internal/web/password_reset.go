@@ -130,8 +130,8 @@ func (h *Handlers) ResetPasswordSubmit(w http.ResponseWriter, r *http.Request) {
 		h.render(w, h.resetPassword, data)
 	}
 
-	if len(password) < 8 {
-		showError("Password must be at least 8 characters.")
+	if err := auth.ValidatePasswordComplexity(password); err != nil {
+		showError(err.Error())
 		return
 	}
 	if password != r.FormValue("password_confirm") {

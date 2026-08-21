@@ -11,10 +11,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,6 +33,21 @@ const (
 	// half-authenticated visitor could use to reach a real session before
 	// their TOTP code is verified.
 	PendingTwoFactorCookieName = "scoutsite_pending_2fa"
+
+	// PendingPasswordChangeCookieName is the cookie carrying a
+	// pending-password-change token (see CreatePendingPasswordChange below) —
+	// separate from both SessionCookieName and PendingTwoFactorCookieName,
+	// for the same "half-authenticated visitor holds nothing useful yet"
+	// reasoning: a login using a still-temporary password never gets a real
+	// session (or reaches the TOTP step) until it's replaced.
+	PendingPasswordChangeCookieName = "scoutsite_pending_pwchange"
+
+	// PendingPasswordChangeDuration is how long a "password checked out,
+	// must set a new one" pending login stays valid. Longer than
+	// PendingTwoFactorDuration (totp.go) — choosing and typing a compliant
+	// new password takes more thought than a 6-digit code — but still short
+	// enough that a stale, abandoned attempt doesn't linger.
+	PendingPasswordChangeDuration = 15 * time.Minute
 
 	// SessionDuration is how long a session stays valid after login.
 	SessionDuration = 30 * 24 * time.Hour
@@ -90,12 +107,66 @@ var ErrAccountLocked = errors.New("auth: too many failed login attempts — plea
 // it was" reasoning as ErrInvalidCredentials.
 var ErrInvalidResetToken = errors.New("auth: invalid or expired reset link")
 
+// ErrInvalidPendingPasswordChange covers every reason a pending forced-
+// password-change login can't be completed — unknown, expired, or already
+// consumed — deliberately not distinguished in the message shown, same
+// "your login session expired" framing as totp.go's ErrInvalidPendingLogin.
+var ErrInvalidPendingPasswordChange = errors.New("auth: your login session expired — please sign in again")
+
 // NormalizeEmail lowercases and trims an email address so lookups and the
 // unique constraint on users.email are consistent regardless of how a user
 // typed it (see internal/db/migrations/0001_init.sql for why this replaces
 // relying on the citext extension).
 func NormalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// MinPasswordLength is the minimum length ValidatePasswordComplexity
+// accepts for a person-chosen password (a leader-issued temporary
+// password from GenerateTemporaryPassword is exempt — it's already random
+// with plenty of entropy, not something a person typed).
+const MinPasswordLength = 8
+
+// ValidatePasswordComplexity checks a candidate password against the
+// site's minimum bar for anyone setting their own password (a self-service
+// reset, or replacing a temporary one) — at least MinPasswordLength
+// characters, and a mix of at least three of (lowercase, uppercase, digit,
+// symbol) character classes. That's enough to rule out something like
+// "password" or "12345678" without demanding a specific special character
+// or otherwise being needlessly picky about what a family or Scout can
+// choose. Returns a plain error whose message is written to be shown
+// directly to the person typing it, rather than a sentinel — the caller
+// just displays err.Error() as the form's flash.
+func ValidatePasswordComplexity(password string) error {
+	if len(password) < MinPasswordLength {
+		return fmt.Errorf("Password must be at least %d characters.", MinPasswordLength)
+	}
+
+	var hasLower, hasUpper, hasDigit, hasSymbol bool
+	for _, r := range password {
+		switch {
+		case unicode.IsLower(r):
+			hasLower = true
+		case unicode.IsUpper(r):
+			hasUpper = true
+		case unicode.IsDigit(r):
+			hasDigit = true
+		case unicode.IsSpace(r):
+			// doesn't count toward any class, but isn't rejected either
+		default:
+			hasSymbol = true
+		}
+	}
+	classes := 0
+	for _, ok := range [...]bool{hasLower, hasUpper, hasDigit, hasSymbol} {
+		if ok {
+			classes++
+		}
+	}
+	if classes < 3 {
+		return errors.New("Password must include a mix of at least 3 of: lowercase letters, uppercase letters, numbers, and symbols.")
+	}
+	return nil
 }
 
 // HashPassword bcrypt-hashes a plaintext password for storage.
@@ -130,11 +201,12 @@ func VerifyPassword(u User, plaintext string) bool {
 // than falling back to family-wide resolution (see internal/web's
 // rolesFor/actingMember helpers).
 type User struct {
-	ID           string
-	FamilyID     string
-	MemberID     *string
-	Email        string
-	PasswordHash string
+	ID                 string
+	FamilyID           string
+	MemberID           *string
+	Email              string
+	PasswordHash       string
+	MustChangePassword bool // true if this login's current password is a leader-issued temporary one, not yet replaced
 }
 
 // Authenticate checks a plaintext password against a stored user, returning
@@ -157,9 +229,9 @@ func Authenticate(ctx context.Context, pool *pgxpool.Pool, email, password strin
 
 	var u User
 	err = pool.QueryRow(ctx,
-		`SELECT id, family_id, member_id, email, password_hash FROM users WHERE email = $1`,
+		`SELECT id, family_id, member_id, email, password_hash, must_change_password FROM users WHERE email = $1`,
 		normalized,
-	).Scan(&u.ID, &u.FamilyID, &u.MemberID, &u.Email, &u.PasswordHash)
+	).Scan(&u.ID, &u.FamilyID, &u.MemberID, &u.Email, &u.PasswordHash, &u.MustChangePassword)
 	if err != nil {
 		recordLoginFailureBestEffort(ctx, pool, normalized)
 		return User{}, ErrInvalidCredentials
@@ -308,9 +380,9 @@ func RecordAndCheckPasswordResetRequest(ctx context.Context, pool *pgxpool.Pool,
 func UserByEmail(ctx context.Context, pool *pgxpool.Pool, email string) (User, bool, error) {
 	var u User
 	err := pool.QueryRow(ctx,
-		`SELECT id, family_id, member_id, email, password_hash FROM users WHERE email = $1`,
+		`SELECT id, family_id, member_id, email, password_hash, must_change_password FROM users WHERE email = $1`,
 		NormalizeEmail(email),
-	).Scan(&u.ID, &u.FamilyID, &u.MemberID, &u.Email, &u.PasswordHash)
+	).Scan(&u.ID, &u.FamilyID, &u.MemberID, &u.Email, &u.PasswordHash, &u.MustChangePassword)
 	if err != nil {
 		return User{}, false, nil //nolint:nilerr // "no such user" is a normal, expected outcome
 	}
@@ -340,9 +412,12 @@ func CreateResetToken(ctx context.Context, pool *pgxpool.Pool, userID string) (t
 }
 
 // ConsumeResetToken redeems a password-reset token: if it exists, hasn't
-// expired, and hasn't already been used, it sets the new password hash and
-// marks the token used, atomically. Returns ErrInvalidResetToken for every
-// failure mode (unknown/expired/already-used token) — see that error's
+// expired, and hasn't already been used, it sets the new password hash,
+// clears must_change_password (a self-service reset is itself proof this
+// login is no longer using a leader-issued temporary password, even if it
+// was before), and marks the token used, atomically. Returns
+// ErrInvalidResetToken for every failure mode (unknown/expired/already-used
+// token) — see that error's
 // comment for why they're not distinguished.
 func ConsumeResetToken(ctx context.Context, pool *pgxpool.Pool, token, newPasswordHash string) (userID string, err error) {
 	tx, err := pool.Begin(ctx)
@@ -366,7 +441,7 @@ func ConsumeResetToken(ctx context.Context, pool *pgxpool.Pool, token, newPasswo
 		return "", err
 	}
 	if _, err := tx.Exec(ctx,
-		`UPDATE users SET password_hash = $1 WHERE id = $2`, newPasswordHash, userID,
+		`UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2`, newPasswordHash, userID,
 	); err != nil {
 		return "", err
 	}
@@ -382,6 +457,84 @@ func ConsumeResetToken(ctx context.Context, pool *pgxpool.Pool, token, newPasswo
 		return "", err
 	}
 	return userID, nil
+}
+
+// CreatePendingPasswordChange records that a login has passed the password
+// check but is using a temporary password (users.must_change_password) and
+// must set a new one before a real session is issued, returning an opaque
+// single-use token carried in its own short-lived cookie (see
+// internal/web) — deliberately not the real session token, and checked
+// before the two-factor step (CreatePendingTwoFactorLogin in totp.go): a
+// temporary credential must be replaced before a second factor even comes
+// into play.
+func CreatePendingPasswordChange(ctx context.Context, pool *pgxpool.Pool, userID, next string) (token string, expiresAt time.Time, err error) {
+	token, err = RandomToken(32)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	expiresAt = time.Now().Add(PendingPasswordChangeDuration)
+
+	_, err = pool.Exec(ctx,
+		`INSERT INTO pending_password_changes (token, user_id, next, expires_at) VALUES ($1, $2, $3, $4)`,
+		token, userID, next, expiresAt,
+	)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return token, expiresAt, nil
+}
+
+// PendingPasswordChangeExists reports whether a pending-password-change
+// token is still valid (exists, unexpired) — used to render the "set a new
+// password" form (and to bounce a visitor back to /login if their pending
+// cookie is missing or stale) without that page-load itself consuming
+// anything.
+func PendingPasswordChangeExists(ctx context.Context, pool *pgxpool.Pool, token string) (bool, error) {
+	var exists bool
+	err := pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM pending_password_changes WHERE token = $1 AND expires_at > now())`,
+		token,
+	).Scan(&exists)
+	return exists, err
+}
+
+// ConsumePendingPasswordChange redeems a pending-password-change token: if
+// it exists and hasn't expired, it sets the new password hash, clears
+// must_change_password, and deletes the pending row, atomically. Returns
+// ErrInvalidPendingPasswordChange for an unknown/expired token — see that
+// error's comment for why it isn't distinguished further. On success,
+// returns the user ID and the original "next" destination so the caller
+// can continue the login (a confirmed TOTP enrollment still needs its own
+// code — see internal/web's completeLogin).
+func ConsumePendingPasswordChange(ctx context.Context, pool *pgxpool.Pool, token, newPasswordHash string) (userID, next string, err error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op if already committed
+
+	err = tx.QueryRow(ctx, `
+		SELECT user_id, next FROM pending_password_changes
+		WHERE token = $1 AND expires_at > now()
+		FOR UPDATE
+	`, token).Scan(&userID, &next)
+	if err != nil {
+		return "", "", ErrInvalidPendingPasswordChange
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM pending_password_changes WHERE token = $1`, token); err != nil {
+		return "", "", err
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2`, newPasswordHash, userID,
+	); err != nil {
+		return "", "", err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", "", err
+	}
+	return userID, next, nil
 }
 
 // CreateSession issues a new session token for a user and persists it.
@@ -450,11 +603,11 @@ func DestroySessionsForMember(ctx context.Context, pool *pgxpool.Pool, memberID 
 func UserForSession(ctx context.Context, pool *pgxpool.Pool, token string) (User, bool, error) {
 	var u User
 	err := pool.QueryRow(ctx, `
-		SELECT users.id, users.family_id, users.member_id, users.email, users.password_hash
+		SELECT users.id, users.family_id, users.member_id, users.email, users.password_hash, users.must_change_password
 		FROM sessions
 		JOIN users ON users.id = sessions.user_id
 		WHERE sessions.token = $1 AND sessions.expires_at > now()
-	`, token).Scan(&u.ID, &u.FamilyID, &u.MemberID, &u.Email, &u.PasswordHash)
+	`, token).Scan(&u.ID, &u.FamilyID, &u.MemberID, &u.Email, &u.PasswordHash, &u.MustChangePassword)
 
 	if err != nil {
 		return User{}, false, nil //nolint:nilerr // "not found" is not an error case here
@@ -520,6 +673,40 @@ func SetPendingTwoFactorCookie(w http.ResponseWriter, token string, expiresAt ti
 func ClearPendingTwoFactorCookie(w http.ResponseWriter, cookieDomain string, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     PendingTwoFactorCookieName,
+		Value:    "",
+		Domain:   cookieDomain,
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// SetPendingPasswordChangeCookie writes the short-lived pending-password-
+// change cookie — same shape as SetPendingTwoFactorCookie, but the caller
+// passes an expiry PendingPasswordChangeDuration out, not
+// PendingTwoFactorDuration.
+func SetPendingPasswordChangeCookie(w http.ResponseWriter, token string, expiresAt time.Time, cookieDomain string, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     PendingPasswordChangeCookieName,
+		Value:    token,
+		Domain:   cookieDomain,
+		Path:     "/",
+		Expires:  expiresAt,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// ClearPendingPasswordChangeCookie expires the pending-password-change
+// cookie immediately — called once a new password is set (or rejected past
+// its expiry) so a stale pending cookie doesn't linger in the browser.
+func ClearPendingPasswordChangeCookie(w http.ResponseWriter, cookieDomain string, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     PendingPasswordChangeCookieName,
 		Value:    "",
 		Domain:   cookieDomain,
 		Path:     "/",
