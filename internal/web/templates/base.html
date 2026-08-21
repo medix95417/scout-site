@@ -5,10 +5,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Unit.Name}}{{if .PageTitle}} — {{.PageTitle}}{{end}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;700&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.3/htmx.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root { --unit-color: {{.Unit.ThemeColor}}; --accent-color: {{.Unit.AccentColor}}; }
+    /* BSA Digital Brand Guidelines: Roboto Slab for headlines, Roboto for
+       everything else. Plain CSS (not Tailwind utility classes) so every
+       existing template gets this for free without a class-by-class pass —
+       a template's own font-weight utility (e.g. font-semibold) still wins
+       over the bare-tag default below, since a class selector outranks one. */
+    body { font-family: 'Roboto', -apple-system, 'Segoe UI', sans-serif; }
+    h1, h2, h3, h4, h5 { font-family: 'Roboto Slab', Georgia, serif; font-weight: 700; }
   </style>
   {{block "extrahead" .}}{{end}}
 </head>
@@ -17,6 +27,9 @@
        browsers introduce when a full-bleed section (100vw) meets a page
        that also has a vertical scrollbar — see home.html's hero/gallery
        sections, which break out of the centered <main> column. -->
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded-md focus:bg-white focus:text-gray-900 focus:px-4 focus:py-2 focus:shadow-lg">
+    Skip to main content
+  </a>
   <header class="text-white" style="background-color: var(--unit-color);">
     <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
       <a href="/" class="text-lg font-semibold flex items-center gap-2">
@@ -138,7 +151,7 @@
     <section class="w-full h-40 sm:h-56 bg-gray-200 bg-cover bg-center" style="background-image: url('{{.PageHeroImageURL}}');"></section>
   {{end}}
 
-  <main class="max-w-4xl mx-auto px-4 py-8">
+  <main id="main-content" class="max-w-4xl mx-auto px-4 py-8">
     {{if .NeedsTwoFactorSetup}}
       <div class="mb-4 rounded-md bg-red-50 border border-red-300 px-4 py-2 text-red-900 text-sm flex items-center justify-between gap-3">
         <span>Your login can access unit funds — set up two-factor authentication to keep it secure.</span>
@@ -153,8 +166,35 @@
     {{template "content" .}}
   </main>
 
-  <footer class="max-w-4xl mx-auto px-4 py-8 text-xs text-gray-400">
-    {{.Unit.Name}} — v{{.Version}}
+  <!-- Dark Scouting-Blue footer bar, per the BSA Digital Brand Guidelines'
+       footer anatomy (container / social icons / copyright). Deliberately
+       leaves out the guideline's national-property link row (About,
+       Careers, Terms, Privacy Policy, Donor Privacy, Connect, Contact) —
+       those assume a BSA National/council site; this unit has no jobs
+       page or national donor-privacy policy for "Careers"/"Donor Privacy"
+       to point at, and adding them as dead links would look broken, not
+       polished. -->
+  <footer class="w-full" style="background-color: #003366;">
+    <div class="max-w-4xl mx-auto px-4 py-8 text-center">
+      {{if or .FooterFacebookURL .FooterInstagramURL .FooterTikTokURL}}
+        <div class="flex items-center justify-center gap-3 mb-4">
+          {{if .FooterFacebookURL}}
+            <a href="{{.FooterFacebookURL}}" target="_blank" rel="noopener"
+               class="rounded-full border border-white/30 text-white px-4 py-1.5 text-xs hover:bg-white/10">Facebook</a>
+          {{end}}
+          {{if .FooterInstagramURL}}
+            <a href="{{.FooterInstagramURL}}" target="_blank" rel="noopener"
+               class="rounded-full border border-white/30 text-white px-4 py-1.5 text-xs hover:bg-white/10">Instagram</a>
+          {{end}}
+          {{if .FooterTikTokURL}}
+            <a href="{{.FooterTikTokURL}}" target="_blank" rel="noopener"
+               class="rounded-full border border-white/30 text-white px-4 py-1.5 text-xs hover:bg-white/10">TikTok</a>
+          {{end}}
+        </div>
+      {{end}}
+      <p class="text-xs text-white/80">&copy; {{.FooterYear}} {{.Unit.Name}} — All Rights Reserved</p>
+      <p class="text-xs text-white/60 mt-1">v{{.Version}}</p>
+    </div>
   </footer>
 </body>
 </html>
