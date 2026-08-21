@@ -20,6 +20,16 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed the Family Directory showing admin/technical accounts as if they
+were families.**
+- A login whose only role in a unit is `super_admin` (e.g. a bootstrap
+  admin account, or the demo data's "Rivera Family (admin)" persona) no
+  longer appears in `/directory` or its PDF export. `super_admin` is
+  deliberately a "site operator" capability, not a community leadership
+  role like Scoutmaster or Treasurer — those still show normally, since
+  they're real people families would want contact info for. A member
+  holding `super_admin` alongside a real role is unaffected either way.
+
 **Accessibility pass: button contrast, keyboard focus, reduced motion, and
 form labels.**
 - **Fixed a real WCAG contrast failure** — every "primary action" button
