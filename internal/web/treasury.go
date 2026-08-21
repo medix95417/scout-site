@@ -790,7 +790,22 @@ func (h *Handlers) TreasuryCreateFundraiser(w http.ResponseWriter, r *http.Reque
 		fixedCents = cents
 	}
 
-	f, err := ledger.CreateFundraiser(r.Context(), h.Pool, unit.ID, name, mode, percent, fixedCents, actor.ID)
+	// Tying a fundraiser to an event is optional — not every fundraiser
+	// (e.g. an ongoing donation drive) maps to one discrete event — but
+	// when given it must actually belong to this unit.
+	eventID := strings.TrimSpace(r.FormValue("event_id"))
+	if eventID != "" {
+		if _, found, err := calendar.GetEvent(r.Context(), h.Pool, eventID, unit.ID); err != nil {
+			log.Printf("web: looking up event for fundraiser: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		} else if !found {
+			http.Error(w, "that event doesn't exist in this unit", http.StatusBadRequest)
+			return
+		}
+	}
+
+	f, err := ledger.CreateFundraiser(r.Context(), h.Pool, unit.ID, name, mode, percent, fixedCents, eventID, actor.ID)
 	if err != nil {
 		log.Printf("web: creating fundraiser: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)

@@ -332,6 +332,16 @@ func reportPDF(title string, view reportViewData) ([]byte, error) {
 			[]string{"Account", "Type", "Status", "Balance"},
 			[]float64{70, 35, 25, 50}, []string{"L", "L", "L", "R"}, rows)
 
+	case "scout_accounts":
+		rows := make([][]string, 0, len(view.ScoutAccounts)+1)
+		for _, a := range view.ScoutAccounts {
+			rows = append(rows, []string{a.Name, a.BalanceDisplay})
+		}
+		rows = append(rows, []string{"Total held for Scouts", view.ScoutAccountsTotal})
+		return simpleTablePDF(title, view.DateRangeLabel,
+			[]string{"Scout", "Balance"},
+			[]float64{130, 50}, []string{"L", "R"}, rows)
+
 	case "transaction_detail":
 		rows := make([][]string, 0, len(view.LedgerRows))
 		for _, row := range view.LedgerRows {

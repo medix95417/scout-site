@@ -66,6 +66,31 @@
     {{else}}
       <p class="text-sm text-gray-500">No accounts yet.</p>
     {{end}}
+  {{else if eq .Report.Type "scout_accounts"}}
+    {{if .Report.ScoutAccounts}}
+      <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <thead class="bg-gray-100 text-left">
+          <tr>
+            <th class="px-4 py-2">Scout</th>
+            <th class="px-4 py-2 text-right">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Report.ScoutAccounts}}
+            <tr class="border-t border-gray-100">
+              <td class="px-4 py-2">{{.Name}}</td>
+              <td class="px-4 py-2 text-right font-mono">{{.BalanceDisplay}}</td>
+            </tr>
+          {{end}}
+          <tr class="border-t border-gray-200 font-semibold">
+            <td class="px-4 py-2">Total held for Scouts</td>
+            <td class="px-4 py-2 text-right font-mono">{{.Report.ScoutAccountsTotal}}</td>
+          </tr>
+        </tbody>
+      </table>
+    {{else}}
+      <p class="text-sm text-gray-500">No Scout accounts yet.</p>
+    {{end}}
   {{else if eq .Report.Type "transaction_detail"}}
     {{if .Report.LedgerRows}}
       <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">

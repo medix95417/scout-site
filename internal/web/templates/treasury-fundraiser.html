@@ -1,21 +1,21 @@
 {{define "content"}}
   <p class="mb-4"><a href="/treasury" class="text-sm underline" style="color: var(--unit-color);">&larr; Back to Treasury</a></p>
   <h1 class="text-2xl font-bold mb-1">{{.Fundraiser.Name}}</h1>
-  <p class="text-sm text-gray-500 mb-6">
+  <p class="text-sm text-gray-500 {{if .Fundraiser.EventTitle}}mb-1{{else}}mb-6{{end}}">
     {{if eq .Fundraiser.AllocationMode "percentage"}}
       {{.Fundraiser.AllocationPercent}}% of each Scout's attributed proceeds is credited to their individual account.
     {{else}}
       A fixed amount per item sold is credited to each Scout's individual account.
     {{end}}
   </p>
+  {{if .Fundraiser.EventTitle}}<p class="text-sm text-gray-500 mb-6">Tied to event: {{.Fundraiser.EventTitle}}</p>{{end}}
 
   {{if .Fundraiser.NeedsCouncilConfirmation}}
     <div class="mb-6 rounded-md bg-amber-50 border border-amber-300 px-4 py-3 text-sm text-amber-900 max-w-lg">
-      <p class="font-medium mb-1">Needs council confirmation</p>
+      <p class="font-medium mb-1">Confirm your council-approved rate</p>
       <p class="mb-3">
-        BSA/IRS rules cap how much of a fundraiser's proceeds can be credited to individual Scout accounts before it
-        risks your unit's tax-exempt "private benefit" standing. Confirm the actual allowed amount with your council
-        or chartered organization, then set the real rule here.
+        How much of this fundraiser's proceeds can go to individual Scout accounts is capped by your council or
+        chartered organization, to protect the unit's tax-exempt status. Enter the confirmed rate below.
       </p>
       <form method="post" action="/treasury/fundraisers/{{.Fundraiser.ID}}/confirm-cap" class="space-y-2">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -25,7 +25,7 @@
         </div>
         <input class="w-full rounded-md border border-amber-300 px-3 py-2 text-sm" type="text" name="allocation_percent" placeholder="Percent, e.g. 10 (if Percentage chosen)">
         <input class="w-full rounded-md border border-amber-300 px-3 py-2 text-sm" type="text" name="allocation_fixed_amount" placeholder="$ per item, e.g. 2.00 (if Fixed chosen)">
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">Confirm Council-Approved Rule</button>
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">Confirm Rate</button>
       </form>
     </div>
   {{end}}

@@ -1,5 +1,6 @@
 {{define "content"}}
-  <h1 class="text-2xl font-bold mb-6">Roster — {{.Unit.Name}}</h1>
+  <h1 class="text-2xl font-bold mb-1">Roster — {{.Unit.Name}}</h1>
+  <p class="mb-6"><a href="/roster/export.pdf" target="_blank" class="text-sm underline" style="color: var(--unit-color);">Download PDF</a></p>
   {{if .Roster}}
     <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
       <thead class="bg-gray-100 text-left">

@@ -248,6 +248,47 @@ func SetRSVP(ctx context.Context, pool *pgxpool.Pool, eventID, unitID, memberID,
 	return nil
 }
 
+// Attendee is one member's RSVP to an event, decorated with enough
+// identity to print without a second round trip — the event attendee
+// roster (see internal/web's CalendarEventAttendeesExportPDF).
+type Attendee struct {
+	MemberID   string
+	FirstName  string
+	LastName   string
+	MemberType string
+	FamilyName string
+	Response   string // "yes" | "no" | "maybe"
+}
+
+// AttendeesForEvent lists every RSVP recorded for an event — "yes"
+// responses first, then "maybe", then "no", alphabetically by name
+// within each — the order an attendee roster should read in (who's
+// actually coming, first).
+func AttendeesForEvent(ctx context.Context, pool *pgxpool.Pool, eventID string) ([]Attendee, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT members.id, members.first_name, members.last_name, members.member_type::text, families.name, rsvps.response::text
+		FROM rsvps
+		JOIN members ON members.id = rsvps.member_id
+		JOIN families ON families.id = members.family_id
+		WHERE rsvps.event_id = $1
+		ORDER BY (rsvps.response = 'yes') DESC, (rsvps.response = 'maybe') DESC, members.last_name, members.first_name
+	`, eventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Attendee
+	for rows.Next() {
+		var a Attendee
+		if err := rows.Scan(&a.MemberID, &a.FirstName, &a.LastName, &a.MemberType, &a.FamilyName, &a.Response); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 // --- Month grid ---------------------------------------------------------
 //
 // A graphical, Google-Calendar-style month view alongside the existing

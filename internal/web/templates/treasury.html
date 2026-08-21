@@ -142,6 +142,7 @@
           <li class="rounded-md bg-white border border-gray-200 px-4 py-2 text-sm flex items-center justify-between">
             <a href="/treasury/fundraisers/{{.ID}}" class="underline" style="color: var(--unit-color);">{{.Name}}</a>
             <span class="text-xs text-gray-500">
+              {{if .EventTitle}}{{.EventTitle}} · {{end}}
               {{if eq .AllocationMode "percentage"}}{{.AllocationPercent}}% per Scout{{else}}fixed per item{{end}}
               {{if .NeedsCouncilConfirmation}}<span class="ml-2 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5">needs council confirmation</span>{{end}}
             </span>
@@ -160,7 +161,13 @@
           <input type="hidden" name="allocation_mode" value="percentage">
           <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. Fall Popcorn Sale 2026" required>
           <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="allocation_percent" placeholder="% credited per Scout, e.g. 10" required>
-          <p class="text-xs text-amber-700">Confirm your council's current allowed percentage before relying on this — see the fundraiser page after creating it.</p>
+          {{if $.UpcomingEvents}}
+            <select name="event_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+              <option value="">Not tied to a specific event</option>
+              {{range $.UpcomingEvents}}<option value="{{.ID}}">{{.Title}} — {{.DateRangeDisplay}}</option>{{end}}
+            </select>
+          {{end}}
+          <p class="text-xs text-amber-700">You'll confirm the actual council-approved rate on the fundraiser's own page after creating it.</p>
           <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Create</button>
         </form>
       </div>
@@ -171,7 +178,13 @@
           <input type="hidden" name="allocation_mode" value="fixed_per_item">
           <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. Mulch Sale 2026" required>
           <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="allocation_fixed_amount" placeholder="$ credited per item sold, e.g. 2.00" required>
-          <p class="text-xs text-amber-700">Confirm your council's current allowed amount before relying on this — see the fundraiser page after creating it.</p>
+          {{if $.UpcomingEvents}}
+            <select name="event_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+              <option value="">Not tied to a specific event</option>
+              {{range $.UpcomingEvents}}<option value="{{.ID}}">{{.Title}} — {{.DateRangeDisplay}}</option>{{end}}
+            </select>
+          {{end}}
+          <p class="text-xs text-amber-700">You'll confirm the actual council-approved rate on the fundraiser's own page after creating it.</p>
           <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Create</button>
         </form>
       </div>

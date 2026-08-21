@@ -448,7 +448,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool) (Summary, error) {
 		return Summary{}, fmt.Errorf("demoseed: posting Troop trip fund contribution: %w", err)
 	}
 
-	popcornFundraiser, err := ledger.CreateFundraiser(ctx, pool, troop.ID, "Fall Popcorn Sale 2026", "percentage", "10.00", 0, terry.MemberID)
+	popcornFundraiser, err := ledger.CreateFundraiser(ctx, pool, troop.ID, "Fall Popcorn Sale 2026", "percentage", "10.00", 0, "", terry.MemberID)
 	if err != nil {
 		return Summary{}, fmt.Errorf("demoseed: creating Fall Popcorn Sale 2026: %w", err)
 	}
@@ -456,7 +456,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool) (Summary, error) {
 		return Summary{}, fmt.Errorf("demoseed: crediting Riley from the popcorn sale: %w", err)
 	}
 
-	mulchFundraiser, err := ledger.CreateFundraiser(ctx, pool, troop.ID, "Mulch Sale 2026", "fixed_per_item", "", 200, terry.MemberID)
+	mulchFundraiser, err := ledger.CreateFundraiser(ctx, pool, troop.ID, "Mulch Sale 2026", "fixed_per_item", "", 200, "", terry.MemberID)
 	if err != nil {
 		return Summary{}, fmt.Errorf("demoseed: creating Mulch Sale 2026: %w", err)
 	}
@@ -501,7 +501,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool) (Summary, error) {
 		return Summary{}, fmt.Errorf("demoseed: posting Pack derby expense: %w", err)
 	}
 
-	packFundraiser, err := ledger.CreateFundraiser(ctx, pool, pack.ID, "Popcorn Fundraiser 2026", "percentage", "8.00", 0, taylor.MemberID)
+	packFundraiser, err := ledger.CreateFundraiser(ctx, pool, pack.ID, "Popcorn Fundraiser 2026", "percentage", "8.00", 0, popcornKickoff.ID, taylor.MemberID)
 	if err != nil {
 		return Summary{}, fmt.Errorf("demoseed: creating Pack popcorn fundraiser: %w", err)
 	}
