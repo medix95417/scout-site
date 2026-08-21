@@ -185,6 +185,40 @@ func SectionsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (ma
 	return sectionsForUnitLike(ctx, pool, unitID, "home-%")
 }
 
+// SocialLinksForUnit fetches the same three optional social-profile URLs
+// a leader can set via /admin/home (Facebook/Instagram/TikTok), for the
+// site-wide footer (see internal/web's baseData and base.html) — every
+// page's footer icons stay in sync with whatever's configured, not just
+// the homepage itself. A targeted 3-slug lookup rather than
+// SectionsForUnit's full "home-%" scan, since this runs on every page
+// load, not just the homepage's.
+func SocialLinksForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (facebook, instagram, tiktok string, err error) {
+	rows, err := pool.Query(ctx, `
+		SELECT slug, body FROM content_pages
+		WHERE unit_id = $1 AND slug IN ('home-facebook', 'home-instagram', 'home-tiktok')
+	`, unitID)
+	if err != nil {
+		return "", "", "", err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var slug, body string
+		if err := rows.Scan(&slug, &body); err != nil {
+			return "", "", "", err
+		}
+		switch slug {
+		case "home-facebook":
+			facebook = body
+		case "home-instagram":
+			instagram = body
+		case "home-tiktok":
+			tiktok = body
+		}
+	}
+	return facebook, instagram, tiktok, rows.Err()
+}
+
 // sectionsForUnitLike is the shared query behind SectionsForUnit and
 // HeroSectionsForUnit — both just want every content_pages row for a unit
 // whose slug matches a known prefix, keyed by slug.

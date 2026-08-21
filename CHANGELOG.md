@@ -20,6 +20,31 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Brand conformance pass: fonts, footer, and a color fix, against the BSA
+Digital Brand Guidelines.**
+- **Roboto + Roboto Slab site-wide** — the two official BSA typefaces are
+  now loaded (Google Fonts) and applied by default (Roboto for body text,
+  Roboto Slab for every heading), site-wide, on both the public pages and
+  every logged-in page. Purely additive — no markup changed, so nothing
+  that depended on the previous OS-default font is affected.
+- **Fixed a one-digit color typo** — Troop 47's theme color was `#243E2C`;
+  the guideline's actual "Scouts Olive" is `#243E26`. Pack 47's colors were
+  already byte-exact.
+- **Rebuilt the site footer** to match the guideline's dark-blue footer bar
+  (social icons + copyright), reusing the Facebook/Instagram/TikTok links a
+  leader already set on `/admin/home` — no new data entry needed, and the
+  icons only show up once a leader has actually set a link. Deliberately
+  left out the guideline's national-property link row (About, Careers,
+  Terms, Privacy Policy, Donor Privacy, Connect, Contact): this unit has no
+  jobs page or national donor-privacy policy for "Careers"/"Donor Privacy"
+  to point at, and dead links would read as broken, not polished.
+- **Added a "Skip to main content" link** and an anchor on `<main>` — a
+  standard, low-risk accessibility improvement that fits naturally
+  alongside this pass; keyboard and screen-reader users can jump straight
+  past the header/nav on every page.
+- Bumped the footer's text opacity slightly (70%→80% for the copyright
+  line) for a bit more contrast against the now-dark background.
+
 **Forced password change on first use of a temporary password, and password
 complexity requirements.**
 - **A leader-issued temporary password must be replaced before it can be

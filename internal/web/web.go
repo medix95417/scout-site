@@ -473,6 +473,10 @@ type baseData struct {
 	NeedsTwoFactorSetup      bool              // this login holds a treasury role, or the require-two-factor-for-all setting is on, and hasn't confirmed TOTP enrollment yet — drives a persistent nudge banner, see base.html
 	NavSubGroups             []roster.SubGroup // every patrol/den in this unit, for the hamburger nav's Patrols/Dens submenu (see base.html) — named distinctly from any page's own "Groups" field (e.g. internal/web/groups.go's GroupsList) so embedding baseData never shadows a page's own data
 	PageHeroImageURL         string            // this request's page hero banner image, if the current path is one of content.HeroPages and a leader has set one — see heroKeyForPath and base.html. Named distinctly from the Home handler's own "HeroImageURL" field (for the homepage's separate, richer hero mechanism) so embedding baseData never lets one shadow the other
+	FooterFacebookURL        string            // site-wide footer's social icons — see content.SocialLinksForUnit. Named distinctly from the Home handler's own FacebookURL/InstagramURL/TikTokURL fields so embedding baseData never lets one shadow the other
+	FooterInstagramURL       string
+	FooterTikTokURL          string
+	FooterYear               int // current year, for the footer's copyright line
 	PageTitle                string
 	Flash                    string
 	CSRFToken                string // embedded as a hidden field in every <form method="post"> — see internal/csrf
@@ -596,7 +600,15 @@ func heroKeyForPath(path string) string {
 func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
-	data := baseData{Unit: unit, LoggedIn: loggedIn, PageTitle: pageTitle, CSRFToken: csrf.TokenFromContext(r.Context()), Version: version.Version}
+	data := baseData{Unit: unit, LoggedIn: loggedIn, PageTitle: pageTitle, CSRFToken: csrf.TokenFromContext(r.Context()), Version: version.Version, FooterYear: time.Now().Year()}
+
+	if facebook, instagram, tiktok, err := content.SocialLinksForUnit(r.Context(), h.Pool, unit.ID); err != nil {
+		log.Printf("web: loading social links for footer: %v", err)
+	} else {
+		data.FooterFacebookURL = facebook
+		data.FooterInstagramURL = instagram
+		data.FooterTikTokURL = tiktok
+	}
 
 	if heroKey := heroKeyForPath(r.URL.Path); heroKey != "" {
 		if heroURL, err := content.HeroURLForPage(r.Context(), h.Pool, unit.ID, heroKey); err != nil {
