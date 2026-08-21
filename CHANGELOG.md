@@ -20,6 +20,24 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Payments settings — Stripe and PayPal, configured entirely from the admin
+page.** A new "Payments" section on `/admin/settings` lets each unit turn
+Stripe and PayPal on or off independently and enter their credentials
+(publishable/secret keys, webhook signing secret; client ID/secret, plus a
+live-vs-sandbox toggle) directly from the web page — no environment
+variables or CLI access needed. Troop and Pack each connect their own
+account, matching how the treasury already keeps fully separate books per
+unit: nothing entered for one unit is visible to, or usable by, the other.
+Secret fields (the API secret keys) are never redisplayed once saved —
+the form always shows them blank with an "already set" placeholder, and
+resubmitting the page without retyping one leaves it untouched rather than
+wiping it. This is the configuration layer only — actually accepting a
+payment (a "Pay Now" button, checkout, and webhook-confirmed ledger
+deposit) is a separate, larger follow-up once these credentials are in
+place. Also fixed a latent bug this uncovered: loading the site-wide or
+per-unit toggle list crashed if any text setting (SMTP fields, or now
+these payment credentials) had ever been saved.
+
 **Deactivate/reactivate a member, and admins no longer clutter the roster.**
 Roster admins can now take a member off the roster without losing anything —
 "Deactivate" on a member's edit page hides them from `/roster` and
