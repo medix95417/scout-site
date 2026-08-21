@@ -186,3 +186,65 @@ func ledgerStatementPDF(title string, sections []ledgerStatementSection) ([]byte
 	}
 	return buf.Bytes(), nil
 }
+
+// This section renders a printable calendar event list — see
+// CalendarExportPDF in web.go.
+
+// calendarPDFEvent is the minimal shape a printed event needs — already
+// resolved to display strings (a den/patrol name, not just its ID) so
+// this file has no database concerns of its own.
+type calendarPDFEvent struct {
+	DateRange string
+	Title     string
+	Location  string
+	SubGroup  string // "" = whole-unit event
+}
+
+// calendarEventsPDF renders one row per event, oldest first (the order
+// CalendarExportPDF already queries in) — a date/time line, the title,
+// and location/den-patrol on a second, smaller line.
+func calendarEventsPDF(title, dateRangeLabel string, events []calendarPDFEvent) ([]byte, error) {
+	pdf := fpdf.New("P", "mm", "Letter", "")
+	pdf.SetMargins(15, 15, 15)
+	pdf.AddPage()
+	tr := pdf.UnicodeTranslatorFromDescriptor("")
+
+	pdf.SetTitle(tr(title), true)
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.CellFormat(0, 10, tr(title), "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.CellFormat(0, 6, tr(dateRangeLabel), "", 1, "L", false, 0, "")
+	pdf.Ln(4)
+
+	if len(events) == 0 {
+		pdf.SetFont("Helvetica", "", 10)
+		pdf.CellFormat(0, 6, tr("No events in this range."), "", 1, "L", false, 0, "")
+	}
+	for _, e := range events {
+		pdf.SetFont("Helvetica", "B", 10)
+		pdf.CellFormat(0, 6, tr(e.DateRange), "", 1, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "", 11)
+		pdf.CellFormat(0, 6, tr(e.Title), "", 1, "L", false, 0, "")
+
+		var extras []string
+		if e.SubGroup != "" {
+			extras = append(extras, e.SubGroup)
+		}
+		if e.Location != "" {
+			extras = append(extras, e.Location)
+		}
+		if len(extras) > 0 {
+			pdf.SetFont("Helvetica", "", 9)
+			pdf.SetTextColor(100, 100, 100)
+			pdf.CellFormat(0, 5, tr(strings.Join(extras, "  ·  ")), "", 1, "L", false, 0, "")
+			pdf.SetTextColor(0, 0, 0)
+		}
+		pdf.Ln(3)
+	}
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}

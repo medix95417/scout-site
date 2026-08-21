@@ -312,6 +312,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/advancement/bulk", h.AdminAdvancementBulkImport)
 	mux.HandleFunc("POST /admin/advancement/{id}/delete", h.AdminAdvancementDelete)
 	mux.HandleFunc("GET /calendar", h.Calendar)
+	mux.HandleFunc("GET /calendar/export.pdf", h.CalendarExportPDF)
 	mux.HandleFunc("POST /calendar", h.CalendarCreate)
 	mux.HandleFunc("POST /calendar/{id}/rsvp", h.CalendarRSVP)
 	mux.HandleFunc("POST /calendar/approvals/{id}/decide", h.ApprovalDecide)
@@ -1175,6 +1176,7 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		CanManageFiles     bool
 		SubGroupNoun       string
 		CreatableSubGroups []roster.SubGroup
+		AllSubGroups       []roster.SubGroup
 	}{
 		baseData:           h.base(r, "Calendar"),
 		Events:             eventViews,
@@ -1185,6 +1187,7 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		PendingApprovals:   pendingViews,
 		SubGroupNoun:       subGroupNoun(unit.UnitType),
 		CreatableSubGroups: creatableSubGroups,
+		AllSubGroups:       subGroups,
 	}
 	h.render(w, h.calendar, data)
 }
@@ -1391,6 +1394,111 @@ func (h *Handlers) ApprovalDecide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/calendar", http.StatusSeeOther)
+}
+
+// CalendarExportPDF prints a date-ranged, optionally den/patrol-narrowed
+// list of events. Same visibility rules as the on-screen calendar — an
+// unauthenticated visitor only ever gets public events, and a logged-in
+// viewer gets everything calendar.FilterVisibleToViewer would already
+// show them on-screen (their own den/patrol's scoped events plus every
+// whole-unit one, or everything if they can edit unit content) — printing
+// can never surface an event the same viewer couldn't already see in the
+// browser.
+func (h *Handlers) CalendarExportPDF(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	user, loggedIn := auth.UserFromContext(r.Context())
+
+	from, to := parseDateRangeParam(r)
+
+	var events []calendar.Event
+	var err error
+	if loggedIn {
+		events, err = calendar.ListForRangeForUnit(r.Context(), h.Pool, unit.ID, from, to)
+	} else {
+		events, err = calendar.ListForRangePublicForUnit(r.Context(), h.Pool, unit.ID, from, to)
+	}
+	if err != nil {
+		log.Printf("web: loading events for calendar PDF: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	if loggedIn {
+		caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+		if err != nil {
+			log.Printf("web: loading capabilities: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		canEditContent := units.CanEditUnitContent(caps)
+
+		var viewerSubGroupIDs []string
+		if user.MemberID != nil {
+			viewerSubGroupIDs, err = roster.SubGroupIDsForMember(r.Context(), h.Pool, *user.MemberID, unit.ID)
+		} else {
+			viewerSubGroupIDs, err = roster.SubGroupIDsForFamily(r.Context(), h.Pool, user.FamilyID, unit.ID)
+		}
+		if err != nil {
+			log.Printf("web: loading viewer's sub-group membership: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		viewerSubGroups := make(map[string]bool, len(viewerSubGroupIDs))
+		for _, id := range viewerSubGroupIDs {
+			viewerSubGroups[id] = true
+		}
+		events = calendar.FilterVisibleToViewer(events, viewerSubGroups, canEditContent)
+	}
+
+	// Narrow to specific den(s)/patrol(s) if requested — a whole-unit event
+	// (SubGroupID nil) always stays in regardless, same as the on-screen
+	// month grid showing it to everyone irrespective of den/patrol.
+	if ids := r.URL.Query()["sub_group_id"]; len(ids) > 0 {
+		wanted := make(map[string]bool, len(ids))
+		for _, id := range ids {
+			if id = strings.TrimSpace(id); id != "" {
+				wanted[id] = true
+			}
+		}
+		filtered := events[:0]
+		for _, e := range events {
+			if e.SubGroupID == nil || wanted[*e.SubGroupID] {
+				filtered = append(filtered, e)
+			}
+		}
+		events = filtered
+	}
+
+	subGroups, err := roster.SubGroupsForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading sub-groups: %v", err)
+	}
+	subGroupNameByID := make(map[string]string, len(subGroups))
+	for _, g := range subGroups {
+		subGroupNameByID[g.ID] = g.Name
+	}
+
+	pdfEvents := make([]calendarPDFEvent, 0, len(events))
+	for _, e := range events {
+		var subGroup string
+		if e.SubGroupID != nil {
+			subGroup = subGroupNameByID[*e.SubGroupID]
+		}
+		pdfEvents = append(pdfEvents, calendarPDFEvent{
+			DateRange: e.DateRangeDisplay(),
+			Title:     e.Title,
+			Location:  e.Location,
+			SubGroup:  subGroup,
+		})
+	}
+
+	data, err := calendarEventsPDF(unit.Name+" — Calendar", dateRangeLabel(from, to), pdfEvents)
+	if err != nil {
+		log.Printf("web: rendering calendar PDF: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	writePDF(w, "calendar.pdf", data)
 }
 
 // --- Audit — see internal/web/audit.go for AuditView/AuditExport -----------
