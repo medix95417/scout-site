@@ -825,7 +825,7 @@ func CreateFamilyWithMember(ctx context.Context, pool *pgxpool.Pool, in NewFamil
 		return "", "", "", fmt.Errorf("creating family: %w", err)
 	}
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO users (family_id, email, password_hash) VALUES ($1, $2, $3)`,
+		`INSERT INTO users (family_id, email, password_hash, must_change_password) VALUES ($1, $2, $3, true)`,
 		familyID, email, passwordHash,
 	); err != nil {
 		return "", "", "", fmt.Errorf("creating login: %w", err)
@@ -869,7 +869,9 @@ func ResetFamilyPassword(ctx context.Context, pool *pgxpool.Pool, familyID, acto
 		return "", err
 	}
 
-	tag, err := pool.Exec(ctx, `UPDATE users SET password_hash = $1 WHERE family_id = $2 AND member_id IS NULL`, passwordHash, familyID)
+	tag, err := pool.Exec(ctx,
+		`UPDATE users SET password_hash = $1, must_change_password = true WHERE family_id = $2 AND member_id IS NULL`,
+		passwordHash, familyID)
 	if err != nil {
 		return "", err
 	}
@@ -942,7 +944,7 @@ func CreateMemberLogin(ctx context.Context, pool *pgxpool.Pool, memberID, family
 	}
 
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO users (family_id, member_id, email, password_hash) VALUES ($1, $2, $3, $4)`,
+		`INSERT INTO users (family_id, member_id, email, password_hash, must_change_password) VALUES ($1, $2, $3, $4, true)`,
 		familyID, memberID, normalized, passwordHash,
 	); err != nil {
 		return "", fmt.Errorf("creating individual login: %w", err)
@@ -972,7 +974,9 @@ func ResetMemberLoginPassword(ctx context.Context, pool *pgxpool.Pool, memberID,
 		return "", err
 	}
 
-	tag, err := pool.Exec(ctx, `UPDATE users SET password_hash = $1 WHERE member_id = $2`, passwordHash, memberID)
+	tag, err := pool.Exec(ctx,
+		`UPDATE users SET password_hash = $1, must_change_password = true WHERE member_id = $2`,
+		passwordHash, memberID)
 	if err != nil {
 		return "", err
 	}

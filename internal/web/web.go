@@ -71,6 +71,7 @@ type Handlers struct {
 	rosterCredentials    *template.Template
 	forgotPassword       *template.Template
 	resetPassword        *template.Template
+	changePassword       *template.Template
 	loginTwoFactor       *template.Template
 	twoFactorSettings    *template.Template
 	twoFactorBackupCodes *template.Template
@@ -200,6 +201,9 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.resetPassword, err = parse("reset-password.html"); err != nil {
 		return nil, err
 	}
+	if h.changePassword, err = parse("change-password.html"); err != nil {
+		return nil, err
+	}
 	if h.loginTwoFactor, err = parse("login-two-factor.html"); err != nil {
 		return nil, err
 	}
@@ -314,6 +318,8 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /forgot-password", h.ForgotPasswordSubmit)
 	mux.HandleFunc("GET /reset-password", h.ResetPasswordForm)
 	mux.HandleFunc("POST /reset-password", h.ResetPasswordSubmit)
+	mux.HandleFunc("GET /login/change-password", h.ChangePasswordForm)
+	mux.HandleFunc("POST /login/change-password", h.ChangePasswordSubmit)
 	mux.HandleFunc("GET /roster", h.Roster)
 	mux.HandleFunc("GET /roster/export.pdf", h.RosterExportPDF)
 	mux.HandleFunc("GET /advancement", h.Advancement)
@@ -955,26 +961,56 @@ func (h *Handlers) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Phase 2: a login with confirmed TOTP enrollment needs a second
-	// factor before a real session gets created — see internal/auth/totp.go.
-	// This applies to ANY confirmed enrollment, not just Treasurer/
-	// super_admin logins: two-factor is available to every user as an
-	// opt-in security measure (see /settings/2fa, reachable from every
-	// logged-in page's nav), and once someone has actually gone through
-	// enrollment, logging in should ask for their code regardless of why
-	// they set it up. What varies by role (and by the site-wide
-	// "require two-factor for everyone" setting) is only whether a login
-	// that HASN'T enrolled yet gets nudged to — see baseData
-	// .NeedsTwoFactorSetup in h.base, which never blocks a login outright,
-	// only this actually-enrolled check does.
-	_, confirmed, err := auth.TOTPStatus(r.Context(), h.Pool, user.ID)
+	// A login whose current password is still a leader-issued temporary
+	// one (users.must_change_password — see internal/roster's
+	// CreateFamilyWithMember/CreateMemberLogin/ResetFamilyPassword/
+	// ResetMemberLoginPassword) must replace it before going any further —
+	// checked before the two-factor step below, so a temporary credential
+	// can't be used to reach a real session (or even the TOTP prompt)
+	// without first being changed.
+	if user.MustChangePassword {
+		pendingToken, pendingExpiresAt, err := auth.CreatePendingPasswordChange(r.Context(), h.Pool, user.ID, next)
+		if err != nil {
+			log.Printf("web: creating pending password change: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		auth.SetPendingPasswordChangeCookie(w, pendingToken, pendingExpiresAt, h.CookieDomain, h.SecureCookie)
+		http.Redirect(w, r, "/login/change-password", http.StatusSeeOther)
+		return
+	}
+
+	h.completeLogin(w, r, user.ID, next)
+}
+
+// completeLogin runs what happens once a login has fully authenticated —
+// password correct, and any forced temporary-password change already done
+// (see MustChangePassword above) — deciding whether a confirmed TOTP
+// enrollment needs a second factor before a real session is issued, or
+// whether to just issue one directly. Shared by LoginSubmit and
+// ChangePasswordSubmit so the "temporary password → forced change →
+// [TOTP] → session" chain has one place that decides the TOTP branch.
+//
+// Phase 2: a login with confirmed TOTP enrollment needs a second factor
+// before a real session gets created — see internal/auth/totp.go. This
+// applies to ANY confirmed enrollment, not just Treasurer/super_admin
+// logins: two-factor is available to every user as an opt-in security
+// measure (see /settings/2fa, reachable from every logged-in page's nav),
+// and once someone has actually gone through enrollment, logging in should
+// ask for their code regardless of why they set it up. What varies by
+// role (and by the site-wide "require two-factor for everyone" setting)
+// is only whether a login that HASN'T enrolled yet gets nudged to — see
+// baseData.NeedsTwoFactorSetup in h.base, which never blocks a login
+// outright, only this actually-enrolled check does.
+func (h *Handlers) completeLogin(w http.ResponseWriter, r *http.Request, userID, next string) {
+	_, confirmed, err := auth.TOTPStatus(r.Context(), h.Pool, userID)
 	if err != nil {
 		log.Printf("web: checking two-factor status: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	if confirmed {
-		pendingToken, pendingExpiresAt, err := auth.CreatePendingTwoFactorLogin(r.Context(), h.Pool, user.ID, next)
+		pendingToken, pendingExpiresAt, err := auth.CreatePendingTwoFactorLogin(r.Context(), h.Pool, userID, next)
 		if err != nil {
 			log.Printf("web: creating pending two-factor login: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
@@ -985,7 +1021,7 @@ func (h *Handlers) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, expiresAt, err := auth.CreateSession(r.Context(), h.Pool, user.ID)
+	token, expiresAt, err := auth.CreateSession(r.Context(), h.Pool, userID)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
