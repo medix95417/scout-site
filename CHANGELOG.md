@@ -20,6 +20,17 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fix — multi-file uploads failing.** Uploading more than a couple of
+photos at once (e.g. a whole camera roll from a campout) could fail
+outright: every POST request, uploads included, was capped at 25 MB
+*total*, not per file — easy to exceed with just two or three modern phone
+photos. Raised to 250 MB total per submission (each file individually
+still capped at 20 MB), and reworded the error so it's clear it's the
+whole batch's size, not one bad file. Also: if one file in a large batch
+is still too big, the rest of the batch now uploads successfully instead
+of the whole submission aborting — `/files` shows which file(s) were
+skipped and why.
+
 **Homepage gallery strip: pick multiple photos, with a real carousel.**
 The homepage's two fixed "Gallery photo 1"/"Gallery photo 2" slots are now
 one combined "Gallery photos" field — click as many thumbnails as you

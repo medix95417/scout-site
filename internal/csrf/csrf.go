@@ -48,10 +48,15 @@ const maxUploadMemory = 10 << 20 // 10 MB
 // maxRequestBodySize caps every POST body this middleware parses,
 // multipart file uploads included — applied here (before ParseMultipartForm
 // ever reads the body) rather than per-route, since it's the one place
-// every POST request already passes through. 25 MB comfortably fits a
-// phone photo or a scanned form while still bounding how much a single
-// request can make the server buffer/spill to disk.
-const maxRequestBodySize = 25 << 20 // 25 MB
+// every POST request already passes through. This is the TOTAL size of a
+// request, not any one file — a multi-file upload (see internal/web/files.go's
+// FileUpload, which accepts a batch via <input multiple>) needs enough
+// headroom for several files at once, e.g. a phone's whole camera roll for
+// a campout, not just one. 250 MB comfortably fits a few dozen photos
+// (each individually capped much lower — see files.go's maxUploadFileSize)
+// while still bounding how much one request can make the server buffer/
+// spill to disk.
+const maxRequestBodySize = 250 << 20 // 250 MB
 
 type contextKey string
 
@@ -110,7 +115,7 @@ func Middleware(secureCookie bool) func(http.Handler) http.Handler {
 				// temp files on disk.
 				if err := r.ParseMultipartForm(maxUploadMemory); err != nil && err != http.ErrNotMultipart {
 					if err.Error() == "http: request body too large" {
-						http.Error(w, "that file is too large (25 MB max)", http.StatusRequestEntityTooLarge)
+						http.Error(w, "that upload is too large — 250 MB total per submission (each file is also capped individually; try uploading in smaller batches)", http.StatusRequestEntityTooLarge)
 						return
 					}
 					http.Error(w, "bad request", http.StatusBadRequest)

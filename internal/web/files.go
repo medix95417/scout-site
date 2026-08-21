@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -22,9 +23,10 @@ import (
 // pages already use.
 
 // maxUploadFileSize caps a single uploaded file's size. Kept comfortably
-// under csrf.maxRequestBodySize (25 MB), which bounds the whole request —
-// this bounds just the one file field, so the error a leader sees names the
-// actual limit that tripped rather than a generic "request too large."
+// under csrf.maxRequestBodySize (250 MB, the TOTAL size of one submission —
+// see that constant's own comment), so the error a leader sees for one
+// oversized file names the actual limit that tripped rather than a generic
+// "request too large."
 const maxUploadFileSize = 20 << 20 // 20 MB
 
 // fileRow is a files.File decorated with what the template needs to render
@@ -103,6 +105,13 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 		CanManage:         canManage,
 		StorageConfigured: h.Storage != nil,
 	}
+	// Set by FileUpload's redirect when a batch upload had to skip one or
+	// more files over the per-file size cap (see maxUploadFileSize) — the
+	// rest of the batch still succeeded, so this is a warning, not an error
+	// page.
+	if skipped := r.URL.Query()["skipped"]; len(skipped) > 0 {
+		data.Flash = strconv.Itoa(len(skipped)) + " file(s) were too large (20 MB max each) and were skipped: " + strings.Join(skipped, ", ")
+	}
 	h.render(w, h.fileLibrary, data)
 }
 
@@ -160,10 +169,17 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var created []files.File
+	var skipped []string
 	for _, fh := range uploaded {
+		// Skip (rather than abort the whole batch on) one oversized file —
+		// a leader uploading a whole library of photos at once shouldn't
+		// lose every other valid file in the batch, including ones already
+		// written to storage earlier in this same loop, just because one
+		// file was too big. Reported back via the redirect's "skipped"
+		// query params (see FileLibrary), not a hard failure.
 		if fh.Size > maxUploadFileSize {
-			http.Error(w, fh.Filename+" is too large (20 MB max per file)", http.StatusRequestEntityTooLarge)
-			return
+			skipped = append(skipped, fh.Filename)
+			continue
 		}
 		src, err := fh.Open()
 		if err != nil {
@@ -218,6 +234,13 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 	redirectTo := "/files"
 	if back := r.FormValue("redirect_to"); back != "" && strings.HasPrefix(back, "/") && !strings.HasPrefix(back, "//") {
 		redirectTo = back
+	}
+	if len(skipped) > 0 {
+		q := url.Values{}
+		for _, name := range skipped {
+			q.Add("skipped", name)
+		}
+		redirectTo += "?" + q.Encode()
 	}
 	http.Redirect(w, r, redirectTo, http.StatusSeeOther)
 }
