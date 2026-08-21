@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/47-yonkers/scout-site/internal/auth"
+	"github.com/47-yonkers/scout-site/internal/content"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/units"
@@ -120,28 +121,53 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		textViews = append(textViews, textSettingView{TextSetting: t, Value: textValues[t.Key]})
 	}
 
-	// Split UnitToggles by Section so "This Unit's Settings" and
-	// "Payments" render as two distinct groups on the page, even though
-	// both are stored/toggled through the exact same mechanism.
-	var unitViews, paymentToggleViews []unitToggleView
+	// Split UnitToggles by Section so "This Unit's Settings", "Payments",
+	// and "Social Media" render as three distinct groups on the page, even
+	// though all three are stored/toggled through the exact same mechanism.
+	var unitViews, paymentToggleViews, socialToggleViews []unitToggleView
 	for _, t := range settings.UnitToggles {
 		v := unitToggleView{UnitToggle: t, Enabled: unitValues[t.Key]}
-		if t.Section == "payments" {
+		switch t.Section {
+		case "payments":
 			paymentToggleViews = append(paymentToggleViews, v)
-		} else {
+		case "social":
+			socialToggleViews = append(socialToggleViews, v)
+		default:
 			unitViews = append(unitViews, v)
 		}
 	}
 
-	unitTextViews := make([]unitTextSettingView, 0, len(settings.UnitTextSettings))
+	// legacySocialSlug maps a social UnitTextSetting's key back to the slug
+	// it used to be saved under via /admin/home, before this page took it
+	// over — see content.LegacySocialURL.
+	legacySocialSlug := map[string]string{
+		settings.SocialFacebookURL:  "home-facebook",
+		settings.SocialInstagramURL: "home-instagram",
+		settings.SocialTikTokURL:    "home-tiktok",
+	}
+
+	var paymentTextViews, socialTextViews []unitTextSettingView
 	for _, t := range settings.UnitTextSettings {
 		v := unitTextSettingView{UnitTextSetting: t}
 		if t.Secret {
 			v.HasValue = unitTextValues[t.Key] != ""
 		} else {
 			v.Value = unitTextValues[t.Key]
+			if v.Value == "" {
+				if legacySlug, ok := legacySocialSlug[t.Key]; ok {
+					if legacy, err := content.LegacySocialURL(r.Context(), h.Pool, unit.ID, legacySlug); err != nil {
+						log.Printf("web: loading legacy social URL for %q: %v", t.Key, err)
+					} else {
+						v.Value = legacy
+					}
+				}
+			}
 		}
-		unitTextViews = append(unitTextViews, v)
+		if t.Section == "social" {
+			socialTextViews = append(socialTextViews, v)
+		} else {
+			paymentTextViews = append(paymentTextViews, v)
+		}
 	}
 
 	data := struct {
@@ -151,13 +177,17 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		UnitToggles         []unitToggleView
 		PaymentToggles      []unitToggleView
 		PaymentTextSettings []unitTextSettingView
+		SocialToggles       []unitToggleView
+		SocialTextSettings  []unitTextSettingView
 	}{
 		baseData:            h.base(r, "Site Settings"),
 		Toggles:             views,
 		TextSettings:        textViews,
 		UnitToggles:         unitViews,
 		PaymentToggles:      paymentToggleViews,
-		PaymentTextSettings: unitTextViews,
+		PaymentTextSettings: paymentTextViews,
+		SocialToggles:       socialToggleViews,
+		SocialTextSettings:  socialTextViews,
 	}
 	h.render(w, h.systemSettings, data)
 }
@@ -222,13 +252,16 @@ func (h *Handlers) SystemSettingsToggle(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
 }
 
-// UnitSettingsUpdateText saves every per-unit text setting (currently
-// the Stripe/PayPal credential fields — see settings.UnitTextSettings)
-// from one combined Payments-section form submission, mirroring
+// UnitSettingsUpdateText saves every per-unit Payments text setting (the
+// Stripe/PayPal credential fields — see settings.UnitTextSettings) from
+// one combined Payments-section form submission, mirroring
 // SystemSettingsUpdateText's shape. A Secret field left blank is a no-op
 // (see settings.SetUnitText) rather than clearing it, so resubmitting the
 // form to change one credential never wipes another the admin didn't
-// retype.
+// retype. Only saves Section == "payments" — the Social Media section has
+// its own form and its own handler (SocialSettingsUpdateText) below, so
+// submitting one section's form never blanks out a field that belongs to
+// the other (which isn't present in that <form> at all).
 func (h *Handlers) UnitSettingsUpdateText(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
 	actor, ok := h.requireSuperAdmin(w, r, "/admin/settings")
@@ -241,8 +274,40 @@ func (h *Handlers) UnitSettingsUpdateText(w http.ResponseWriter, r *http.Request
 	}
 
 	for _, t := range settings.UnitTextSettings {
+		if t.Section != "payments" {
+			continue
+		}
 		if err := settings.SetUnitText(r.Context(), h.Pool, unit.ID, t.Key, r.FormValue(t.Key), actor.ID); err != nil {
 			log.Printf("web: updating unit text setting %q: %v", t.Key, err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+}
+
+// SocialSettingsUpdateText is UnitSettingsUpdateText's Social
+// Media-section sibling — saves only the Facebook/Instagram/TikTok URL
+// fields (Section == "social") from their own form, so this section and
+// Payments never clobber each other.
+func (h *Handlers) SocialSettingsUpdateText(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	actor, ok := h.requireSuperAdmin(w, r, "/admin/settings")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	for _, t := range settings.UnitTextSettings {
+		if t.Section != "social" {
+			continue
+		}
+		if err := settings.SetUnitText(r.Context(), h.Pool, unit.ID, t.Key, r.FormValue(t.Key), actor.ID); err != nil {
+			log.Printf("web: updating social setting %q: %v", t.Key, err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}

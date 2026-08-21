@@ -80,9 +80,6 @@ func HomepageSections(unitType string) []SectionDef {
 			{Slug: "home-leadership", Label: "Leadership & contact", Placeholder: "Contact our Scoutmaster to learn more about joining."},
 			{Slug: "home-gallery", Label: "Gallery photos", Kind: "images", Placeholder: stockPhotoCampsite + " | The Great Outdoors\n" + stockPhotoTroopCamp + " | Adventure Awaits", Help: galleryHelp},
 			{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your troop's Facebook or Instagram page."},
-			{Slug: "home-facebook", Label: "Facebook page URL (optional)", Kind: "url", Help: "Shows a Facebook icon/link on the homepage if set."},
-			{Slug: "home-instagram", Label: "Instagram profile URL (optional)", Kind: "url", Help: "Shows an Instagram icon/link on the homepage if set."},
-			{Slug: "home-tiktok", Label: "TikTok profile URL (optional)", Kind: "url", Help: "Shows a TikTok icon/link on the homepage if set."},
 		}
 	}
 	return []SectionDef{
@@ -94,9 +91,6 @@ func HomepageSections(unitType string) []SectionDef {
 		{Slug: "home-leadership", Label: "Leadership & contact", Placeholder: "Contact our Cubmaster to learn more about joining."},
 		{Slug: "home-gallery", Label: "Gallery photos", Kind: "images", Placeholder: stockPhotoCampsite + " | The Great Outdoors\n" + stockPhotoDerby + " | Pinewood Derby Fun", Help: galleryHelp},
 		{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your pack's Instagram or Facebook page."},
-		{Slug: "home-facebook", Label: "Facebook page URL (optional)", Kind: "url", Help: "Shows a Facebook icon/link on the homepage if set."},
-		{Slug: "home-instagram", Label: "Instagram profile URL (optional)", Kind: "url", Help: "Shows an Instagram icon/link on the homepage if set."},
-		{Slug: "home-tiktok", Label: "TikTok profile URL (optional)", Kind: "url", Help: "Shows a TikTok icon/link on the homepage if set."},
 	}
 }
 
@@ -185,38 +179,20 @@ func SectionsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (ma
 	return sectionsForUnitLike(ctx, pool, unitID, "home-%")
 }
 
-// SocialLinksForUnit fetches the same three optional social-profile URLs
-// a leader can set via /admin/home (Facebook/Instagram/TikTok), for the
-// site-wide footer (see internal/web's baseData and base.html) — every
-// page's footer icons stay in sync with whatever's configured, not just
-// the homepage itself. A targeted 3-slug lookup rather than
-// SectionsForUnit's full "home-%" scan, since this runs on every page
-// load, not just the homepage's.
-func SocialLinksForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (facebook, instagram, tiktok string, err error) {
-	rows, err := pool.Query(ctx, `
-		SELECT slug, body FROM content_pages
-		WHERE unit_id = $1 AND slug IN ('home-facebook', 'home-instagram', 'home-tiktok')
-	`, unitID)
-	if err != nil {
-		return "", "", "", err
+// LegacySocialURL returns a Facebook/Instagram/TikTok URL saved through
+// the old /admin/home content editor under one of its former slugs
+// ("home-facebook", "home-instagram", "home-tiktok" — see
+// internal/settings, which now owns these under /admin/settings), or ""
+// if never set there. Purely a one-time fallback so a unit that already
+// configured one of these before the move doesn't see it go blank the
+// first time /admin/settings loads; once re-saved through the new form
+// the settings value takes over and this is no longer consulted.
+func LegacySocialURL(ctx context.Context, pool *pgxpool.Pool, unitID, slug string) (string, error) {
+	s, found, err := GetSection(ctx, pool, unitID, slug)
+	if err != nil || !found {
+		return "", err
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var slug, body string
-		if err := rows.Scan(&slug, &body); err != nil {
-			return "", "", "", err
-		}
-		switch slug {
-		case "home-facebook":
-			facebook = body
-		case "home-instagram":
-			instagram = body
-		case "home-tiktok":
-			tiktok = body
-		}
-	}
-	return facebook, instagram, tiktok, rows.Err()
+	return s.Body, nil
 }
 
 // sectionsForUnitLike is the shared query behind SectionsForUnit and

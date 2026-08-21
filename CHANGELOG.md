@@ -20,6 +20,22 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Social media links moved to `/admin/settings`, each with its own on/off
+switch.**
+- **Facebook/Instagram/TikTok URLs are now set from the new "Social Media"
+  section of `/admin/settings`**, alongside a per-platform toggle — a leader
+  can enter a link ahead of time and turn it on later, or hide one
+  temporarily (an inactive account, a platform the unit is stepping back
+  from) without losing the URL underneath. Applies to both the site footer
+  and the homepage's social icon row.
+- These three fields moved off `/admin/home` (the general homepage-copy
+  editor) — that's still where the single generic "Social media link" field
+  lives, but Facebook/Instagram/TikTok specifically now live under Settings
+  with everything else that's a site-wide on/off switch. A unit that had
+  already set one of these through the old editor sees it carried over
+  automatically the first time `/admin/settings` loads; saving the new form
+  once switches that unit over for good.
+
 **Brand conformance pass: fonts, footer, and a color fix, against the BSA
 Digital Brand Guidelines.**
 - **Roboto + Roboto Slab site-wide** — the two official BSA typefaces are

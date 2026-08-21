@@ -394,6 +394,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/settings/text", h.SystemSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/{key}/toggle", h.UnitSettingsToggle)
 	mux.HandleFunc("POST /admin/settings/unit/text", h.UnitSettingsUpdateText)
+	mux.HandleFunc("POST /admin/settings/unit/social", h.SocialSettingsUpdateText)
 
 	// News/announcements and photo galleries (internal/web/content_posts.go).
 	mux.HandleFunc("GET /news", h.NewsList)
@@ -473,7 +474,7 @@ type baseData struct {
 	NeedsTwoFactorSetup      bool              // this login holds a treasury role, or the require-two-factor-for-all setting is on, and hasn't confirmed TOTP enrollment yet — drives a persistent nudge banner, see base.html
 	NavSubGroups             []roster.SubGroup // every patrol/den in this unit, for the hamburger nav's Patrols/Dens submenu (see base.html) — named distinctly from any page's own "Groups" field (e.g. internal/web/groups.go's GroupsList) so embedding baseData never shadows a page's own data
 	PageHeroImageURL         string            // this request's page hero banner image, if the current path is one of content.HeroPages and a leader has set one — see heroKeyForPath and base.html. Named distinctly from the Home handler's own "HeroImageURL" field (for the homepage's separate, richer hero mechanism) so embedding baseData never lets one shadow the other
-	FooterFacebookURL        string            // site-wide footer's social icons — see content.SocialLinksForUnit. Named distinctly from the Home handler's own FacebookURL/InstagramURL/TikTokURL fields so embedding baseData never lets one shadow the other
+	FooterFacebookURL        string            // site-wide footer's social icons — see h.socialLinks. Named distinctly from the Home handler's own FacebookURL/InstagramURL/TikTokURL fields so embedding baseData never lets one shadow the other
 	FooterInstagramURL       string
 	FooterTikTokURL          string
 	FooterYear               int // current year, for the footer's copyright line
@@ -597,12 +598,47 @@ func heroKeyForPath(path string) string {
 	}
 }
 
+// socialLinks resolves the three optional social-profile URLs for a unit
+// (Facebook/Instagram/TikTok), each gated by its own on/off toggle — see
+// internal/settings' SocialFacebookURL/SocialFacebookEnabled and its
+// Instagram/TikTok siblings, set from /admin/settings. This is the shared
+// logic behind both the site-wide footer (base, below) and the homepage's
+// own social icon row (Home), so a leader's /admin/settings choices apply
+// identically in both places. A unit that configured one of these through
+// the old /admin/home content editor (before this moved to
+// /admin/settings) still sees it, via content.LegacySocialURL, until it's
+// re-saved through the new form.
+func (h *Handlers) socialLinks(ctx context.Context, unitID string) (facebook, instagram, tiktok string, err error) {
+	resolve := func(enabledKey, urlKey, legacySlug string) (string, error) {
+		enabled, err := settings.GetForUnit(ctx, h.Pool, unitID, enabledKey)
+		if err != nil || !enabled {
+			return "", err
+		}
+		v, err := settings.GetUnitText(ctx, h.Pool, unitID, urlKey)
+		if err != nil || v != "" {
+			return v, err
+		}
+		return content.LegacySocialURL(ctx, h.Pool, unitID, legacySlug)
+	}
+
+	if facebook, err = resolve(settings.SocialFacebookEnabled, settings.SocialFacebookURL, "home-facebook"); err != nil {
+		return "", "", "", err
+	}
+	if instagram, err = resolve(settings.SocialInstagramEnabled, settings.SocialInstagramURL, "home-instagram"); err != nil {
+		return "", "", "", err
+	}
+	if tiktok, err = resolve(settings.SocialTikTokEnabled, settings.SocialTikTokURL, "home-tiktok"); err != nil {
+		return "", "", "", err
+	}
+	return facebook, instagram, tiktok, nil
+}
+
 func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
 	data := baseData{Unit: unit, LoggedIn: loggedIn, PageTitle: pageTitle, CSRFToken: csrf.TokenFromContext(r.Context()), Version: version.Version, FooterYear: time.Now().Year()}
 
-	if facebook, instagram, tiktok, err := content.SocialLinksForUnit(r.Context(), h.Pool, unit.ID); err != nil {
+	if facebook, instagram, tiktok, err := h.socialLinks(r.Context(), unit.ID); err != nil {
 		log.Printf("web: loading social links for footer: %v", err)
 	} else {
 		data.FooterFacebookURL = facebook
@@ -764,6 +800,11 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	facebook, instagram, tiktok, err := h.socialLinks(r.Context(), unit.ID)
+	if err != nil {
+		log.Printf("web: loading social links for homepage: %v", err)
+	}
+
 	data := struct {
 		baseData
 		Events          []calendar.Event
@@ -789,9 +830,9 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		Leadership:      text["home-leadership"],
 		GalleryPhotos:   galleryPhotos,
 		SocialURL:       text["home-social"],
-		FacebookURL:     text["home-facebook"],
-		InstagramURL:    text["home-instagram"],
-		TikTokURL:       text["home-tiktok"],
+		FacebookURL:     facebook,
+		InstagramURL:    instagram,
+		TikTokURL:       tiktok,
 	}
 
 	h.render(w, h.home, data)
