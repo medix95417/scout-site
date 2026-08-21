@@ -20,6 +20,33 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Accessibility pass: button contrast, keyboard focus, reduced motion, and
+form labels.**
+- **Fixed a real WCAG contrast failure** — every "primary action" button
+  (Save, Log in, Record Deposit, etc.) used white text on the unit's accent
+  color. That's fine for Scouting Red, but Cub Scouts' mandated accent,
+  Cub Scout Yellow (`#FDC116`), is a light color — white text on it was
+  badly unreadable (~1.6:1 contrast, nowhere near the 3:1 minimum). Buttons
+  now use a shared `.btn-accent` style whose text color
+  (`Unit.AccentTextColor`) is computed from the accent color's actual WCAG
+  luminance, so it stays correct automatically if a unit's colors ever
+  change, rather than being hardcoded per unit type.
+- **A single, consistent keyboard-focus style** site-wide (`:focus-visible`,
+  so nothing changes for mouse users) — every link, button, and form field
+  now gets the same visible outline when tabbed to, instead of relying on
+  inconsistent browser defaults.
+- **Respect "reduce motion"** — the handful of hover/hover-open transitions
+  site-wide now collapse to instant for anyone whose OS is set to reduce
+  motion.
+- **Added `aria-label`s to form fields that only had placeholder text** —
+  amount/description fields on Treasury, permission-slip signatures, the
+  roster search box, and a few others now have a real accessible name, not
+  just a placeholder that disappears once you start typing.
+- Checked (no changes needed): heading hierarchy per page, and alt text on
+  images — both were already in good shape (images sitting next to their
+  own visible caption/label correctly use empty alt text, rather than
+  needlessly repeating it for screen readers).
+
 **Social media links moved to `/admin/settings`, each with its own on/off
 switch.**
 - **Facebook/Instagram/TikTok URLs are now set from the new "Social Media"

@@ -32,7 +32,7 @@
         <form method="post" action="/admin/home/{{.Slug}}" class="space-y-2">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           {{if eq .Kind "image"}}
-            <input
+            <input aria-label="{{.Label}}"
               type="url"
               name="body"
               value="{{.Body}}"
@@ -51,7 +51,7 @@
             >{{.Body}}</textarea>
             {{template "imagePicker" (dict "Slug" .Slug "Images" $.PublicImages "Mode" "append" "AppendTarget" (printf "gallery-body-%s" .Slug))}}
           {{else if eq .Kind "url"}}
-            <input
+            <input aria-label="{{.Label}}"
               type="url"
               name="body"
               value="{{.Body}}"
@@ -66,7 +66,7 @@
               placeholder="{{.Placeholder}}"
             >{{.Body}}</textarea>
           {{end}}
-          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">
+          <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
             Save
           </button>
         </form>
@@ -92,7 +92,7 @@
         {{end}}
         <form method="post" action="/admin/home/{{.Slug}}" class="space-y-2">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-          <input
+          <input aria-label="{{.Label}}"
             type="url"
             name="body"
             value="{{.Body}}"
@@ -101,7 +101,7 @@
             data-image-url-input="{{.Slug}}"
           >
           {{template "imagePicker" (dict "Slug" .Slug "Images" $.PublicImages "CurrentURL" .Body)}}
-          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">
+          <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
             Save
           </button>
         </form>

@@ -70,13 +70,13 @@
       <form method="post" action="/treasury/transactions" class="space-y-2">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <input type="hidden" name="entry_type" value="deposit">
-        <select name="account_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+        <select aria-label="Deposit into account" name="account_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
           <option value="">Deposit into…</option>
           {{range .Accounts}}{{if ne .AccountType "external"}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}
         </select>
-        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="amount" placeholder="Amount, e.g. 50.00" required>
-        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="description" placeholder="Description, e.g. Dues — Smith family" required>
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Record Deposit</button>
+        <input aria-label="Deposit amount" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="amount" placeholder="Amount, e.g. 50.00" required>
+        <input aria-label="Deposit description" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="description" placeholder="Description, e.g. Dues — Smith family" required>
+        <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">Record Deposit</button>
       </form>
     </section>
 
@@ -85,13 +85,13 @@
       <form method="post" action="/treasury/transactions" class="space-y-2">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <input type="hidden" name="entry_type" value="expense">
-        <select name="account_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+        <select aria-label="Pay from account" name="account_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
           <option value="">Pay from…</option>
           {{range .Accounts}}{{if ne .AccountType "external"}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}
         </select>
-        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="amount" placeholder="Amount, e.g. 50.00" required>
-        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="description" placeholder="Description, e.g. Camp site fee" required>
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Record Expense</button>
+        <input aria-label="Expense amount" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="amount" placeholder="Amount, e.g. 50.00" required>
+        <input aria-label="Expense description" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="description" placeholder="Description, e.g. Camp site fee" required>
+        <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">Record Expense</button>
       </form>
     </section>
 
@@ -100,17 +100,17 @@
       <form method="post" action="/treasury/transactions" class="space-y-2">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <input type="hidden" name="entry_type" value="transfer">
-        <select name="from_account_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+        <select aria-label="Transfer from account" name="from_account_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
           <option value="">From…</option>
           {{range .Accounts}}{{if ne .AccountType "external"}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}
         </select>
-        <select name="to_account_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+        <select aria-label="Transfer to account" name="to_account_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
           <option value="">To…</option>
           {{range .Accounts}}{{if ne .AccountType "external"}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}
         </select>
-        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="amount" placeholder="Amount, e.g. 50.00" required>
-        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="description" placeholder="Description, e.g. Fundraiser proceeds to General Fund" required>
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Transfer</button>
+        <input aria-label="Transfer amount" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="amount" placeholder="Amount, e.g. 50.00" required>
+        <input aria-label="Transfer description" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="description" placeholder="Description, e.g. Fundraiser proceeds to General Fund" required>
+        <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">Transfer</button>
       </form>
     </section>
 
@@ -119,12 +119,12 @@
       {{if .UpcomingEvents}}
         <form method="post" action="/treasury/trip-funds" class="space-y-2">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-          <select name="event_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+          <select aria-label="Tie trip fund to event" name="event_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
             <option value="">Tie to event…</option>
             {{range .UpcomingEvents}}<option value="{{.ID}}">{{.Title}} — {{.DateRangeDisplay}}</option>{{end}}
           </select>
-          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="Fund name, e.g. Summer Camp 2026" required>
-          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Create Trip Fund</button>
+          <input aria-label="Trip fund name" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="Fund name, e.g. Summer Camp 2026" required>
+          <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">Create Trip Fund</button>
         </form>
       {{else}}
         <p class="text-sm text-gray-500">No upcoming events yet — add one on the Calendar page first.</p>
@@ -159,8 +159,8 @@
         <form method="post" action="/treasury/fundraisers" class="space-y-2">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <input type="hidden" name="allocation_mode" value="percentage">
-          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. Fall Popcorn Sale 2026" required>
-          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="allocation_percent" placeholder="% credited per Scout, e.g. 10" required>
+          <input aria-label="Fundraiser name" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. Fall Popcorn Sale 2026" required>
+          <input aria-label="Percent credited per Scout" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="allocation_percent" placeholder="% credited per Scout, e.g. 10" required>
           {{if $.UpcomingEvents}}
             <select name="event_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
               <option value="">Not tied to a specific event</option>
@@ -168,7 +168,7 @@
             </select>
           {{end}}
           <p class="text-xs text-amber-700">You'll confirm the actual council-approved rate on the fundraiser's own page after creating it.</p>
-          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Create</button>
+          <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">Create</button>
         </form>
       </div>
       <div class="rounded-lg border border-gray-200 bg-white p-4">
@@ -176,8 +176,8 @@
         <form method="post" action="/treasury/fundraisers" class="space-y-2">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <input type="hidden" name="allocation_mode" value="fixed_per_item">
-          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. Mulch Sale 2026" required>
-          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="allocation_fixed_amount" placeholder="$ credited per item sold, e.g. 2.00" required>
+          <input aria-label="Fundraiser name" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. Mulch Sale 2026" required>
+          <input aria-label="Dollar amount credited per item sold" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="allocation_fixed_amount" placeholder="$ credited per item sold, e.g. 2.00" required>
           {{if $.UpcomingEvents}}
             <select name="event_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
               <option value="">Not tied to a specific event</option>
@@ -185,7 +185,7 @@
             </select>
           {{end}}
           <p class="text-xs text-amber-700">You'll confirm the actual council-approved rate on the fundraiser's own page after creating it.</p>
-          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Create</button>
+          <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">Create</button>
         </form>
       </div>
     </div>
