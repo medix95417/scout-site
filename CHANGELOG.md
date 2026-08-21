@@ -20,6 +20,12 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Thumbnails in the file library and patrol/den photo picker.** The main
+file library list (`/files`) and the patrol/den page's photo checkbox list
+now show a small thumbnail preview next to each image file's name, instead
+of a filename with no visual — makes it much faster to spot the right
+photo by eye rather than reading names one at a time.
+
 **Fix — multi-file uploads failing.** Uploading more than a couple of
 photos at once (e.g. a whole camera roll from a campout) could fail
 outright: every POST request, uploads included, was capped at 25 MB
