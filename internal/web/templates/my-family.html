@@ -28,7 +28,7 @@
             <label class="flex items-center gap-1"><input type="checkbox" name="release_email" value="1" {{if .ReleaseEmail}}checked{{end}}> Share email</label>
             <label class="flex items-center gap-1"><input type="checkbox" name="release_phone" value="1" {{if .ReleasePhone}}checked{{end}}> Share phone</label>
           </div>
-          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">
+          <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
             Save
           </button>
         </form>
@@ -43,7 +43,7 @@
         <label class="flex items-center gap-1 text-xs text-gray-600">
           <input type="checkbox" name="release_address" value="1" {{if .Members}}{{if (index .Members 0).ReleaseAddress}}checked{{end}}{{end}}> Share address
         </label>
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">
+        <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
           Save
         </button>
       </form>

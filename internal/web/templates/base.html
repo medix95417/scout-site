@@ -11,7 +11,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.3/htmx.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    :root { --unit-color: {{.Unit.ThemeColor}}; --accent-color: {{.Unit.AccentColor}}; }
+    :root { --unit-color: {{.Unit.ThemeColor}}; --accent-color: {{.Unit.AccentColor}}; --accent-text-color: {{.Unit.AccentTextColor}}; }
     /* BSA Digital Brand Guidelines: Roboto Slab for headlines, Roboto for
        everything else. Plain CSS (not Tailwind utility classes) so every
        existing template gets this for free without a class-by-class pass —
@@ -19,6 +19,37 @@
        over the bare-tag default below, since a class selector outranks one. */
     body { font-family: 'Roboto', -apple-system, 'Segoe UI', sans-serif; }
     h1, h2, h3, h4, h5 { font-family: 'Roboto Slab', Georgia, serif; font-weight: 700; }
+
+    /* The one reusable "primary action" button style, used everywhere a
+       page needs its unit's accent color as a button background. Text
+       color comes from --accent-text-color (see Unit.AccentTextColor)
+       rather than being hardcoded white — Scouting Red contrasts fine
+       with white, but Cub Scout Yellow doesn't, so this picks whichever
+       clears WCAG AA for that unit's actual accent color. */
+    .btn-accent { background-color: var(--accent-color); color: var(--accent-text-color); }
+
+    /* A single, deliberate keyboard-focus style, applied consistently to
+       every interactive element site-wide — :focus-visible only fires for
+       keyboard/assistive-tech focus, not a mouse click, so this doesn't
+       change anything for mouse users. */
+    a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible,
+    select:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--accent-color);
+      outline-offset: 2px;
+    }
+
+    /* Respect a visitor's OS-level "reduce motion" setting by collapsing
+       every transition/animation to effectively instant, site-wide —
+       standard boilerplate for this, so it doesn't need touching each
+       time a page adds its own transition. */
+    @media (prefers-reduced-motion: reduce) {
+      *, ::before, ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
   </style>
   {{block "extrahead" .}}{{end}}
 </head>

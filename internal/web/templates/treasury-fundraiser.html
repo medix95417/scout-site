@@ -23,9 +23,9 @@
           <label class="flex items-center gap-1"><input type="radio" name="allocation_mode" value="percentage" {{if eq .Fundraiser.AllocationMode "percentage"}}checked{{end}}> Percentage</label>
           <label class="flex items-center gap-1"><input type="radio" name="allocation_mode" value="fixed_per_item" {{if eq .Fundraiser.AllocationMode "fixed_per_item"}}checked{{end}}> Fixed per item</label>
         </div>
-        <input class="w-full rounded-md border border-amber-300 px-3 py-2 text-sm" type="text" name="allocation_percent" placeholder="Percent, e.g. 10 (if Percentage chosen)">
-        <input class="w-full rounded-md border border-amber-300 px-3 py-2 text-sm" type="text" name="allocation_fixed_amount" placeholder="$ per item, e.g. 2.00 (if Fixed chosen)">
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">Confirm Rate</button>
+        <input aria-label="Confirmed percent rate" class="w-full rounded-md border border-amber-300 px-3 py-2 text-sm" type="text" name="allocation_percent" placeholder="Percent, e.g. 10 (if Percentage chosen)">
+        <input aria-label="Confirmed fixed amount per item" class="w-full rounded-md border border-amber-300 px-3 py-2 text-sm" type="text" name="allocation_fixed_amount" placeholder="$ per item, e.g. 2.00 (if Fixed chosen)">
+        <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Confirm Rate</button>
       </form>
     </div>
   {{end}}
@@ -35,13 +35,13 @@
     {{if .Scouts}}
       <form method="post" action="/treasury/fundraisers/{{.Fundraiser.ID}}/allocate" class="space-y-2">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <select name="member_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+        <select aria-label="Choose a Scout" name="member_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
           <option value="">Choose a Scout…</option>
           {{range .Scouts}}<option value="{{.ID}}">{{.FirstName}} {{.LastName}}</option>{{end}}
         </select>
-        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="gross_amount" placeholder="Total proceeds attributed to this Scout, e.g. 60.00" required>
-        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="quantity" placeholder="Items sold (only for fixed-per-item fundraisers)">
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">Credit Account</button>
+        <input aria-label="Total proceeds for this Scout" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="gross_amount" placeholder="Total proceeds attributed to this Scout, e.g. 60.00" required>
+        <input aria-label="Items sold" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="quantity" placeholder="Items sold (only for fixed-per-item fundraisers)">
+        <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">Credit Account</button>
       </form>
     {{else}}
       <p class="text-sm text-gray-500">No Scouts on the roster yet.</p>
@@ -63,7 +63,7 @@
         placeholder="{{if eq .Fundraiser.AllocationMode "fixed_per_item"}}Jamie,Rivera,60.00,20&#10;Alex,Chen,45.00,15{{else}}Jamie,Rivera,60.00&#10;Alex,Chen,45.00{{end}}"
         class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
       ></textarea>
-      <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">
+      <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
         Import Rows
       </button>
     </form>

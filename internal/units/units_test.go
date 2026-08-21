@@ -112,3 +112,24 @@ func TestIsSuperAdmin(t *testing.T) {
 		}
 	}
 }
+
+func TestAccentTextColor(t *testing.T) {
+	cases := []struct {
+		name string
+		hex  string
+		want string
+	}{
+		{"Scouting Red — dark enough for white text", "#CE1126", "#ffffff"},
+		{"Cub Scout Yellow — too light for white text", "#FDC116", "#111827"},
+		{"BSA Blue — dark enough for white text", "#003F87", "#ffffff"},
+		{"pure white — needs dark text", "#FFFFFF", "#111827"},
+		{"pure black — needs white text", "#000000", "#ffffff"},
+		{"malformed color falls back to white text", "not-a-color", "#ffffff"},
+	}
+	for _, c := range cases {
+		u := Unit{AccentColor: c.hex}
+		if got := u.AccentTextColor(); got != c.want {
+			t.Errorf("%s: AccentTextColor(%q) = %q, want %q", c.name, c.hex, got, c.want)
+		}
+	}
+}

@@ -7,7 +7,9 @@ package units
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,6 +24,61 @@ type Unit struct {
 	ThemeColor  string // primary/structural color — header, hero bands, calendar highlights
 	AccentColor string // action color — buttons and other calls-to-action
 	LogoURL     string
+}
+
+// AccentTextColor returns the text color a button using AccentColor as its
+// background should use, so every accent-colored button clears WCAG AA's
+// contrast minimum regardless of which program color a unit's accent
+// happens to be. Scouting Red (#CE1126) contrasts fine with white — but
+// Cub Scouts' mandated accent, Cub Scout Yellow (#FDC116), is a light
+// color: white text on it fails badly (~1.6:1, nowhere near the 3:1 a
+// button's text needs). Computed from AccentColor's actual relative
+// luminance (WCAG's own formula) rather than hardcoded per unit type, so
+// this keeps working correctly if a unit's accent color ever changes.
+func (u Unit) AccentTextColor() string {
+	const darkText = "#111827" // Tailwind gray-900 — this site's standard body text color
+	const lightText = "#ffffff"
+
+	r, g, b, ok := parseHexColor(u.AccentColor)
+	if !ok {
+		return lightText // unparseable color: fall back to the old, previously-universal behavior
+	}
+
+	// WCAG 2.x relative luminance and contrast ratio — see
+	// https://www.w3.org/TR/WCAG21/#dfn-relative-luminance.
+	linearize := func(c float64) float64 {
+		c /= 255
+		if c <= 0.03928 {
+			return c / 12.92
+		}
+		return math.Pow((c+0.055)/1.055, 2.4)
+	}
+	luminance := 0.2126*linearize(r) + 0.7152*linearize(g) + 0.0722*linearize(b)
+	contrastWithWhite := 1.05 / (luminance + 0.05)
+	contrastWithDark := (luminance + 0.05) / 0.05
+
+	if contrastWithWhite >= contrastWithDark {
+		return lightText
+	}
+	return darkText
+}
+
+// parseHexColor parses a "#rrggbb" string into 0-255 float components.
+// Returns ok=false for anything else (missing "#", wrong length, non-hex
+// digits) — every AccentColor in this codebase is set by an admin/
+// migration, never by a site visitor, so a malformed one is a
+// configuration bug, not something to render an error page over.
+func parseHexColor(hex string) (r, g, b float64, ok bool) {
+	if len(hex) != 7 || hex[0] != '#' {
+		return 0, 0, 0, false
+	}
+	rv, err1 := strconv.ParseUint(hex[1:3], 16, 8)
+	gv, err2 := strconv.ParseUint(hex[3:5], 16, 8)
+	bv, err3 := strconv.ParseUint(hex[5:7], 16, 8)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return 0, 0, 0, false
+	}
+	return float64(rv), float64(gv), float64(bv), true
 }
 
 // ByHostname resolves a Unit from the incoming request's Host header.

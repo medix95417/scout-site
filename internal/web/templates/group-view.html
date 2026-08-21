@@ -61,9 +61,9 @@
         <summary class="cursor-pointer select-none text-sm font-semibold">Post an update</summary>
         <form method="post" action="/admin/groups/{{.Group.ID}}/news" class="space-y-2 mt-3">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="title" placeholder="Title" required>
+          <input aria-label="News post title" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="title" placeholder="Title" required>
           <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="body" rows="3" placeholder="What's new?"></textarea>
-          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">Post</button>
+          <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Post</button>
         </form>
       </details>
     {{end}}

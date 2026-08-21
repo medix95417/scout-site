@@ -38,7 +38,7 @@
                 {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
               </select>
             </div>
-            <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">
+            <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">
               Add to This Unit
             </button>
           </form>
@@ -69,7 +69,7 @@
             {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
           </select>
         </div>
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">
+        <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">
           Create Family
         </button>
       </form>
@@ -102,7 +102,7 @@
               {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
             </select>
           </div>
-          <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">
+          <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">
             Add Member
           </button>
         </form>
@@ -127,7 +127,7 @@
       <form method="post" action="/admin/roster/sub-groups" class="flex gap-2">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. {{if eq .SubGroupNoun "patrol"}}Eagle Patrol{{else}}Bear Den 3{{end}}" required>
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm whitespace-nowrap" style="background-color: var(--accent-color);">
+        <button type="submit" class="rounded-md px-4 py-2 text-sm whitespace-nowrap btn-accent">
           Add {{if eq .SubGroupNoun "patrol"}}Patrol{{else}}Den{{end}}
         </button>
       </form>
@@ -136,7 +136,7 @@
 
   <div class="flex items-center justify-between mb-3">
     <h2 class="text-lg font-semibold">Current Roster</h2>
-    <input id="roster-search" type="text" placeholder="Search by name…"
+    <input aria-label="Search roster by name" id="roster-search" type="text" placeholder="Search by name…"
            class="w-56 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
            oninput="filterRoster(this.value)">
   </div>

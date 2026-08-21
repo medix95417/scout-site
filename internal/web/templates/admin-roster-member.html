@@ -53,7 +53,7 @@
           <label class="flex items-center gap-1 text-xs text-gray-600"><input type="checkbox" name="release_address" value="1" {{if .Member.ReleaseAddress}}checked{{end}}> Share address with the rest of the unit</label>
         </div>
 
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">
+        <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
           Save
         </button>
       </form>
@@ -97,7 +97,7 @@
             <form method="post" action="/admin/roster/members/{{.Member.ID}}/login" class="flex gap-2">
               <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
               <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Login email" required>
-              <button type="submit" class="rounded-md px-4 py-2 text-white text-sm whitespace-nowrap" style="background-color: var(--accent-color);">
+              <button type="submit" class="rounded-md px-4 py-2 text-sm whitespace-nowrap btn-accent">
                 Create Individual Login
               </button>
             </form>
@@ -145,7 +145,7 @@
             {{range .AllowedRoles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
           </select>
         </div>
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm w-full" style="background-color: var(--accent-color);">
+        <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">
           Add Role
         </button>
       </form>

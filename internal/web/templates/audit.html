@@ -1,7 +1,7 @@
 {{define "content"}}
   <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
     <h1 class="text-2xl font-bold">Activity Log — {{.Unit.Name}}</h1>
-    <a href="/audit/export.csv?{{.ExportQueryString}}" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">
+    <a href="/audit/export.csv?{{.ExportQueryString}}" class="rounded-md px-4 py-2 text-sm btn-accent">
       Export CSV
     </a>
   </div>
@@ -35,7 +35,7 @@
         {{end}}
       </select>
     </div>
-    <button type="submit" class="rounded-md px-4 py-1.5 text-white text-sm" style="background-color: var(--accent-color);">Filter</button>
+    <button type="submit" class="rounded-md px-4 py-1.5 text-sm btn-accent">Filter</button>
     {{if or .From .To .EntityType .ActorID}}
       <a href="/audit" class="text-sm underline text-gray-500">Clear filters</a>
     {{end}}
