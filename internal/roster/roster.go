@@ -57,6 +57,16 @@ type DirectoryEntry struct {
 // that's never released anything simply shows blank fields, same as if
 // they'd never entered them — this never leaks anything nobody chose to
 // share.
+//
+// Excludes a member whose only role in this unit is super_admin — that
+// capability is deliberately narrower and more "site operator" than a
+// community leadership role (see units.IsSuperAdmin's own doc comment):
+// it's how an ops/bootstrap login (e.g. internal/bootstrap.CreateAdmin,
+// or internal/demoseed's "Rivera Family (admin)" persona) gets set up,
+// not necessarily a family actually in the program. A member holding
+// super_admin alongside a real role (Scoutmaster, Treasurer, parent,
+// etc.) still shows normally — only a member with no OTHER role is
+// treated as a pure technical account and left out.
 func DirectoryForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]DirectoryEntry, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT
@@ -68,8 +78,13 @@ func DirectoryForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([
 			CASE WHEN members.release_phone THEN COALESCE(members.cell_phone, '') ELSE '' END
 		FROM families
 		JOIN members ON members.family_id = families.id
-		JOIN role_assignments ON role_assignments.member_id = members.id
-		WHERE role_assignments.unit_id = $1 AND members.active
+		WHERE members.active
+			AND EXISTS (
+				SELECT 1 FROM role_assignments
+				WHERE role_assignments.member_id = members.id
+					AND role_assignments.unit_id = $1
+					AND role_assignments.role <> 'super_admin'
+			)
 		GROUP BY families.id, families.name, families.release_address, families.address,
 			members.id, members.first_name, members.last_name, members.member_type,
 			members.release_email, members.release_phone, members.email, members.home_phone, members.cell_phone
