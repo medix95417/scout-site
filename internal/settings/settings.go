@@ -203,6 +203,16 @@ const ScoutAccountSelfService = "scout_account_self_service"
 const (
 	PaymentsStripeEnabled = "payments_stripe_enabled"
 	PaymentsPayPalEnabled = "payments_paypal_enabled"
+	// SocialFacebookEnabled/SocialInstagramEnabled/SocialTikTokEnabled gate
+	// whether each social link (see SocialFacebookURL etc. below) actually
+	// shows in the footer and on the homepage. Default true so a unit that
+	// already had one of these URLs set (via the old /admin/home editor,
+	// before this moved here — see content.LegacySocialURL) keeps showing
+	// it with no extra action; turning one off hides it without clearing
+	// the URL underneath.
+	SocialFacebookEnabled  = "social_facebook_enabled"
+	SocialInstagramEnabled = "social_instagram_enabled"
+	SocialTikTokEnabled    = "social_tiktok_enabled"
 	// PayPalLiveMode picks which of PayPal's two separate API environments
 	// PayPalClientID/PayPalClientSecret are checked against — sandbox
 	// (default; PayPal's test environment, no real money moves) or live.
@@ -260,6 +270,27 @@ var UnitToggles = []UnitToggle{
 		Description: "Off (default) checks the sandbox credentials below — PayPal's test environment, no real money moves. Turn on only once you've entered real, live PayPal credentials and are ready to accept actual payments.",
 		Default:     false,
 		Section:     "payments",
+	},
+	{
+		Key:         SocialFacebookEnabled,
+		Label:       "Show Facebook link",
+		Description: "Shows a Facebook icon/link in the site footer and on the homepage once a page URL is set below. Turn off to hide it without losing the URL you've entered.",
+		Default:     true,
+		Section:     "social",
+	},
+	{
+		Key:         SocialInstagramEnabled,
+		Label:       "Show Instagram link",
+		Description: "Shows an Instagram icon/link in the site footer and on the homepage once a profile URL is set below. Turn off to hide it without losing the URL you've entered.",
+		Default:     true,
+		Section:     "social",
+	},
+	{
+		Key:         SocialTikTokEnabled,
+		Label:       "Show TikTok link",
+		Description: "Shows a TikTok icon/link in the site footer and on the homepage once a profile URL is set below. Turn off to hide it without losing the URL you've entered.",
+		Default:     true,
+		Section:     "social",
 	},
 }
 
@@ -578,19 +609,28 @@ const (
 
 	PayPalClientID     = "paypal_client_id"
 	PayPalClientSecret = "paypal_client_secret"
+
+	SocialFacebookURL  = "social_facebook_url"
+	SocialInstagramURL = "social_instagram_url"
+	SocialTikTokURL    = "social_tiktok_url"
 )
 
-// UnitTextSetting describes one per-unit text setting for the "Payments"
-// section of /admin/settings. Secret marks a real credential: the admin
-// page never re-displays its actual value once saved, and leaving the
-// field blank on submit leaves the stored value unchanged instead of
-// clearing it (see SetUnitText).
+// UnitTextSetting describes one per-unit text setting for /admin/settings.
+// Secret marks a real credential: the admin page never re-displays its
+// actual value once saved, and leaving the field blank on submit leaves
+// the stored value unchanged instead of clearing it (see SetUnitText).
+// Section groups related settings under their own heading and their own
+// save form, the same way UnitToggle.Section does — "payments" for the
+// Stripe/PayPal credentials, "social" for the social-profile URLs, each
+// saved independently so submitting one section's form can never blank
+// out a field that belongs to the other.
 type UnitTextSetting struct {
 	Key         string
 	Label       string
 	Description string
 	Placeholder string
 	Secret      bool
+	Section     string
 }
 
 // UnitTextSettings is every per-unit text/credential setting the
@@ -601,6 +641,7 @@ var UnitTextSettings = []UnitTextSetting{
 		Label:       "Stripe publishable key",
 		Description: "Starts with pk_test_ (sandbox) or pk_live_ — safe to expose in a browser, this is what a Stripe Checkout page needs client-side.",
 		Placeholder: "pk_live_...",
+		Section:     "payments",
 	},
 	{
 		Key:         StripeSecretKey,
@@ -608,6 +649,7 @@ var UnitTextSettings = []UnitTextSetting{
 		Description: "Starts with sk_test_ or sk_live_ — grants real account access; never share it outside this form.",
 		Placeholder: "sk_live_...",
 		Secret:      true,
+		Section:     "payments",
 	},
 	{
 		Key:         StripeWebhookSigningSecret,
@@ -615,12 +657,14 @@ var UnitTextSettings = []UnitTextSetting{
 		Description: "Starts with whsec_ — from the webhook endpoint's settings in the Stripe Dashboard, once a checkout integration is wired up to verify incoming events actually came from Stripe.",
 		Placeholder: "whsec_...",
 		Secret:      true,
+		Section:     "payments",
 	},
 	{
 		Key:         PayPalClientID,
 		Label:       "PayPal client ID",
 		Description: "From your PayPal app's credentials — the sandbox or live one, matching the PayPal live mode toggle above.",
 		Placeholder: "",
+		Section:     "payments",
 	},
 	{
 		Key:         PayPalClientSecret,
@@ -628,6 +672,28 @@ var UnitTextSettings = []UnitTextSetting{
 		Description: "From the same PayPal app — grants real account access; never share it outside this form.",
 		Placeholder: "",
 		Secret:      true,
+		Section:     "payments",
+	},
+	{
+		Key:         SocialFacebookURL,
+		Label:       "Facebook page URL",
+		Description: "Shows a Facebook icon/link in the footer and on the homepage, once the toggle above is on.",
+		Placeholder: "https://facebook.com/yourtroop",
+		Section:     "social",
+	},
+	{
+		Key:         SocialInstagramURL,
+		Label:       "Instagram profile URL",
+		Description: "Shows an Instagram icon/link in the footer and on the homepage, once the toggle above is on.",
+		Placeholder: "https://instagram.com/yourtroop",
+		Section:     "social",
+	},
+	{
+		Key:         SocialTikTokURL,
+		Label:       "TikTok profile URL",
+		Description: "Shows a TikTok icon/link in the footer and on the homepage, once the toggle above is on.",
+		Placeholder: "https://tiktok.com/@yourtroop",
+		Section:     "social",
 	},
 }
 
