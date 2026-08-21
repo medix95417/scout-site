@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -172,6 +173,18 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, rosterRow{RosterEntry: e, Editable: scope.UnitWide || manageable[e.ID]})
 	}
 
+	// Deactivated members no longer show up in the roster above — this is
+	// the only way to find one again in order to reactivate them (see
+	// roster.SetMemberActive).
+	inactiveEntries, err := family.InactiveRosterForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading inactive roster: %v", err)
+	}
+	inactiveRows := make([]rosterRow, 0, len(inactiveEntries))
+	for _, e := range inactiveEntries {
+		inactiveRows = append(inactiveRows, rosterRow{RosterEntry: e, Editable: scope.UnitWide || manageable[e.ID]})
+	}
+
 	allowedRoles, err := roster.AllowedRoles(r.Context(), h.Pool, unit.UnitType, unit.ID, scope)
 	if err != nil {
 		log.Printf("web: loading allowed roles: %v", err)
@@ -186,6 +199,7 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 		Families         []roster.FamilyOption
 		Roles            []roster.RoleOption
 		Roster           []rosterRow
+		InactiveRoster   []rosterRow
 		OtherMembers     []roster.MemberOption
 	}{
 		baseData:         h.base(r, "Manage Roster"),
@@ -196,6 +210,7 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 		Families:         families,
 		Roles:            allowedRoles,
 		Roster:           rows,
+		InactiveRoster:   inactiveRows,
 		OtherMembers:     otherMembers,
 	}
 	h.render(w, h.rosterAdmin, data)
@@ -622,6 +637,70 @@ func (h *Handlers) AdminRosterMemberUpdate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	http.Redirect(w, r, "/admin/roster/members/"+memberID, http.StatusSeeOther)
+}
+
+// AdminRosterMemberDeactivate takes a member off this unit's roster (see
+// roster.SetMemberActive) while keeping their record and role assignments
+// intact — refused with a friendly error if they still hold a nonzero
+// Scout account balance anywhere.
+func (h *Handlers) AdminRosterMemberDeactivate(w http.ResponseWriter, r *http.Request) {
+	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	if !ok {
+		return
+	}
+	memberID := r.PathValue("id")
+	manageable, err := scope.CanManageMember(r.Context(), h.Pool, memberID, unit.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !manageable {
+		http.Error(w, "this member is outside your "+subGroupNoun(unit.UnitType), http.StatusForbidden)
+		return
+	}
+
+	if err := roster.SetMemberActive(r.Context(), h.Pool, memberID, false, actor.ID); err != nil {
+		var nz roster.NonZeroBalanceError
+		if errors.As(err, &nz) {
+			parts := make([]string, len(nz.Balances))
+			for i, b := range nz.Balances {
+				parts[i] = b.UnitName + ": " + formatCents(b.BalanceCents)
+			}
+			http.Error(w, "can't deactivate — this member's Scout account balance must be $0.00 first ("+strings.Join(parts, "; ")+")", http.StatusBadRequest)
+			return
+		}
+		log.Printf("web: deactivating member: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin/roster/members/"+memberID, http.StatusSeeOther)
+}
+
+// AdminRosterMemberReactivate restores a previously deactivated member to
+// this unit's roster — every role assignment they held is still there, so
+// there's nothing else to reassign.
+func (h *Handlers) AdminRosterMemberReactivate(w http.ResponseWriter, r *http.Request) {
+	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	if !ok {
+		return
+	}
+	memberID := r.PathValue("id")
+	manageable, err := scope.CanManageMember(r.Context(), h.Pool, memberID, unit.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !manageable {
+		http.Error(w, "this member is outside your "+subGroupNoun(unit.UnitType), http.StatusForbidden)
+		return
+	}
+
+	if err := roster.SetMemberActive(r.Context(), h.Pool, memberID, true, actor.ID); err != nil {
+		log.Printf("web: reactivating member: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 	http.Redirect(w, r, "/admin/roster/members/"+memberID, http.StatusSeeOther)
 }
 

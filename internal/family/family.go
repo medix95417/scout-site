@@ -105,9 +105,20 @@ type RosterEntry struct {
 	Roles        []string
 }
 
-// RosterForUnit lists every member with at least one role assignment in the
-// given unit — i.e. everyone actually part of that unit, not just anyone in
-// the database. This is what leaders see on the roster page.
+// RosterForUnit lists every active member with at least one role
+// assignment in the given unit — i.e. everyone actually part of that
+// unit, not just anyone in the database. This is what leaders see on the
+// roster page. Two members are deliberately left out even though they
+// technically hold a role_assignment here:
+//   - a deactivated member (members.active = false — see SetMemberActive
+//     in internal/roster) is "off the rolls" by design, though their
+//     record and role assignments are untouched and they show up again in
+//     InactiveRosterForUnit below;
+//   - a member whose only role in this unit is super_admin — a site-wide
+//     configuration/ops grant, not a real membership — never belongs on a
+//     family-facing roster. Anyone who holds super_admin alongside a real
+//     membership role (e.g. a Scoutmaster who's also been granted
+//     super_admin) still appears normally, tagged with their real role.
 func RosterForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]RosterEntry, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT
@@ -117,7 +128,47 @@ func RosterForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Ro
 		FROM role_assignments
 		JOIN members ON members.id = role_assignments.member_id
 		LEFT JOIN sub_groups ON sub_groups.id = role_assignments.sub_group_id
-		WHERE role_assignments.unit_id = $1
+		WHERE role_assignments.unit_id = $1 AND members.active
+		GROUP BY members.id, members.family_id, members.first_name, members.last_name, members.member_type, sub_groups.name
+		HAVING NOT bool_and(role_assignments.role::text = 'super_admin')
+		ORDER BY (members.member_type = 'youth'), members.last_name, members.first_name
+	`, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []RosterEntry
+	for rows.Next() {
+		var e RosterEntry
+		if err := rows.Scan(
+			&e.ID, &e.FamilyID, &e.FirstName, &e.LastName, &e.MemberType,
+			&e.SubGroupName, &e.Roles,
+		); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// InactiveRosterForUnit is RosterForUnit's mirror image: every deactivated
+// member with at least one role assignment in the unit. Since a
+// deactivated member no longer shows up in RosterForUnit, this is the only
+// way the roster admin page can list them again in order to reactivate one
+// (see SetMemberActive in internal/roster) — reactivating needs no repair
+// beyond flipping the flag back, since their role assignments were never
+// touched.
+func InactiveRosterForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]RosterEntry, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT
+			members.id, members.family_id, members.first_name, members.last_name, members.member_type::text,
+			COALESCE(sub_groups.name, ''),
+			array_agg(DISTINCT role_assignments.role::text) AS roles
+		FROM role_assignments
+		JOIN members ON members.id = role_assignments.member_id
+		LEFT JOIN sub_groups ON sub_groups.id = role_assignments.sub_group_id
+		WHERE role_assignments.unit_id = $1 AND NOT members.active
 		GROUP BY members.id, members.family_id, members.first_name, members.last_name, members.member_type, sub_groups.name
 		ORDER BY (members.member_type = 'youth'), members.last_name, members.first_name
 	`, unitID)
@@ -142,7 +193,10 @@ func RosterForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Ro
 
 // RosterForSubGroup is RosterForUnit narrowed to one patrol/den — what a
 // sub-group's own members-only page (see internal/web's GroupView) shows
-// as its member list.
+// as its member list. Same active-only filtering as RosterForUnit (see its
+// doc comment); no need for the super_admin exclusion here, since a
+// super_admin role assignment is always whole-unit (sub_group_id NULL) and
+// so never matches this query's sub_group_id filter to begin with.
 func RosterForSubGroup(ctx context.Context, pool *pgxpool.Pool, subGroupID string) ([]RosterEntry, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT
@@ -152,7 +206,7 @@ func RosterForSubGroup(ctx context.Context, pool *pgxpool.Pool, subGroupID strin
 		FROM role_assignments
 		JOIN members ON members.id = role_assignments.member_id
 		LEFT JOIN sub_groups ON sub_groups.id = role_assignments.sub_group_id
-		WHERE role_assignments.sub_group_id = $1
+		WHERE role_assignments.sub_group_id = $1 AND members.active
 		GROUP BY members.id, members.family_id, members.first_name, members.last_name, members.member_type, sub_groups.name
 		ORDER BY (members.member_type = 'youth'), members.last_name, members.first_name
 	`, subGroupID)

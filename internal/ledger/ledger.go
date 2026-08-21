@@ -293,6 +293,51 @@ func ScoutAccountForMember(ctx context.Context, pool *pgxpool.Pool, unitID, memb
 	return a, true, nil
 }
 
+// ScoutAccountBalance is one member's individual account balance in a
+// unit, with the unit's name joined in for display — used by
+// roster.SetMemberActive's deactivation gate (see internal/roster) to
+// tell an admin exactly which unit(s) still hold money for a member being
+// taken off the rolls. A member can hold a scout_individual account in
+// more than one unit (see migration 0006's one-account-per-unit comment —
+// e.g. an older Scout also registered with the Pack as a den chief
+// helper), so this returns every one, not just the account in whichever
+// unit the deactivation was initiated from.
+type ScoutAccountBalance struct {
+	UnitID       string
+	UnitName     string
+	BalanceCents int64
+}
+
+// ScoutAccountBalancesForMember lists every scout_individual account a
+// member holds, across every unit, with its current balance.
+func ScoutAccountBalancesForMember(ctx context.Context, pool *pgxpool.Pool, memberID string) ([]ScoutAccountBalance, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT units.id, units.name,
+			COALESCE((
+				SELECT SUM(p.amount_cents) FROM ledger_postings p
+				JOIN ledger_transactions t ON t.id = p.transaction_id
+				WHERE p.account_id = a.id AND t.status = 'posted'
+			), 0) AS balance_cents
+		FROM ledger_accounts a
+		JOIN units ON units.id = a.unit_id
+		WHERE a.account_type = 'scout_individual' AND a.member_id = $1
+	`, memberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ScoutAccountBalance
+	for rows.Next() {
+		var b ScoutAccountBalance
+		if err := rows.Scan(&b.UnitID, &b.UnitName, &b.BalanceCents); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
 // CreateTripFund creates a new trip-fund account tied to a calendar
 // event — Treasurer-only, per units.CanManageLedger.
 func CreateTripFund(ctx context.Context, pool *pgxpool.Pool, unitID, eventID, name, createdBy string) (Account, error) {

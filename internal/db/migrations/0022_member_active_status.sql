@@ -1,0 +1,12 @@
+-- 0022_member_active_status.sql
+--
+-- A member who's left the unit (moved away, aged out, quit) needs a way to
+-- come off the roster without losing their history — advancement records,
+-- past ledger transactions, RSVPs, and the audit log all still reference
+-- members.id. `active` is a soft-delete flag: false hides a member from
+-- the roster (see family.RosterForUnit/RosterForSubGroup and
+-- roster.DirectoryForUnit) while leaving every other row involving them
+-- completely untouched, so reactivating (flipping it back to true) needs
+-- no repair — every role_assignment they held is still there, exactly as
+-- it was.
+ALTER TABLE members ADD COLUMN active boolean NOT NULL DEFAULT true;
