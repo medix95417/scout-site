@@ -23,7 +23,20 @@ import (
 // still shares in editing the one household address, since that's their
 // home too.
 
+// myFamilyMember decorates roster.MemberDetail with what's on file in
+// this unit specifically (den/patrol, roles) — read-only "here's your
+// current information" context alongside the editable contact fields
+// below it. Sourced from family.RosterForUnit rather than a new query:
+// a unit's roster is small, and this is the same lookup /roster already
+// does for everyone, just filtered down to this one family.
+type myFamilyMember struct {
+	roster.MemberDetail
+	SubGroupName string
+	Roles        []string
+}
+
 func (h *Handlers) MyFamily(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
 	if !loggedIn {
 		http.Redirect(w, r, "/login?next=/my-family", http.StatusSeeOther)
@@ -45,21 +58,38 @@ func (h *Handlers) MyFamily(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var details []roster.MemberDetail
+	unitRoster, err := family.RosterForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading unit roster: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	onFile := make(map[string]family.RosterEntry, len(unitRoster))
+	for _, e := range unitRoster {
+		onFile[e.ID] = e
+	}
+
+	var details []myFamilyMember
 	for _, id := range memberIDs {
 		d, found, err := roster.GetMember(r.Context(), h.Pool, id)
 		if err != nil {
 			log.Printf("web: loading member %s: %v", id, err)
 			continue
 		}
-		if found {
-			details = append(details, d)
+		if !found {
+			continue
 		}
+		m := myFamilyMember{MemberDetail: d}
+		if e, ok := onFile[id]; ok {
+			m.SubGroupName = e.SubGroupName
+			m.Roles = e.Roles
+		}
+		details = append(details, m)
 	}
 
 	data := struct {
 		baseData
-		Members []roster.MemberDetail
+		Members []myFamilyMember
 	}{
 		baseData: h.base(r, "My Family"),
 		Members:  details,
@@ -107,63 +137,6 @@ func (h *Handlers) MyFamilyUpdateMember(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	http.Redirect(w, r, "/my-family", http.StatusSeeOther)
-}
-
-// MyFamilyExportPDF generates a downloadable PDF of the caller's own
-// family — same unfiltered contact info /my-family itself shows (this is
-// your own household's data, not subject to the release-to-others toggles
-// that gate /directory).
-func (h *Handlers) MyFamilyExportPDF(w http.ResponseWriter, r *http.Request) {
-	user, loggedIn := auth.UserFromContext(r.Context())
-	if !loggedIn {
-		http.Redirect(w, r, "/login?next=/my-family", http.StatusSeeOther)
-		return
-	}
-
-	var memberIDs []string
-	if user.MemberID != nil {
-		memberIDs = []string{*user.MemberID}
-	} else {
-		members, err := family.MembersForFamily(r.Context(), h.Pool, user.FamilyID)
-		if err != nil {
-			log.Printf("web: loading family members: %v", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		for _, m := range members {
-			memberIDs = append(memberIDs, m.ID)
-		}
-	}
-
-	fam := pdfFamily{Name: "My Family"}
-	for _, id := range memberIDs {
-		d, found, err := roster.GetMember(r.Context(), h.Pool, id)
-		if err != nil {
-			log.Printf("web: loading member %s: %v", id, err)
-			continue
-		}
-		if !found {
-			continue
-		}
-		if fam.Name == "My Family" {
-			fam.Name = d.FamilyName
-			fam.Address = d.FamilyAddress
-		}
-		fam.Members = append(fam.Members, pdfMember{
-			Name:      d.FirstName + " " + d.LastName,
-			Email:     d.Email,
-			HomePhone: d.HomePhone,
-			CellPhone: d.CellPhone,
-		})
-	}
-
-	data, err := familyDirectoryPDF(fam.Name, []pdfFamily{fam})
-	if err != nil {
-		log.Printf("web: rendering my-family PDF: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	writePDF(w, "my-family.pdf", data)
 }
 
 func (h *Handlers) FamilyDirectory(w http.ResponseWriter, r *http.Request) {

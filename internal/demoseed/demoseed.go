@@ -275,7 +275,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool) (Summary, error) {
 	troopNews, err := content.CreatePost(ctx, pool, troop.ID, "post",
 		"Summer Camp 2026 Sign-Ups Are Open",
 		"Registration for Summer Camp 2026 is open now through the end of the month. See Sam or Ashley at the next meeting to sign up, or check the Summer Camp trip fund on the Treasury page to start saving.",
-		"public", sam.MemberID)
+		"public", "", sam.MemberID)
 	if err != nil {
 		return Summary{}, fmt.Errorf("demoseed: creating Troop news post: %w", err)
 	}
@@ -285,13 +285,13 @@ func Run(ctx context.Context, pool *pgxpool.Pool) (Summary, error) {
 	if _, err := content.CreatePost(ctx, pool, troop.ID, "post",
 		"Eagle Project Fundraiser — Details Coming Soon",
 		"Presley is planning an Eagle Scout service project fundraiser this fall — more details once the plan is finalized.",
-		"members", sam.MemberID); err != nil {
+		"members", "", sam.MemberID); err != nil {
 		return Summary{}, fmt.Errorf("demoseed: creating Troop draft news post: %w", err)
 	}
 	troopGallery, err := content.CreatePost(ctx, pool, troop.ID, "gallery", "Fall Campout 2025",
 		"https://commons.wikimedia.org/wiki/Special:FilePath/Cole_Canoe_Base_Boy_Scout_Campfire.JPG | Campfire on Saturday night\n"+
 			"https://commons.wikimedia.org/wiki/Special:FilePath/Campsite_at_NoBeBoSco_07152018.jpg | Eagle Patrol's campsite",
-		"public", sam.MemberID)
+		"public", "", sam.MemberID)
 	if err != nil {
 		return Summary{}, fmt.Errorf("demoseed: creating Troop gallery: %w", err)
 	}
@@ -302,7 +302,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool) (Summary, error) {
 	packNews, err := content.CreatePost(ctx, pool, pack.ID, "post",
 		"Popcorn Kickoff This Weekend",
 		"Pack 47's popcorn fundraiser kicks off this Saturday at the Popcorn Kickoff event — see the calendar for details.",
-		"public", casey.MemberID)
+		"public", "", casey.MemberID)
 	if err != nil {
 		return Summary{}, fmt.Errorf("demoseed: creating Pack news post: %w", err)
 	}
@@ -312,17 +312,31 @@ func Run(ctx context.Context, pool *pgxpool.Pool) (Summary, error) {
 	if _, err := content.CreatePost(ctx, pool, pack.ID, "post",
 		"Den Leader Volunteers Needed",
 		"Bear Den 3 is looking for a second adult volunteer for the spring semester — talk to Dana if you're interested.",
-		"members", casey.MemberID); err != nil {
+		"members", "", casey.MemberID); err != nil {
 		return Summary{}, fmt.Errorf("demoseed: creating Pack draft news post: %w", err)
 	}
 	packGallery, err := content.CreatePost(ctx, pool, pack.ID, "gallery", "Pinewood Derby 2025",
 		"https://commons.wikimedia.org/wiki/Special:FilePath/Pinewood_derby_cars_02.jpg | Cars on the track",
-		"members", casey.MemberID)
+		"members", "", casey.MemberID)
 	if err != nil {
 		return Summary{}, fmt.Errorf("demoseed: creating Pack gallery: %w", err)
 	}
 	if err := content.SetPublished(ctx, pool, packGallery.ID, pack.ID, true, casey.MemberID); err != nil {
 		return Summary{}, fmt.Errorf("demoseed: publishing Pack gallery: %w", err)
+	}
+
+	// One den-scoped news post — shows up only on Bear Den 3's own page
+	// (see internal/web/groups.go's GroupView "News" section), not on the
+	// unit-wide /news feed.
+	bearDenNews, err := content.CreatePost(ctx, pool, pack.ID, "post",
+		"Great job at the Pinewood Derby!",
+		"Bear Den 3 took second place as a den at this year's derby — thanks to everyone who came out to cheer on our racers.",
+		"members", bearDen.ID, casey.MemberID)
+	if err != nil {
+		return Summary{}, fmt.Errorf("demoseed: creating Bear Den 3 news post: %w", err)
+	}
+	if err := content.SetPublished(ctx, pool, bearDenNews.ID, pack.ID, true, casey.MemberID); err != nil {
+		return Summary{}, fmt.Errorf("demoseed: publishing Bear Den 3 news post: %w", err)
 	}
 
 	// -- Calendar: past / upcoming-public / upcoming-members / pending-approval / trip-fund-linked --

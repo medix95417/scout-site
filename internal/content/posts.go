@@ -38,6 +38,7 @@ import (
 type Post struct {
 	ID         string
 	UnitID     string
+	SubGroupID string // "" unless scoped to one den/patrol's own page
 	Slug       string
 	Title      string
 	Body       string
@@ -87,29 +88,36 @@ func randomSlug(pageType string) (string, error) {
 	return pageType + "-" + hex.EncodeToString(b), nil
 }
 
-const postColumns = `id, unit_id, slug, title, body, page_type::text, visibility::text, status::text, created_at, updated_at`
+const postColumns = `id, unit_id, COALESCE(sub_group_id::text, ''), slug, title, body, page_type::text, visibility::text, status::text, created_at, updated_at`
 
 func scanPost(row interface{ Scan(dest ...any) error }) (Post, error) {
 	var p Post
-	err := row.Scan(&p.ID, &p.UnitID, &p.Slug, &p.Title, &p.Body, &p.PageType, &p.Visibility, &p.Status, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &p.UnitID, &p.SubGroupID, &p.Slug, &p.Title, &p.Body, &p.PageType, &p.Visibility, &p.Status, &p.CreatedAt, &p.UpdatedAt)
 	return p, err
 }
 
 // CreatePost creates a new post or gallery as a draft — a leader
 // publishes it explicitly via SetPublished once it's ready, so a
 // half-written announcement or a gallery mid-upload is never visible to
-// families in between.
-func CreatePost(ctx context.Context, pool *pgxpool.Pool, unitID, pageType, title, body, visibility, actorID string) (Post, error) {
+// families in between. subGroupID scopes it to one den/patrol's own page
+// (see GroupView's "News" section) — pass "" for the unit-wide /news and
+// /gallery feeds.
+func CreatePost(ctx context.Context, pool *pgxpool.Pool, unitID, pageType, title, body, visibility, subGroupID, actorID string) (Post, error) {
 	slug, err := randomSlug(pageType)
 	if err != nil {
 		return Post{}, fmt.Errorf("content: generating slug: %w", err)
 	}
 
+	var subGroupIDArg *string
+	if subGroupID != "" {
+		subGroupIDArg = &subGroupID
+	}
+
 	p, err := scanPost(pool.QueryRow(ctx, `
-		INSERT INTO content_pages (unit_id, slug, title, body, page_type, visibility, status, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7)
+		INSERT INTO content_pages (unit_id, sub_group_id, slug, title, body, page_type, visibility, status, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8)
 		RETURNING `+postColumns,
-		unitID, slug, title, body, pageType, visibility, actorID))
+		unitID, subGroupIDArg, slug, title, body, pageType, visibility, actorID))
 	if err != nil {
 		return Post{}, err
 	}
@@ -229,25 +237,29 @@ func queryPosts(ctx context.Context, pool *pgxpool.Pool, sql string, args ...any
 	return posts, rows.Err()
 }
 
-// ListAllForUnit returns every post/gallery of the given type (draft and
-// published alike), newest first — what the admin list
-// (/admin/news, /admin/gallery) shows.
+// ListAllForUnit returns every unit-wide post/gallery of the given type
+// (draft and published alike), newest first — what the admin list
+// (/admin/news, /admin/gallery) shows. Excludes sub_group_id-scoped
+// posts: those are a den's/patrol's own news, managed and shown only on
+// that sub-group's page (see GroupView/ListPublishedForSubGroup), not
+// mixed into the whole-unit feed.
 func ListAllForUnit(ctx context.Context, pool *pgxpool.Pool, unitID, pageType string) ([]Post, error) {
 	return queryPosts(ctx, pool, `
 		SELECT `+postColumns+`
 		FROM content_pages
-		WHERE unit_id = $1 AND page_type = $2
+		WHERE unit_id = $1 AND page_type = $2 AND sub_group_id IS NULL
 		ORDER BY created_at DESC
 	`, unitID, pageType)
 }
 
-// ListPublishedForUnit returns published posts/galleries of any
-// visibility, newest first — what a logged-in family sees.
+// ListPublishedForUnit returns published, unit-wide posts/galleries of
+// any visibility, newest first — what a logged-in family sees. See
+// ListAllForUnit on why sub_group_id-scoped posts are excluded.
 func ListPublishedForUnit(ctx context.Context, pool *pgxpool.Pool, unitID, pageType string) ([]Post, error) {
 	return queryPosts(ctx, pool, `
 		SELECT `+postColumns+`
 		FROM content_pages
-		WHERE unit_id = $1 AND page_type = $2 AND status = 'published'
+		WHERE unit_id = $1 AND page_type = $2 AND status = 'published' AND sub_group_id IS NULL
 		ORDER BY created_at DESC
 	`, unitID, pageType)
 }
@@ -261,7 +273,22 @@ func ListPublishedPublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID,
 	return queryPosts(ctx, pool, `
 		SELECT `+postColumns+`
 		FROM content_pages
-		WHERE unit_id = $1 AND page_type = $2 AND status = 'published' AND visibility = 'public'
+		WHERE unit_id = $1 AND page_type = $2 AND status = 'published' AND visibility = 'public' AND sub_group_id IS NULL
 		ORDER BY created_at DESC
 	`, unitID, pageType)
+}
+
+// ListPublishedForSubGroup returns a den's/patrol's own published news
+// posts, newest first — the "News" section on that sub-group's members-
+// only page (see internal/web/groups.go's GroupView). Always page_type =
+// 'post': a sub-group's photos are handled separately, by linking
+// existing file-library images (files.ListForSubGroup), not by a
+// sub-group-scoped gallery post.
+func ListPublishedForSubGroup(ctx context.Context, pool *pgxpool.Pool, subGroupID, unitID string) ([]Post, error) {
+	return queryPosts(ctx, pool, `
+		SELECT `+postColumns+`
+		FROM content_pages
+		WHERE unit_id = $1 AND sub_group_id = $2 AND page_type = 'post' AND status = 'published'
+		ORDER BY created_at DESC
+	`, unitID, subGroupID)
 }

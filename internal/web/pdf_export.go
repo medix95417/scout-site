@@ -9,13 +9,11 @@ import (
 	"github.com/go-pdf/fpdf"
 )
 
-// This file renders the simple, printable family-contact-list PDF shared by
-// /directory/export.pdf (every family, contact fields already
-// release-filtered by roster.DirectoryForUnit) and /my-family/export.pdf
-// (just the caller's own family, unfiltered — same "see your own stuff
-// regardless of release settings" rule /my-family's own page already
-// follows). Deliberately a real, server-generated PDF rather than a
-// print stylesheet alone — see CHANGELOG.md's entry for why.
+// This file renders the simple, printable family-contact-list PDF used by
+// /directory/export.pdf — every family, contact fields already
+// release-filtered by roster.DirectoryForUnit. Deliberately a real,
+// server-generated PDF rather than a print stylesheet alone — see
+// CHANGELOG.md's entry for why.
 
 // pdfMember is the minimal shape the PDF needs, decoupled from whichever
 // roster type (roster.DirectoryEntry.Members or roster.MemberDetail)
