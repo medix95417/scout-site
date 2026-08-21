@@ -20,6 +20,16 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Print a calendar date range, optionally narrowed to specific dens/patrols.**
+`/calendar` gained a "Print Events" section: pick a date range (either end
+optional) and, if the unit has any dens/patrols, choose specific ones to
+include — leave none checked to print every event. A whole-unit event
+always stays in regardless of which den/patrol is checked, matching how
+the on-screen month grid already shows it to everyone. Printing respects
+the exact same visibility rules as the browser: a logged-out visitor only
+ever gets public events, and a logged-in family gets everything they could
+already see on-screen — never more.
+
 **Print a Scout ledger statement — one Scout, or a whole family, for any
 date range.** A Scout's account page (`/treasury/accounts/{id}`, reachable
 by the Scout/family themselves, not just the Treasurer) now has a "Print

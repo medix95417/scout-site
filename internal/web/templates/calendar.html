@@ -65,6 +65,39 @@
     </section>
   {{end}}
 
+  <details class="mb-8 rounded-lg border border-gray-200 bg-white p-4">
+    <summary class="cursor-pointer select-none text-lg font-semibold">Print Events</summary>
+    <p class="text-xs text-gray-500 mt-2 mb-3">
+      Choose a date range (leave either blank for "since the beginning"/"through today")
+      {{if .AllSubGroups}} and which {{.SubGroupNoun}}(s) to include — leave all unchecked for every event{{end}}.
+    </p>
+    <form method="get" action="/calendar/export.pdf" class="space-y-3 max-w-sm">
+      {{if .AllSubGroups}}
+        <div class="space-y-1">
+          {{range .AllSubGroups}}
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="sub_group_id" value="{{.ID}}">
+              {{.Name}}
+            </label>
+          {{end}}
+        </div>
+      {{end}}
+      <div class="flex items-end gap-2">
+        <div class="flex-1">
+          <label class="block text-xs text-gray-500 mb-1" for="cal-from">From</label>
+          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="date" id="cal-from" name="from">
+        </div>
+        <div class="flex-1">
+          <label class="block text-xs text-gray-500 mb-1" for="cal-to">To</label>
+          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="date" id="cal-to" name="to">
+        </div>
+      </div>
+      <button type="submit" class="rounded-md border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50 w-full">
+        Download PDF
+      </button>
+    </form>
+  </details>
+
   <section class="mb-8">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-lg font-semibold">{{.Month.Label}}</h2>
