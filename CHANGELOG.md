@@ -20,6 +20,33 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**My Family page cleanup, roster search, and single-page den/patrol sites
+with events, news, and photos.**
+- **Removed the "Print / Download PDF" link from `/my-family`** — it
+  duplicated the Family Directory's own PDF export for little benefit on a
+  page that's about editing your own info, not printing it.
+- **`/my-family` now shows what's on file before you edit it** — each
+  member's card leads with their member type, den/patrol, and roles (all
+  read-only; those are managed by a leader), then the existing editable
+  contact-info fields below.
+- **Roster search.** `/admin/roster`'s "Current Roster" table gained a
+  live, client-side search box — type a name to filter the table down as
+  you type. Each row's name is now also a link straight to that member's
+  detail/edit page (previously only the separate "Edit" action linked
+  there).
+- **Den/patrol pages are now a fuller single-page hub.** Each sub-group's
+  members-only page (`/groups/{id}`) gained:
+  - An **Upcoming Events** section — that sub-group's own scoped events
+    plus every whole-unit event (a Troop event on a patrol's page, a Pack
+    event on a den's page), tagged so it's clear which is which.
+  - A **News** section — short updates a Den Leader/Patrol Leader (or any
+    unit-wide leader) can post directly from the group's own page, visible
+    only there, not mixed into the unit-wide `/news` feed. Built on
+    `content_pages.sub_group_id`, a column that's existed since the
+    original schema but was never used until now.
+  - The existing member list and linked photo gallery stay, just
+    reorganized alongside the new sections on the same page.
+
 **Scout Accounts report, fundraiser-to-event linkage, roster and event
 attendee PDFs, and clearer council-confirmation wording.**
 - **Scout Accounts report** — a 5th report type under `/treasury/reports`

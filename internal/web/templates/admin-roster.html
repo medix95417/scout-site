@@ -134,9 +134,14 @@
     </section>
   {{end}}
 
-  <h2 class="text-lg font-semibold mb-3">Current Roster</h2>
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-lg font-semibold">Current Roster</h2>
+    <input id="roster-search" type="text" placeholder="Search by name…"
+           class="w-56 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+           oninput="filterRoster(this.value)">
+  </div>
   {{if .Roster}}
-    <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
+    <table id="roster-table" class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
       <thead class="bg-gray-100 text-left">
         <tr>
           <th class="px-4 py-2">Name</th>
@@ -148,8 +153,14 @@
       </thead>
       <tbody>
         {{range .Roster}}
-          <tr class="border-t border-gray-100">
-            <td class="px-4 py-2">{{.FirstName}} {{.LastName}}</td>
+          <tr class="border-t border-gray-100" data-name="{{.FirstName}} {{.LastName}}">
+            <td class="px-4 py-2">
+              {{if .Editable}}
+                <a href="/admin/roster/members/{{.ID}}" class="underline" style="color: var(--unit-color);">{{.FirstName}} {{.LastName}}</a>
+              {{else}}
+                {{.FirstName}} {{.LastName}}
+              {{end}}
+            </td>
             <td class="px-4 py-2 capitalize">{{.MemberType}}</td>
             <td class="px-4 py-2">{{if .SubGroupName}}{{.SubGroupName}}{{else}}—{{end}}</td>
             <td class="px-4 py-2">{{range .Roles}}<span class="inline-block rounded-full bg-gray-100 px-2 py-0.5 mr-1 text-xs">{{.}}</span>{{end}}</td>
@@ -163,6 +174,21 @@
         {{end}}
       </tbody>
     </table>
+    <p id="roster-no-matches" class="hidden text-sm text-gray-500 mt-3">No members match "<span id="roster-no-matches-query"></span>".</p>
+    <script>
+      function filterRoster(query) {
+        var q = query.trim().toLowerCase();
+        var rows = document.querySelectorAll('#roster-table tbody tr');
+        var visible = 0;
+        rows.forEach(function (row) {
+          var match = row.dataset.name.toLowerCase().indexOf(q) !== -1;
+          row.classList.toggle('hidden', !match);
+          if (match) visible++;
+        });
+        document.getElementById('roster-no-matches-query').textContent = query;
+        document.getElementById('roster-no-matches').classList.toggle('hidden', !(q && visible === 0));
+      }
+    </script>
   {{else}}
     <p class="text-sm text-gray-500">No members recorded for this unit yet.</p>
   {{end}}

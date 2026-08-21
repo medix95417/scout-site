@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/47-yonkers/scout-site/internal/auth"
+	"github.com/47-yonkers/scout-site/internal/calendar"
+	"github.com/47-yonkers/scout-site/internal/content"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/files"
 	"github.com/47-yonkers/scout-site/internal/roster"
@@ -97,6 +99,29 @@ func (h *Handlers) GroupView(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: loading sub-group photos: %v", err)
 	}
 
+	// Events for this sub-group's own page: its own scoped events plus
+	// every whole-unit event (a Troop event for a patrol, a Pack event for
+	// a den) — the same visibility FilterVisibleToViewer already gives a
+	// member of this one sub-group on /calendar, just without needing
+	// canEditContent's "see every sub-group" escape hatch here.
+	allEvents, err := calendar.ListUpcomingForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading events for sub-group page: %v", err)
+	}
+	events := calendar.FilterVisibleToViewer(allEvents, map[string]bool{group.ID: true}, false)
+	if len(events) > 8 {
+		events = events[:8]
+	}
+
+	news, err := content.ListPublishedForSubGroup(r.Context(), h.Pool, group.ID, unit.ID)
+	if err != nil {
+		log.Printf("web: loading sub-group news: %v", err)
+	}
+	newsViews := make([]publicPostView, 0, len(news))
+	for _, p := range news {
+		newsViews = append(newsViews, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.CreatedAt), Excerpt: p.Body})
+	}
+
 	scope, err := h.rosterScope(r.Context(), user, unit.ID)
 	if err != nil {
 		log.Printf("web: computing roster scope: %v", err)
@@ -108,6 +133,8 @@ func (h *Handlers) GroupView(w http.ResponseWriter, r *http.Request) {
 		Group        roster.SubGroup
 		Members      []family.RosterEntry
 		Photos       []files.File
+		Events       []calendar.Event
+		News         []publicPostView
 		Scope        roster.Scope
 	}{
 		baseData:     h.base(r, group.Name),
@@ -115,6 +142,8 @@ func (h *Handlers) GroupView(w http.ResponseWriter, r *http.Request) {
 		Group:        group,
 		Members:      members,
 		Photos:       photos,
+		Events:       events,
+		News:         newsViews,
 		Scope:        scope,
 	}
 	h.render(w, h.groupView, data)
@@ -230,4 +259,81 @@ func (h *Handlers) AdminGroupSetPhotos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/admin/groups/"+subGroupID, http.StatusSeeOther)
+}
+
+// AdminGroupCreateNews posts a short news item to one patrol's/den's own
+// page — same "manage your own sub-group" gate as AdminGroupUpdate/
+// AdminGroupSetPhotos above. Published immediately rather than going
+// through the unit-wide /admin/news draft workflow: this is a short,
+// low-stakes update visible only within the site (the group page is
+// already members-only), not worth a separate publish step.
+func (h *Handlers) AdminGroupCreateNews(w http.ResponseWriter, r *http.Request) {
+	unit, actor, scope, ok := h.requireRosterEditor(w, r, r.URL.Path)
+	if !ok {
+		return
+	}
+	subGroupID := r.PathValue("id")
+	if !scope.CanManageSubGroup(subGroupID) {
+		http.Error(w, "this "+subGroupNoun(unit.UnitType)+" is outside what you can manage", http.StatusForbidden)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	title := strings.TrimSpace(r.PostFormValue("title"))
+	body := r.PostFormValue("body")
+	if title == "" {
+		http.Error(w, "title is required", http.StatusBadRequest)
+		return
+	}
+
+	p, err := content.CreatePost(r.Context(), h.Pool, unit.ID, "post", title, body, "members", subGroupID, actor.ID)
+	if err != nil {
+		log.Printf("web: creating sub-group news post: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if err := content.SetPublished(r.Context(), h.Pool, p.ID, unit.ID, true, actor.ID); err != nil {
+		log.Printf("web: publishing sub-group news post: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/groups/"+subGroupID, http.StatusSeeOther)
+}
+
+// AdminGroupDeleteNews removes one of this sub-group's own news posts —
+// implemented as unpublishing (content.SetPublished false) rather than a
+// hard delete, same "keep the history, just hide it" posture /admin/news
+// already uses for its own publish toggle.
+func (h *Handlers) AdminGroupDeleteNews(w http.ResponseWriter, r *http.Request) {
+	unit, actor, scope, ok := h.requireRosterEditor(w, r, r.URL.Path)
+	if !ok {
+		return
+	}
+	subGroupID := r.PathValue("id")
+	if !scope.CanManageSubGroup(subGroupID) {
+		http.Error(w, "this "+subGroupNoun(unit.UnitType)+" is outside what you can manage", http.StatusForbidden)
+		return
+	}
+
+	postID := r.PathValue("postID")
+	post, found, err := content.GetPostAnyType(r.Context(), h.Pool, postID, unit.ID)
+	if err != nil {
+		log.Printf("web: loading sub-group news post: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !found || post.SubGroupID != subGroupID {
+		http.NotFound(w, r)
+		return
+	}
+
+	if err := content.SetPublished(r.Context(), h.Pool, postID, unit.ID, false, actor.ID); err != nil {
+		log.Printf("web: unpublishing sub-group news post: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/groups/"+subGroupID, http.StatusSeeOther)
 }

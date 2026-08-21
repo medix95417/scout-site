@@ -442,7 +442,6 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /my-family", h.MyFamily)
 	mux.HandleFunc("POST /my-family/members/{id}", h.MyFamilyUpdateMember)
 	mux.HandleFunc("POST /my-family/address", h.MyFamilyUpdateAddress)
-	mux.HandleFunc("GET /my-family/export.pdf", h.MyFamilyExportPDF)
 	mux.HandleFunc("GET /directory", h.FamilyDirectory)
 	mux.HandleFunc("GET /directory/export.pdf", h.DirectoryExportPDF)
 
@@ -452,6 +451,8 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/groups/{id}", h.AdminGroupEdit)
 	mux.HandleFunc("POST /admin/groups/{id}", h.AdminGroupUpdate)
 	mux.HandleFunc("POST /admin/groups/{id}/photos", h.AdminGroupSetPhotos)
+	mux.HandleFunc("POST /admin/groups/{id}/news", h.AdminGroupCreateNews)
+	mux.HandleFunc("POST /admin/groups/{id}/news/{postID}/delete", h.AdminGroupDeleteNews)
 }
 
 // baseData is embedded in every page's template data.

@@ -366,7 +366,7 @@ func (h *Handlers) adminContentCreate(w http.ResponseWriter, r *http.Request, ki
 		return
 	}
 
-	p, err := content.CreatePost(r.Context(), h.Pool, unit.ID, kind.PageType, title, body, visibility, actor.ID)
+	p, err := content.CreatePost(r.Context(), h.Pool, unit.ID, kind.PageType, title, body, visibility, "", actor.ID)
 	if err != nil {
 		log.Printf("web: creating %s: %v", kind.Label, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
