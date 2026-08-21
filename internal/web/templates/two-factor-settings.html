@@ -67,7 +67,7 @@
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <label class="block text-sm font-medium" for="code">Enter the 6-digit code your app shows now</label>
         <input class="w-full rounded-md border border-gray-300 px-3 py-2 tracking-widest" type="text" id="code" name="code" inputmode="numeric" placeholder="123456" required autofocus>
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">
           Confirm &amp; enable
         </button>
       </form>
@@ -77,7 +77,7 @@
       <p class="text-sm text-gray-600 mb-3">Not set up yet.</p>
       <form method="post" action="/settings/2fa/enroll">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">
           Set Up Two-Factor Authentication
         </button>
       </form>

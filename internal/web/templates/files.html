@@ -39,7 +39,7 @@
             </div>
           </details>
         {{end}}
-        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--unit-color);">
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: var(--accent-color);">
           Upload
         </button>
       </form>
@@ -82,7 +82,7 @@
                     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                     <input type="text" name="display_name" value="{{.DisplayName}}" placeholder="{{.Filename}}"
                            class="rounded-md border border-gray-300 px-2 py-1 text-xs w-40">
-                    <button type="submit" class="rounded-md px-2 py-1 text-white text-xs whitespace-nowrap" style="background-color: var(--unit-color);">Save</button>
+                    <button type="submit" class="rounded-md px-2 py-1 text-white text-xs whitespace-nowrap" style="background-color: var(--accent-color);">Save</button>
                   </form>
                 </details>
                 {{if hasPrefix .ContentType "image/"}}
@@ -118,7 +118,7 @@
                     </label>
                   {{end}}
                 </div>
-                <button type="submit" class="rounded-md px-3 py-1.5 text-white text-xs" style="background-color: var(--unit-color);">
+                <button type="submit" class="rounded-md px-3 py-1.5 text-white text-xs" style="background-color: var(--accent-color);">
                   Save linked events
                 </button>
               </form>

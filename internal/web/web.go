@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"strings"
@@ -34,6 +35,15 @@ import (
 
 //go:embed all:templates
 var templatesFS embed.FS
+
+// staticFS holds small, built-in brand assets (currently just the official
+// Cub Scouts/Scouts BSA trademark images a unit's logo_url may point at) —
+// unlike uploaded files/photos, these ship with the binary rather than
+// living in per-unit object storage, since they're the same fixed set of
+// program trademarks for every install rather than unit-specific content.
+//
+//go:embed all:static
+var staticFS embed.FS
 
 // errMemberNotFound backs actingMember's individual-login path — should
 // only ever happen if a member row was deleted out from under a still-live
@@ -280,6 +290,13 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 // Routes registers every Phase 1 route. Mounted by cmd/server after the
 // unit-resolution and auth middleware.
 func (h *Handlers) Routes(mux *http.ServeMux) {
+	// Built-in brand assets (trademark logos) — see staticFS's doc comment.
+	staticSub, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		panic("web: static assets: " + err.Error()) // can't happen — "static" is embedded above
+	}
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(staticSub)))
+
 	mux.HandleFunc("GET /{$}", h.Home)
 	mux.HandleFunc("GET /login", h.LoginForm)
 	mux.HandleFunc("POST /login", h.LoginSubmit)

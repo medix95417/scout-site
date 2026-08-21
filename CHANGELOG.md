@@ -20,6 +20,18 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**On-brand colors and official trademarks for both sites.** Troop 47 and
+Pack 47 now match the Scouting America Brand Guidelines instead of an
+arbitrary green/blue: Troop 47 uses Scouts BSA's olive + red, Pack 47 uses
+Cub Scouts' blue + gold, and each site's header shows the corresponding
+official program trademark. Added a second per-unit color
+(`accent_color`, alongside the existing `theme_color`) so a unit can pair
+a neutral/structural color (header, hero banner, calendar highlights) with
+a separate, punchier color for buttons and other calls-to-action, matching
+how the guidelines actually use each unit's colors — every button, "Save",
+and "Join" link site-wide now renders in the accent color. No template
+structure or page layout changed, just the color/branding layer.
+
 **Thumbnails in the file library and patrol/den photo picker.** The main
 file library list (`/files`) and the patrol/den page's photo checkbox list
 now show a small thumbnail preview next to each image file's name, instead
