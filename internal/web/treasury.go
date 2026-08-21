@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/47-yonkers/scout-site/internal/approval"
 	"github.com/47-yonkers/scout-site/internal/auth"
@@ -430,6 +431,50 @@ func (h *Handlers) TreasuryDecideTransfer(w http.ResponseWriter, r *http.Request
 
 // --- Individual accounts (Treasurer, or the owning family) ----------------
 
+// resolveAccountAccess loads an account (scoped to unit) and resolves
+// whether the current login may view it — the shared "same account, same
+// viewer" check every route touching one specific account needs
+// (TreasuryAccountView and, identically, its printable-statement sibling
+// TreasuryAccountExportPDF), so the PDF export can never show anything
+// the on-screen page wouldn't show that same viewer. Returns
+// ledger.ErrAccountNotFound (never a raw pgx error) for both "no such
+// account" and "exists, but in the other unit" — callers only need one
+// errors.Is check to know it's a 404, same as GetAccount's own callers
+// elsewhere already assume.
+func (h *Handlers) resolveAccountAccess(ctx context.Context, unit units.Unit, user auth.User, accountID string) (account ledger.Account, canManage, isOwner bool, err error) {
+	account, err = ledger.GetAccount(ctx, h.Pool, accountID)
+	if err != nil {
+		return ledger.Account{}, false, false, ledger.ErrAccountNotFound
+	}
+	if account.UnitID != unit.ID {
+		return ledger.Account{}, false, false, ledger.ErrAccountNotFound
+	}
+
+	caps, err := h.capabilitiesFor(ctx, user, unit.ID)
+	if err != nil {
+		return ledger.Account{}, false, false, err
+	}
+	canManage = units.CanManageLedger(caps)
+
+	if account.AccountType == "scout_individual" {
+		owns, err := isAccountOwner(ctx, h.Pool, user, account.MemberID)
+		if err != nil {
+			return ledger.Account{}, false, false, err
+		}
+		// Ownership only grants access while family self-service is on for
+		// this unit — otherwise accounts are treasurer-only (see
+		// settings.ScoutAccountSelfService).
+		if owns {
+			selfService, err := h.scoutAccountSelfServiceEnabled(ctx, unit.ID)
+			if err != nil {
+				return ledger.Account{}, false, false, err
+			}
+			isOwner = selfService
+		}
+	}
+	return account, canManage, isOwner, nil
+}
+
 func (h *Handlers) TreasuryAccountView(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
@@ -439,46 +484,16 @@ func (h *Handlers) TreasuryAccountView(w http.ResponseWriter, r *http.Request) {
 	}
 
 	accountID := r.PathValue("id")
-	account, err := ledger.GetAccount(r.Context(), h.Pool, accountID)
+	account, canManage, isOwner, err := h.resolveAccountAccess(r.Context(), unit, user, accountID)
 	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	if account.UnitID != unit.ID {
-		http.NotFound(w, r)
-		return
-	}
-
-	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
-	if err != nil {
-		log.Printf("web: loading capabilities: %v", err)
+		if errors.Is(err, ledger.ErrAccountNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		log.Printf("web: resolving account access: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	canManage := units.CanManageLedger(caps)
-
-	isOwner := false
-	if account.AccountType == "scout_individual" {
-		owns, err := isAccountOwner(r.Context(), h.Pool, user, account.MemberID)
-		if err != nil {
-			log.Printf("web: checking account ownership: %v", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		// Ownership only grants access while family self-service is on for
-		// this unit — otherwise accounts are treasurer-only (see
-		// settings.ScoutAccountSelfService).
-		if owns {
-			selfService, err := h.scoutAccountSelfServiceEnabled(r.Context(), unit.ID)
-			if err != nil {
-				log.Printf("web: checking scout-account-self-service setting: %v", err)
-				http.Error(w, "internal error", http.StatusInternalServerError)
-				return
-			}
-			isOwner = selfService
-		}
-	}
-
 	if !canManage && !isOwner {
 		http.Error(w, "you don't have permission to view this account", http.StatusForbidden)
 		return
@@ -539,6 +554,125 @@ func (h *Handlers) TreasuryAccountView(w http.ResponseWriter, r *http.Request) {
 		TripFundHasBalance: canManage && account.AccountType == "trip_fund" && account.Status == "open" && balance != 0,
 	}
 	h.render(w, h.treasuryAccount, data)
+}
+
+// parseDateRangeParam parses a printable statement's optional "from"/"to"
+// query params (YYYY-MM-DD, from a plain <input type="date">). from's
+// zero value means "since the beginning" (BalanceForAccountAsOf/
+// TransactionsForAccountInRange both treat it that way); an unset or
+// unparseable to defaults to now — a malformed or missing date range
+// should print "everything so far," not error.
+func parseDateRangeParam(r *http.Request) (from, to time.Time) {
+	to = time.Now()
+	if raw := r.URL.Query().Get("from"); raw != "" {
+		if t, err := time.ParseInLocation("2006-01-02", raw, time.Local); err == nil {
+			from = t
+		}
+	}
+	if raw := r.URL.Query().Get("to"); raw != "" {
+		if t, err := time.ParseInLocation("2006-01-02", raw, time.Local); err == nil {
+			to = t.Add(24*time.Hour - time.Nanosecond) // include the whole "to" day
+		}
+	}
+	return from, to
+}
+
+// dateRangeLabel renders a statement's date range for its printed
+// heading.
+func dateRangeLabel(from, to time.Time) string {
+	if from.IsZero() {
+		return "All activity through " + to.Format("Jan 2, 2006")
+	}
+	return from.Format("Jan 2, 2006") + " – " + to.Format("Jan 2, 2006")
+}
+
+// buildLedgerStatementSection loads one account's date-ranged statement —
+// starting/ending balances and every row with a running balance — shared
+// by TreasuryAccountExportPDF (a single account) and AccountsExportPDF
+// (several, one section per Scout) in accounts.go. Only posted
+// transactions move the running balance/count as activity; a pending or
+// rejected transfer hasn't actually moved money (see
+// AccountWithBalance's doc comment), so a printed statement — unlike the
+// on-screen page's "here's its status" list — omits it entirely rather
+// than showing an amount that hasn't happened yet.
+func (h *Handlers) buildLedgerStatementSection(ctx context.Context, accountID, heading string, from, to time.Time) (ledgerStatementSection, error) {
+	starting, err := ledger.BalanceForAccountAsOf(ctx, h.Pool, accountID, from)
+	if err != nil {
+		return ledgerStatementSection{}, err
+	}
+	txs, err := ledger.TransactionsForAccountInRange(ctx, h.Pool, accountID, from, to)
+	if err != nil {
+		return ledgerStatementSection{}, err
+	}
+
+	running := starting
+	rows := make([]ledgerStatementRow, 0, len(txs))
+	for _, t := range txs {
+		if t.Status != "posted" {
+			continue
+		}
+		amount := t.AmountForAccount(accountID)
+		running += amount
+		rows = append(rows, ledgerStatementRow{
+			Date:            t.OccurredAt.Format("Jan 2, 2006"),
+			Description:     t.Description,
+			TransactionType: t.TransactionType,
+			AmountCents:     amount,
+			RunningCents:    running,
+		})
+	}
+
+	return ledgerStatementSection{
+		Heading:        heading,
+		DateRangeLabel: dateRangeLabel(from, to),
+		StartingCents:  starting,
+		EndingCents:    running,
+		Rows:           rows,
+	}, nil
+}
+
+// TreasuryAccountExportPDF is TreasuryAccountView's printable sibling —
+// same account, same "can this login see it" check, just rendered as a
+// downloadable, date-ranged PDF statement instead of the on-screen page.
+func (h *Handlers) TreasuryAccountExportPDF(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	user, loggedIn := auth.UserFromContext(r.Context())
+	if !loggedIn {
+		http.Redirect(w, r, "/login?next="+r.URL.Path, http.StatusSeeOther)
+		return
+	}
+
+	accountID := r.PathValue("id")
+	account, canManage, isOwner, err := h.resolveAccountAccess(r.Context(), unit, user, accountID)
+	if err != nil {
+		if errors.Is(err, ledger.ErrAccountNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		log.Printf("web: resolving account access: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !canManage && !isOwner {
+		http.Error(w, "you don't have permission to view this account", http.StatusForbidden)
+		return
+	}
+
+	from, to := parseDateRangeParam(r)
+	section, err := h.buildLedgerStatementSection(r.Context(), accountID, account.Name, from, to)
+	if err != nil {
+		log.Printf("web: building account statement: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	data, err := ledgerStatementPDF(unit.Name+" — "+account.Name, []ledgerStatementSection{section})
+	if err != nil {
+		log.Printf("web: rendering account statement PDF: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	writePDF(w, "statement.pdf", data)
 }
 
 // TreasuryRequestTransfer submits a "push" transfer from a Scout's

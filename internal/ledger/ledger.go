@@ -717,6 +717,51 @@ func PendingTransfersForUnit(ctx context.Context, pool *pgxpool.Pool, unitID str
 	return transactionsQuery(ctx, pool, `WHERE t.unit_id = $1 AND t.status = 'pending_approval' ORDER BY t.occurred_at`, unitID)
 }
 
+// TransactionsForAccountInRange lists every transaction touching a single
+// account whose occurred_at falls within [from, to] (inclusive), oldest
+// first — the printable, date-ranged statement a Scout or family can
+// export (see internal/web's ledgerStatementPDF), as opposed to
+// TransactionsForAccount's fixed "most recent N, newest first" window.
+func TransactionsForAccountInRange(ctx context.Context, pool *pgxpool.Pool, accountID string, from, to time.Time) ([]TransactionDetail, error) {
+	return transactionsQuery(ctx, pool, `
+		WHERE t.id IN (SELECT transaction_id FROM ledger_postings WHERE account_id = $1)
+		  AND t.occurred_at >= $2 AND t.occurred_at <= $3
+		ORDER BY t.occurred_at, t.id
+	`, accountID, from, to)
+}
+
+// BalanceForAccountAsOf returns an account's balance from every posted
+// transaction that occurred strictly before asOf — the "starting
+// balance" line on a date-ranged statement (see
+// TransactionsForAccountInRange), so a statement for, say, March shows
+// what the account held walking into March, not just March's activity in
+// isolation.
+func BalanceForAccountAsOf(ctx context.Context, pool *pgxpool.Pool, accountID string, asOf time.Time) (int64, error) {
+	var balance int64
+	err := pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(p.amount_cents), 0)
+		FROM ledger_postings p
+		JOIN ledger_transactions t ON t.id = p.transaction_id
+		WHERE p.account_id = $1 AND t.status = 'posted' AND t.occurred_at < $2
+	`, accountID, asOf).Scan(&balance)
+	return balance, err
+}
+
+// AmountForAccount sums whichever of a transaction's postings apply to
+// one specific account — the signed amount a per-account statement row
+// should show, since TransactionDetail.Postings includes every account a
+// (usually two-sided) transaction touched, not just the one the statement
+// is for.
+func (t TransactionDetail) AmountForAccount(accountID string) int64 {
+	var total int64
+	for _, p := range t.Postings {
+		if p.AccountID == accountID {
+			total += p.AmountCents
+		}
+	}
+	return total
+}
+
 // --- Fundraisers -------------------------------------------------------
 
 // CreateFundraiser registers a new fundraiser and its per-Scout

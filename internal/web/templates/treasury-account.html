@@ -48,6 +48,24 @@
     </section>
   {{end}}
 
+  <section class="rounded-lg border border-gray-200 bg-white p-4 mb-8 max-w-sm">
+    <h2 class="text-lg font-semibold mb-2">Print Statement</h2>
+    <p class="text-xs text-gray-500 mb-3">Choose a date range (leave either blank for "since the beginning"/"through today") and download a PDF.</p>
+    <form method="get" action="/treasury/accounts/{{.Account.ID}}/export.pdf" class="flex items-end gap-2">
+      <div class="flex-1">
+        <label class="block text-xs text-gray-500 mb-1" for="from">From</label>
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="date" id="from" name="from">
+      </div>
+      <div class="flex-1">
+        <label class="block text-xs text-gray-500 mb-1" for="to">To</label>
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="date" id="to" name="to">
+      </div>
+      <button type="submit" class="rounded-md border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50 whitespace-nowrap">
+        Download PDF
+      </button>
+    </form>
+  </section>
+
   <h2 class="text-lg font-semibold mb-3">Statement</h2>
   {{if .Transactions}}
     <ul class="space-y-2">

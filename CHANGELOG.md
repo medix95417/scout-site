@@ -20,6 +20,17 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Print a Scout ledger statement — one Scout, or a whole family, for any
+date range.** A Scout's account page (`/treasury/accounts/{id}`, reachable
+by the Scout/family themselves, not just the Treasurer) now has a "Print
+Statement" form: pick a date range (or leave it blank for everything) and
+download a PDF with a starting balance, every transaction with a running
+balance, and an ending balance. "My Accounts" (`/accounts`) gained the same
+date-range print, plus — for a family with more than one Scout — checkboxes
+to choose which Scout(s) to include; choosing more than one prints each
+Scout as their own section (sorted the same order they're already listed
+in), never combined into one total.
+
 **Payments settings — Stripe and PayPal, configured entirely from the admin
 page.** A new "Payments" section on `/admin/settings` lets each unit turn
 Stripe and PayPal on or off independently and enter their credentials
