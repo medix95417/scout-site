@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-pdf/fpdf"
@@ -247,4 +248,109 @@ func calendarEventsPDF(title, dateRangeLabel string, events []calendarPDFEvent) 
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// This section renders /treasury/reports' PDF exports — see
+// TreasuryReportExportPDF in treasury_reports.go.
+
+// simpleTablePDF renders a title, an optional subtitle, and a single
+// table — the shared layout behind every Treasury report export, so each
+// report type only supplies its own headers/rows, not its own PDF layout
+// code. widths are column widths in mm; aligns is "L"/"R" per column,
+// same length as headers/each row.
+func simpleTablePDF(title, subtitle string, headers []string, widths []float64, aligns []string, rows [][]string) ([]byte, error) {
+	pdf := fpdf.New("P", "mm", "Letter", "")
+	pdf.SetMargins(15, 15, 15)
+	pdf.AddPage()
+	tr := pdf.UnicodeTranslatorFromDescriptor("")
+
+	pdf.SetTitle(tr(title), true)
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.CellFormat(0, 10, tr(title), "", 1, "L", false, 0, "")
+	if subtitle != "" {
+		pdf.SetFont("Helvetica", "", 10)
+		pdf.CellFormat(0, 6, tr(subtitle), "", 1, "L", false, 0, "")
+	}
+	pdf.Ln(4)
+
+	var tableWidth float64
+	for _, w := range widths {
+		tableWidth += w
+	}
+
+	pdf.SetFillColor(240, 240, 240)
+	pdf.SetFont("Helvetica", "B", 9)
+	for i, hdr := range headers {
+		ln := 0
+		if i == len(headers)-1 {
+			ln = 1
+		}
+		pdf.CellFormat(widths[i], 7, tr(hdr), "1", ln, aligns[i], true, 0, "")
+	}
+
+	pdf.SetFont("Helvetica", "", 9)
+	if len(rows) == 0 {
+		pdf.CellFormat(tableWidth, 7, tr("No data for this report."), "1", 1, "L", false, 0, "")
+	}
+	for _, row := range rows {
+		for i, cell := range row {
+			ln := 0
+			if i == len(row)-1 {
+				ln = 1
+			}
+			pdf.CellFormat(widths[i], 7, tr(cell), "1", ln, aligns[i], false, 0, "")
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// reportPDF dispatches one built report (see buildReport in
+// treasury_reports.go) to simpleTablePDF with the column layout that
+// report type needs.
+func reportPDF(title string, view reportViewData) ([]byte, error) {
+	switch view.Type {
+	case "income_expense":
+		rows := make([][]string, 0, len(view.Periods))
+		for _, p := range view.Periods {
+			rows = append(rows, []string{p.Label, p.Income, p.Expense, p.Net})
+		}
+		return simpleTablePDF(title, view.DateRangeLabel,
+			[]string{"Period", "Income", "Expense", "Net"},
+			[]float64{90, 30, 30, 30}, []string{"L", "R", "R", "R"}, rows)
+
+	case "account_balances":
+		rows := make([][]string, 0, len(view.Accounts))
+		for _, a := range view.Accounts {
+			rows = append(rows, []string{a.Name, a.AccountType, a.Status, a.BalanceDisplay})
+		}
+		return simpleTablePDF(title, view.DateRangeLabel,
+			[]string{"Account", "Type", "Status", "Balance"},
+			[]float64{70, 35, 25, 50}, []string{"L", "L", "L", "R"}, rows)
+
+	case "transaction_detail":
+		rows := make([][]string, 0, len(view.LedgerRows))
+		for _, row := range view.LedgerRows {
+			rows = append(rows, []string{row.Date, row.AccountName, row.Description, row.Debit, row.Credit})
+		}
+		return simpleTablePDF(title, view.DateRangeLabel,
+			[]string{"Date", "Account", "Description", "Debit", "Credit"},
+			[]float64{25, 45, 60, 20, 20}, []string{"L", "L", "L", "R", "R"}, rows)
+
+	case "fundraiser_proceeds":
+		rows := make([][]string, 0, len(view.Fundraisers))
+		for _, f := range view.Fundraisers {
+			rows = append(rows, []string{f.Name, strconv.Itoa(f.ScoutCount), f.Gross, f.Credited})
+		}
+		return simpleTablePDF(title, view.DateRangeLabel,
+			[]string{"Fundraiser", "Scouts Credited", "Gross Proceeds", "Credited to Scouts"},
+			[]float64{70, 35, 35, 40}, []string{"L", "R", "R", "R"}, rows)
+
+	default:
+		return simpleTablePDF(title, view.DateRangeLabel, nil, nil, nil, nil)
+	}
 }
