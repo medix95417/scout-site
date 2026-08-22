@@ -11,88 +11,68 @@
     <a href="/admin/roster/import" class="underline" style="color: var(--unit-color);">Import roster from a spreadsheet or Scoutbook export &rarr;</a>
   </p>
 
-  <div class="grid gap-6 sm:grid-cols-2 mb-10">
+  <div class="grid gap-4 sm:grid-cols-2 mb-10">
     {{if .Scope.UnitWide}}
       <!-- Add an existing person (e.g. a Pack Scout crossing over to a Troop
            position, or a parent already registered under the other unit) —
            anyone who doesn't yet show up on this unit's own roster. -->
-      <section class="rounded-lg border border-gray-200 bg-white p-4">
-        <h2 class="text-lg font-semibold mb-1">Add an Existing Person</h2>
-        <p class="text-xs text-gray-500 mb-3">
-          Already registered under {{if eq .Unit.UnitType "troop"}}the Pack{{else}}the Troop{{end}} (or elsewhere in the system)?
-          Give them a role here instead of creating a duplicate record.
-        </p>
-        {{if .OtherMembers}}
-          <form method="post" action="/admin/roster/existing-member" class="space-y-2">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <select name="member_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
-              <option value="">Choose a person…</option>
-              {{range .OtherMembers}}<option value="{{.ID}}">{{.FirstName}} {{.LastName}} — {{.FamilyName}}</option>{{end}}
-            </select>
-            <div class="flex gap-2">
-              <select name="sub_group_id" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm">
-                <option value="">No {{.SubGroupNoun}} yet</option>
-                {{range .AddableSubGroups}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+      <details class="group rounded-lg border border-gray-200 bg-white overflow-hidden">
+        <summary class="list-none cursor-pointer select-none flex items-center justify-between gap-4 p-4 hover:bg-gray-50">
+          <h2 class="text-lg font-semibold">Add an Existing Person</h2>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 text-gray-400 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </summary>
+        <div class="border-t border-gray-100 p-4">
+          <p class="text-xs text-gray-500 mb-3">
+            Already registered under {{if eq .Unit.UnitType "troop"}}the Pack{{else}}the Troop{{end}} (or elsewhere in the system)?
+            Give them a role here instead of creating a duplicate record.
+          </p>
+          {{if .OtherMembers}}
+            <form method="post" action="/admin/roster/existing-member" class="space-y-2">
+              <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+              <select name="member_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+                <option value="">Choose a person…</option>
+                {{range .OtherMembers}}<option value="{{.ID}}">{{.FirstName}} {{.LastName}} — {{.FamilyName}}</option>{{end}}
               </select>
-              <select name="role" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" required>
-                {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
-              </select>
-            </div>
-            <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">
-              Add to This Unit
-            </button>
-          </form>
-        {{else}}
-          <p class="text-sm text-gray-500">Everyone in the system already has a role here.</p>
-        {{end}}
-      </section>
+              <div class="flex gap-2">
+                <select name="sub_group_id" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm">
+                  <option value="">No {{.SubGroupNoun}} yet</option>
+                  {{range .AddableSubGroups}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+                </select>
+                <select name="role" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+                  {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+                </select>
+              </div>
+              <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">
+                Add to This Unit
+              </button>
+            </form>
+          {{else}}
+            <p class="text-sm text-gray-500">Everyone in the system already has a role here.</p>
+          {{end}}
+        </div>
+      </details>
     {{end}}
 
     <!-- Add a new family -->
-    <section class="rounded-lg border border-gray-200 bg-white p-4">
-      <h2 class="text-lg font-semibold mb-3">Add a New Family</h2>
-      <form method="post" action="/admin/roster/families" class="space-y-2">
-        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="family_name" placeholder="Family display name (e.g. The Smith Family)" required>
-        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Contact email (this becomes their login)" required>
-        <div class="flex gap-2">
-          <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="first_name" placeholder="First name" required>
-          <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="last_name" placeholder="Last name" required>
-        </div>
-        <p class="text-xs text-gray-500">The first family member is added as an adult — this is who's logging in.</p>
-        <div class="flex gap-2">
-          <select name="sub_group_id" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm">
-            {{if .Scope.UnitWide}}<option value="">No {{.SubGroupNoun}} yet</option>{{end}}
-            {{range .AddableSubGroups}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
-          </select>
-          <select name="role" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" required>
-            {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
-          </select>
-        </div>
-        <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">
-          Create Family
-        </button>
-      </form>
-    </section>
-
-    <!-- Add a member to an existing family -->
-    <section class="rounded-lg border border-gray-200 bg-white p-4">
-      <h2 class="text-lg font-semibold mb-3">Add a Member to an Existing Family</h2>
-      {{if .Families}}
-        <form method="post" action="/admin/roster/members" class="space-y-2">
+    <details class="group rounded-lg border border-gray-200 bg-white overflow-hidden">
+      <summary class="list-none cursor-pointer select-none flex items-center justify-between gap-4 p-4 hover:bg-gray-50">
+        <h2 class="text-lg font-semibold">Add a New Family</h2>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 text-gray-400 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </summary>
+      <div class="border-t border-gray-100 p-4">
+        <form method="post" action="/admin/roster/families" class="space-y-2">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-          <select name="family_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
-            <option value="">Choose a family…</option>
-            {{range .Families}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
-          </select>
+          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="family_name" placeholder="Family display name (e.g. The Smith Family)" required>
+          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Contact email (this becomes their login)" required>
           <div class="flex gap-2">
             <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="first_name" placeholder="First name" required>
             <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="last_name" placeholder="Last name" required>
           </div>
-          <div class="flex gap-4 text-sm">
-            <label class="flex items-center gap-1"><input type="radio" name="member_type" value="youth" checked> Youth</label>
-            <label class="flex items-center gap-1"><input type="radio" name="member_type" value="adult"> Adult</label>
-          </div>
+          <p class="text-xs text-gray-500">The first family member is added as an adult — this is who's logging in.</p>
           <div class="flex gap-2">
             <select name="sub_group_id" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm">
               {{if .Scope.UnitWide}}<option value="">No {{.SubGroupNoun}} yet</option>{{end}}
@@ -103,35 +83,83 @@
             </select>
           </div>
           <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">
-            Add Member
+            Create Family
           </button>
         </form>
-      {{else}}
-        <p class="text-sm text-gray-500">No families exist yet — add one first.</p>
-      {{end}}
-    </section>
+      </div>
+    </details>
+
+    <!-- Add a member to an existing family -->
+    <details class="group rounded-lg border border-gray-200 bg-white overflow-hidden">
+      <summary class="list-none cursor-pointer select-none flex items-center justify-between gap-4 p-4 hover:bg-gray-50">
+        <h2 class="text-lg font-semibold">Add a Member to an Existing Family</h2>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 text-gray-400 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </summary>
+      <div class="border-t border-gray-100 p-4">
+        {{if .Families}}
+          <form method="post" action="/admin/roster/members" class="space-y-2">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <select name="family_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+              <option value="">Choose a family…</option>
+              {{range .Families}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+            </select>
+            <div class="flex gap-2">
+              <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="first_name" placeholder="First name" required>
+              <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="last_name" placeholder="Last name" required>
+            </div>
+            <div class="flex gap-4 text-sm">
+              <label class="flex items-center gap-1"><input type="radio" name="member_type" value="youth" checked> Youth</label>
+              <label class="flex items-center gap-1"><input type="radio" name="member_type" value="adult"> Adult</label>
+            </div>
+            <div class="flex gap-2">
+              <select name="sub_group_id" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm">
+                {{if .Scope.UnitWide}}<option value="">No {{.SubGroupNoun}} yet</option>{{end}}
+                {{range .AddableSubGroups}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+              </select>
+              <select name="role" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" required>
+                {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+              </select>
+            </div>
+            <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">
+              Add Member
+            </button>
+          </form>
+        {{else}}
+          <p class="text-sm text-gray-500">No families exist yet — add one first.</p>
+        {{end}}
+      </div>
+    </details>
   </div>
 
   {{if .Scope.UnitWide}}
-    <section class="rounded-lg border border-gray-200 bg-white p-4 mb-10">
-      <h2 class="text-lg font-semibold mb-3">Dens &amp; Patrols</h2>
-      {{if .SubGroups}}
-        <ul class="flex flex-wrap gap-2 mb-3">
-          {{range .SubGroups}}
-            <li><a href="/admin/groups/{{.ID}}" class="block rounded-full bg-gray-100 px-3 py-1 text-xs hover:bg-gray-200">{{.Name}}</a></li>
-          {{end}}
-        </ul>
-      {{else}}
-        <p class="text-sm text-gray-500 mb-3">None set up yet.</p>
-      {{end}}
-      <form method="post" action="/admin/roster/sub-groups" class="flex gap-2">
-        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. {{if eq .SubGroupNoun "patrol"}}Eagle Patrol{{else}}Bear Den 3{{end}}" required>
-        <button type="submit" class="rounded-md px-4 py-2 text-sm whitespace-nowrap btn-accent">
-          Add {{if eq .SubGroupNoun "patrol"}}Patrol{{else}}Den{{end}}
-        </button>
-      </form>
-    </section>
+    <details class="group rounded-lg border border-gray-200 bg-white overflow-hidden mb-10">
+      <summary class="list-none cursor-pointer select-none flex items-center justify-between gap-4 p-4 hover:bg-gray-50">
+        <h2 class="text-lg font-semibold">Dens &amp; Patrols{{if .SubGroups}} ({{len .SubGroups}}){{end}}</h2>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 text-gray-400 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </summary>
+      <div class="border-t border-gray-100 p-4">
+        {{if .SubGroups}}
+          <ul class="flex flex-wrap gap-2 mb-3">
+            {{range .SubGroups}}
+              <li><a href="/admin/groups/{{.ID}}" class="block rounded-full bg-gray-100 px-3 py-1 text-xs hover:bg-gray-200">{{.Name}}</a></li>
+            {{end}}
+          </ul>
+        {{else}}
+          <p class="text-sm text-gray-500 mb-3">None set up yet.</p>
+        {{end}}
+        <form method="post" action="/admin/roster/sub-groups" class="flex gap-2">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. {{if eq .SubGroupNoun "patrol"}}Eagle Patrol{{else}}Bear Den 3{{end}}" required>
+          <button type="submit" class="rounded-md px-4 py-2 text-sm whitespace-nowrap btn-accent">
+            Add {{if eq .SubGroupNoun "patrol"}}Patrol{{else}}Den{{end}}
+          </button>
+        </form>
+      </div>
+    </details>
   {{end}}
 
   <div class="flex items-center justify-between mb-3">

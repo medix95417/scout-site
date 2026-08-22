@@ -20,6 +20,21 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Accordion-style collapsible sections on Roster and Advancement.**
+- `/admin/roster`'s three "add" forms (Add an Existing Person, Add a New
+  Family, Add a Member to an Existing Family) and its Dens & Patrols
+  section now collapse into the same disclosure pattern used elsewhere —
+  closed by default, so the actual roster table isn't pushed down the
+  page by forms you use far less often than you look up a member.
+- `/admin/advancement`'s Record One and Bulk Import cards get the same
+  treatment. Bulk Import stays open automatically right after you submit
+  it, so you see the "X recorded, Y skipped" result without an extra
+  click.
+- The Roster and Advancement records tables themselves are left as
+  tables, not converted to accordion rows — collapsing every person's or
+  record's row would hide exactly the side-by-side, scan-a-column view
+  that makes a roster/records table useful in the first place.
+
 **Accordion-style collapsible rows on the busiest admin list pages.**
 - News/Photos, Our Leaders, and Resources' management view now show each
   item as a collapsible row: title, status badges, and (for Resources)
