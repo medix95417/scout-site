@@ -20,6 +20,16 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Accordion-style collapsible rows on the busiest admin list pages.**
+- News/Photos, Our Leaders, and Resources' management view now show each
+  item as a collapsible row: title, status badges, and (for Resources)
+  description stay visible at a glance, while the action buttons
+  (Edit/Publish/Unpublish/Delete/make-public) are tucked behind a click to
+  expand — cleaning up what used to be a row of several buttons sitting
+  next to every single item. Built on the same no-JS `<details>/<summary>`
+  disclosure the hamburger menu and its Patrols/Dens submenu already use,
+  so it needs no new script and works identically with JS disabled.
+
 **Added a public "Our Leaders" page.**
 - New `/leaders` public page lists a unit's adult leaders — name, role
   title, a brief bio, and an optional photo (choosable from the unit's

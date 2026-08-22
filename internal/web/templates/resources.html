@@ -53,50 +53,34 @@
   {{end}}
 
   {{if .Resources}}
-    <div class="space-y-3">
+    <div class="space-y-2">
       {{range .Resources}}
-        <div class="rounded-lg border border-gray-200 bg-white p-4">
-          <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              {{if .FileID}}
-                <a href="/resources/{{.ID}}/download" target="_blank" class="font-medium hover:underline truncate block" style="color: var(--unit-color);">
-                  {{.Title}}
-                </a>
-              {{else}}
-                <a href="{{.URL}}" target="_blank" rel="noopener" class="font-medium hover:underline truncate block" style="color: var(--unit-color);">
-                  {{.Title}}
-                </a>
-              {{end}}
-              {{if .Description}}<p class="text-sm text-gray-600 mt-0.5">{{.Description}}</p>{{end}}
-              <div class="text-xs text-gray-400 mt-0.5">
-                {{if .FileID}}
-                  <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 font-medium">{{.FileDisplayLabel}} · {{.SizeDisplay}}</span>
-                {{else}}
-                  <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 font-medium">Link</span>
-                {{end}}
-                {{if .IsPublic}}
-                  <span class="rounded-full bg-green-100 text-green-800 px-2 py-0.5 font-medium">Public</span>
-                {{else}}
-                  <span class="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 font-medium">Members only</span>
-                {{end}}
-              </div>
+        {{if $.CanManage}}
+          <details class="group rounded-lg border border-gray-200 bg-white overflow-hidden">
+            <summary class="list-none cursor-pointer select-none flex items-start justify-between gap-4 p-4 hover:bg-gray-50">
+              {{template "resourceSummary" .}}
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 text-gray-400 mt-1 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </summary>
+            <div class="border-t border-gray-100 bg-gray-50 p-4 flex items-center gap-3">
+              <form method="post" action="/resources/{{.ID}}/public">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="text-xs hover:underline" style="color: var(--unit-color);">
+                  {{if .IsPublic}}Make members-only{{else}}Make public{{end}}
+                </button>
+              </form>
+              <form method="post" action="/resources/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Title}}? This can\'t be undone.');">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
+              </form>
             </div>
-            {{if $.CanManage}}
-              <div class="flex items-center gap-3 flex-shrink-0">
-                <form method="post" action="/resources/{{.ID}}/public">
-                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                  <button type="submit" class="text-xs hover:underline" style="color: var(--unit-color);">
-                    {{if .IsPublic}}Make members-only{{else}}Make public{{end}}
-                  </button>
-                </form>
-                <form method="post" action="/resources/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Title}}? This can\'t be undone.');">
-                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                  <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
-                </form>
-              </div>
-            {{end}}
+          </details>
+        {{else}}
+          <div class="rounded-lg border border-gray-200 bg-white p-4">
+            {{template "resourceSummary" .}}
           </div>
-        </div>
+        {{end}}
       {{end}}
     </div>
   {{else}}
@@ -119,4 +103,35 @@
       });
     })();
   </script>
+{{end}}
+
+{{/* resourceSummary is one resource's always-visible title/description/
+     badges — shared between the plain (no-management) row and the
+     collapsible accordion row a manager sees, so the two only differ in
+     whether actions are tucked behind a details/summary disclosure. */}}
+{{define "resourceSummary"}}
+  <div class="min-w-0">
+    {{if .FileID}}
+      <a href="/resources/{{.ID}}/download" target="_blank" class="font-medium hover:underline truncate block" style="color: var(--unit-color);">
+        {{.Title}}
+      </a>
+    {{else}}
+      <a href="{{.URL}}" target="_blank" rel="noopener" class="font-medium hover:underline truncate block" style="color: var(--unit-color);">
+        {{.Title}}
+      </a>
+    {{end}}
+    {{if .Description}}<p class="text-sm text-gray-600 mt-0.5">{{.Description}}</p>{{end}}
+    <div class="text-xs text-gray-400 mt-0.5">
+      {{if .FileID}}
+        <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 font-medium">{{.FileDisplayLabel}} · {{.SizeDisplay}}</span>
+      {{else}}
+        <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 font-medium">Link</span>
+      {{end}}
+      {{if .IsPublic}}
+        <span class="rounded-full bg-green-100 text-green-800 px-2 py-0.5 font-medium">Public</span>
+      {{else}}
+        <span class="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 font-medium">Members only</span>
+      {{end}}
+    </div>
+  </div>
 {{end}}
