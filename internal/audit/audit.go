@@ -130,6 +130,8 @@ const entityScopeSQL = `
 	UNION
 	SELECT id FROM fundraiser_allocations WHERE fundraiser_id IN (SELECT id FROM fundraisers WHERE unit_id = $1)
 	UNION
+	SELECT id FROM fundraiser_orders WHERE unit_id = $1
+	UNION
 	SELECT id FROM system_settings
 	UNION
 	SELECT id FROM sub_groups WHERE unit_id = $1

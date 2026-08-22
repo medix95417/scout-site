@@ -224,6 +224,22 @@ Scoutbook roster export, matched by header names) were all originally
 listed here as Phase 3 candidates not yet built; all four have since
 shipped.
 
+**Also added post-Phase-2 — a fundraiser storefront (the order-taking
+half of online payments):** a Treasurer can give any Fundraiser an item
+catalog and a homepage button image from its Treasury page; a super_admin
+picks which single fundraiser (if any) is the active storefront from
+`/admin/settings`, showing a "Buy Now" button just below the homepage
+hero and linking to a public order page (`/fundraiser`) usable by
+anonymous visitors and logged-in leaders/parents alike. An order takes the
+buyer's info, items/quantities, and the name of the Scout who should get
+credit — in place of a payment method, since real payment processing
+still isn't wired up. That name is auto-matched against the youth roster
+on an exact match, otherwise left for a leader to resolve by hand; either
+way, the existing fundraiser-allocation ledger credit only posts once a
+leader marks the order paid, never the instant it's placed, so the books
+are never credited ahead of money actually being received. Stripe/PayPal
+checkout is the next step this sets up for.
+
 **Also added post-Phase-2 — news, photo galleries, and a filterable/
 exportable activity log:** a public news feed (`/news`) and photo
 galleries (`/gallery`), both built on the same `content_pages` table

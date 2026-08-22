@@ -43,6 +43,7 @@ var entityTypeTable = map[string]string{
 	"family_address":            "role_assignments", // families.id, via members.family_id
 	"fundraiser":                "fundraisers",
 	"fundraiser_allocation":     "fundraiser_allocations",
+	"fundraiser_order":          "fundraiser_orders",
 	"leader":                    "leaders",
 	"ledger_account":            "ledger_accounts",
 	"ledger_transaction":        "ledger_transactions",

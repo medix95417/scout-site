@@ -63,6 +63,36 @@
     <p class="text-sm text-gray-500">No unit settings yet.</p>
   {{end}}
 
+  <h2 class="text-lg font-semibold mt-10 mb-2">Fundraiser Storefront — {{.Unit.Name}}</h2>
+  <p class="text-sm text-gray-600 mb-4 max-w-2xl">
+    Show one fundraiser's "Buy Now" button on the homepage, just below the hero banner. Only one fundraiser can be
+    the active storefront at a time — turning one on automatically turns any other one off. Manage a fundraiser's
+    items for sale and button image from its
+    <a href="/treasury" class="underline" style="color: var(--unit-color);">Treasury</a> page.
+  </p>
+  <div class="rounded-lg border border-gray-200 bg-white p-4 max-w-2xl mb-6">
+    {{if .Fundraisers}}
+      <form method="post" action="/admin/settings/unit/fundraiser-storefront" class="flex flex-wrap items-center gap-3">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <select aria-label="Which fundraiser is the storefront" name="fundraiser_id" class="rounded-md border border-gray-300 px-3 py-2 text-sm">
+          {{$activeID := .ActiveStorefrontID}}
+          {{range .Fundraisers}}
+            <option value="{{.ID}}" {{if eq .ID $activeID}}selected{{end}}>{{.Name}}</option>
+          {{end}}
+        </select>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="enabled" {{if .ActiveStorefrontID}}checked{{end}}>
+          Show on homepage
+        </label>
+        <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Save</button>
+      </form>
+    {{else}}
+      <p class="text-sm text-gray-500">
+        No fundraisers yet — create one from the <a href="/treasury" class="underline" style="color: var(--unit-color);">Treasury</a> page first.
+      </p>
+    {{end}}
+  </div>
+
   <h2 class="text-lg font-semibold mt-10 mb-2">Payments — {{.Unit.Name}}</h2>
   <p class="text-sm text-gray-600 mb-4 max-w-2xl">
     Accept online payments for {{.Unit.Name}}. Troop and Pack each connect their own Stripe/PayPal account —

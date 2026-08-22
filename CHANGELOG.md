@@ -20,6 +20,28 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Added a fundraiser storefront: an item catalog, a homepage "Buy Now"
+button, and an order queue — the first step toward online payments.**
+A Treasurer can now add sellable items and a button image to any existing
+Fundraiser from its Treasury page, then a super_admin picks which single
+fundraiser (if any) is the active storefront from Settings — enabling one
+automatically disables any other, so only one campaign is ever live at a
+time. When on, the homepage shows a large "Buy Now" button just below the
+hero banner, linking to a new public order page (`/fundraiser`) reachable
+by anonymous visitors and logged-in leaders/parents alike; when off, the
+button disappears entirely. An order asks for the buyer's info, which
+items and quantities, and — in place of a payment method, since no
+processor is wired up yet — the name of the Scout who should get credit.
+That name is matched against the unit's youth roster automatically on an
+exact, unambiguous match; an unmatched or ambiguous name is still recorded
+and left for a leader to resolve by hand from the fundraiser's order
+queue. Crucially, the existing Fundraiser ledger-credit mechanism
+(`RecordFundraiserAllocation`) never fires the instant an order is
+placed — only once a leader explicitly marks the order "paid" and its
+Scout match is resolved, so the unit's books are never credited ahead of
+money actually being received. Online payment via Stripe/PayPal is still
+the next step; this phase is the order-taking half.
+
 **Five fixes/additions to existing admin and account features.**
 - **Fixed a missing "Manage Leaders" link** — the Our Leaders admin page
   (`/admin/leaders`) has existed since it shipped, but the hamburger

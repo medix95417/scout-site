@@ -38,6 +38,18 @@
     </div>
   {{end}}
 
+  {{if .StorefrontActive}}
+    <a href="/fundraiser" class="block mb-10 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow">
+      {{if .StorefrontButtonURL}}
+        <img src="{{.StorefrontButtonURL}}" alt="Shop {{.StorefrontName}}" class="w-full max-h-64 object-cover">
+      {{else}}
+        <div class="w-full py-8 text-center text-white text-xl font-semibold" style="background-color: var(--unit-color);">
+          Shop {{.StorefrontName}} &#8594;
+        </div>
+      {{end}}
+    </a>
+  {{end}}
+
   <!-- Quick-link cards -->
   <div class="grid gap-4 sm:grid-cols-3 mb-14">
     <a href="/calendar" class="rounded-xl border border-gray-200 bg-white p-5 text-center hover:shadow-md transition-shadow">
