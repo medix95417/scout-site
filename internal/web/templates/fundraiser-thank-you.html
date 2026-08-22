@@ -1,0 +1,26 @@
+{{define "content"}}
+  <div class="max-w-lg mx-auto text-center py-10">
+    <h1 class="text-2xl font-bold mb-2" style="color: var(--unit-color);">Thank You!</h1>
+    <p class="text-gray-600 mb-8">
+      Your order for {{.Fundraiser.Name}} has been recorded, crediting <strong>{{.Order.ScoutNameEntered}}</strong>.
+      A leader will follow up with you about payment.
+    </p>
+
+    <div class="rounded-lg border border-gray-200 bg-white p-4 text-left">
+      <ul class="space-y-1 text-sm mb-3">
+        {{range .Items}}
+          <li class="flex justify-between">
+            <span>{{.Quantity}}&times; {{.ItemName}}</span>
+            <span class="font-mono">{{.LineTotalDisplay}}</span>
+          </li>
+        {{end}}
+      </ul>
+      <div class="flex justify-between text-sm font-semibold border-t border-gray-100 pt-2">
+        <span>Total</span>
+        <span class="font-mono">{{.TotalDisplay}}</span>
+      </div>
+    </div>
+
+    <a href="/" class="inline-block mt-8 text-sm underline" style="color: var(--unit-color);">&larr; Back to Home</a>
+  </div>
+{{end}}

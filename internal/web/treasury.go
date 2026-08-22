@@ -882,20 +882,281 @@ func (h *Handlers) renderFundraiser(w http.ResponseWriter, r *http.Request, unit
 		}
 	}
 
+	items, err := ledger.ItemsForFundraiser(r.Context(), h.Pool, fundraiserID)
+	if err != nil {
+		log.Printf("web: loading fundraiser items: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	type itemView struct {
+		ledger.FundraiserItem
+		PriceDisplay string
+	}
+	itemViews := make([]itemView, 0, len(items))
+	for _, it := range items {
+		itemViews = append(itemViews, itemView{FundraiserItem: it, PriceDisplay: formatCents(it.PriceCents)})
+	}
+
+	orders, err := ledger.OrdersForFundraiser(r.Context(), h.Pool, fundraiserID)
+	if err != nil {
+		log.Printf("web: loading fundraiser orders: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	type orderItemView struct {
+		ledger.FundraiserOrderItem
+		LineTotalDisplay string
+	}
+	type orderView struct {
+		ledger.FundraiserOrder
+		TotalDisplay string
+		ItemViews    []orderItemView
+	}
+	orderViews := make([]orderView, 0, len(orders))
+	for _, o := range orders {
+		itemLines := make([]orderItemView, 0, len(o.Items))
+		for _, it := range o.Items {
+			itemLines = append(itemLines, orderItemView{FundraiserOrderItem: it, LineTotalDisplay: formatCents(it.UnitPriceCents * int64(it.Quantity))})
+		}
+		orderViews = append(orderViews, orderView{FundraiserOrder: o, TotalDisplay: formatCents(o.TotalCents), ItemViews: itemLines})
+	}
+
 	data := struct {
 		baseData
 		Fundraiser  ledger.Fundraiser
 		Allocations []allocationView
 		Scouts      []family.RosterEntry
 		BulkResult  *bulkImportResult
+		Items       []itemView
+		Orders      []orderView
 	}{
 		baseData:    h.base(r, f.Name),
 		Fundraiser:  f,
 		Allocations: allocationViews,
 		Scouts:      scouts,
 		BulkResult:  bulkResult,
+		Items:       itemViews,
+		Orders:      orderViews,
 	}
 	h.render(w, h.treasuryFundraiser, data)
+}
+
+// loadFundraiserInUnit is the common "does this fundraiser ID actually
+// belong to this unit" guard every item/order action below needs before
+// touching anything, mirroring the same check renderFundraiser already
+// does for the plain view.
+func (h *Handlers) loadFundraiserInUnit(r *http.Request, unit units.Unit, fundraiserID string) (ledger.Fundraiser, bool) {
+	f, err := ledger.GetFundraiser(r.Context(), h.Pool, fundraiserID)
+	if err != nil || f.UnitID != unit.ID {
+		return ledger.Fundraiser{}, false
+	}
+	return f, true
+}
+
+// --- Fundraiser storefront: item catalog, button image, orders ----------
+
+func (h *Handlers) TreasuryFundraiserAddItem(w http.ResponseWriter, r *http.Request) {
+	unit, _, ok := h.requireTreasurer(w, r, r.URL.Path)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	fundraiserID := r.PathValue("id")
+	if _, ok := h.loadFundraiserInUnit(r, unit, fundraiserID); !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	priceCents, err := parseDollarsToCents(r.FormValue("price"))
+	if err != nil || priceCents <= 0 {
+		http.Error(w, "enter an item name and a valid, positive price", http.StatusBadRequest)
+		return
+	}
+	if _, err := ledger.AddFundraiserItem(r.Context(), h.Pool, fundraiserID, r.FormValue("name"), priceCents); err != nil {
+		log.Printf("web: adding fundraiser item: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	http.Redirect(w, r, "/treasury/fundraisers/"+fundraiserID, http.StatusSeeOther)
+}
+
+func (h *Handlers) TreasuryFundraiserUpdateItem(w http.ResponseWriter, r *http.Request) {
+	unit, _, ok := h.requireTreasurer(w, r, r.URL.Path)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	fundraiserID := r.PathValue("id")
+	if _, ok := h.loadFundraiserInUnit(r, unit, fundraiserID); !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	item, err := ledger.GetFundraiserItem(r.Context(), h.Pool, r.PathValue("itemID"))
+	if err != nil || item.FundraiserID != fundraiserID {
+		http.NotFound(w, r)
+		return
+	}
+
+	priceCents, err := parseDollarsToCents(r.FormValue("price"))
+	if err != nil || priceCents <= 0 {
+		http.Error(w, "enter an item name and a valid, positive price", http.StatusBadRequest)
+		return
+	}
+	if err := ledger.UpdateFundraiserItem(r.Context(), h.Pool, item.ID, r.FormValue("name"), priceCents); err != nil {
+		log.Printf("web: updating fundraiser item: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	http.Redirect(w, r, "/treasury/fundraisers/"+fundraiserID, http.StatusSeeOther)
+}
+
+func (h *Handlers) TreasuryFundraiserDeleteItem(w http.ResponseWriter, r *http.Request) {
+	unit, _, ok := h.requireTreasurer(w, r, r.URL.Path)
+	if !ok {
+		return
+	}
+	fundraiserID := r.PathValue("id")
+	if _, ok := h.loadFundraiserInUnit(r, unit, fundraiserID); !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	item, err := ledger.GetFundraiserItem(r.Context(), h.Pool, r.PathValue("itemID"))
+	if err != nil || item.FundraiserID != fundraiserID {
+		http.NotFound(w, r)
+		return
+	}
+	if err := ledger.DeleteFundraiserItem(r.Context(), h.Pool, item.ID); err != nil {
+		log.Printf("web: deleting fundraiser item: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/treasury/fundraisers/"+fundraiserID, http.StatusSeeOther)
+}
+
+// TreasuryFundraiserSetButtonImage changes the graphic on this
+// fundraiser's homepage storefront button — deliberately separate from
+// the rest of the fundraiser's fields so it's a one-field form, easy to
+// swap whenever what's being sold changes.
+func (h *Handlers) TreasuryFundraiserSetButtonImage(w http.ResponseWriter, r *http.Request) {
+	unit, _, ok := h.requireTreasurer(w, r, r.URL.Path)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	fundraiserID := r.PathValue("id")
+	if _, ok := h.loadFundraiserInUnit(r, unit, fundraiserID); !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	if err := ledger.SetFundraiserButtonImage(r.Context(), h.Pool, fundraiserID, r.FormValue("button_image_url")); err != nil {
+		log.Printf("web: setting fundraiser button image: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/treasury/fundraisers/"+fundraiserID, http.StatusSeeOther)
+}
+
+// loadOrderInFundraiser guards the order-action handlers below the same
+// way loadFundraiserInUnit guards the fundraiser itself: the order must
+// actually belong to the fundraiser (and hence the unit) the URL claims.
+func (h *Handlers) loadOrderInFundraiser(r *http.Request, fundraiserID string) (ledger.FundraiserOrder, bool) {
+	o, err := ledger.GetFundraiserOrder(r.Context(), h.Pool, r.PathValue("orderID"))
+	if err != nil || o.FundraiserID != fundraiserID {
+		return ledger.FundraiserOrder{}, false
+	}
+	return o, true
+}
+
+func (h *Handlers) TreasuryOrderMarkPaid(w http.ResponseWriter, r *http.Request) {
+	unit, actor, ok := h.requireTreasurer(w, r, r.URL.Path)
+	if !ok {
+		return
+	}
+	fundraiserID := r.PathValue("id")
+	if _, ok := h.loadFundraiserInUnit(r, unit, fundraiserID); !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if _, ok := h.loadOrderInFundraiser(r, fundraiserID); !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	if _, err := ledger.MarkFundraiserOrderPaid(r.Context(), h.Pool, r.PathValue("orderID"), actor.ID); err != nil {
+		log.Printf("web: marking fundraiser order paid: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/treasury/fundraisers/"+fundraiserID, http.StatusSeeOther)
+}
+
+func (h *Handlers) TreasuryOrderResolveScout(w http.ResponseWriter, r *http.Request) {
+	unit, actor, ok := h.requireTreasurer(w, r, r.URL.Path)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	fundraiserID := r.PathValue("id")
+	if _, ok := h.loadFundraiserInUnit(r, unit, fundraiserID); !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if _, ok := h.loadOrderInFundraiser(r, fundraiserID); !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	if _, err := ledger.ResolveFundraiserOrderScout(r.Context(), h.Pool, r.PathValue("orderID"), r.FormValue("scout_member_id"), actor.ID); err != nil {
+		log.Printf("web: resolving fundraiser order scout: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	http.Redirect(w, r, "/treasury/fundraisers/"+fundraiserID, http.StatusSeeOther)
+}
+
+func (h *Handlers) TreasuryOrderCancel(w http.ResponseWriter, r *http.Request) {
+	unit, actor, ok := h.requireTreasurer(w, r, r.URL.Path)
+	if !ok {
+		return
+	}
+	fundraiserID := r.PathValue("id")
+	if _, ok := h.loadFundraiserInUnit(r, unit, fundraiserID); !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if _, ok := h.loadOrderInFundraiser(r, fundraiserID); !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	if err := ledger.CancelFundraiserOrder(r.Context(), h.Pool, r.PathValue("orderID"), actor.ID); err != nil {
+		log.Printf("web: canceling fundraiser order: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	http.Redirect(w, r, "/treasury/fundraisers/"+fundraiserID, http.StatusSeeOther)
 }
 
 func (h *Handlers) TreasuryAllocateFundraiser(w http.ResponseWriter, r *http.Request) {

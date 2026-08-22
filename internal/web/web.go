@@ -25,6 +25,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/csrf"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/files"
+	"github.com/47-yonkers/scout-site/internal/ledger"
 	"github.com/47-yonkers/scout-site/internal/mailer"
 	"github.com/47-yonkers/scout-site/internal/permission"
 	"github.com/47-yonkers/scout-site/internal/roster"
@@ -119,6 +120,9 @@ type Handlers struct {
 	leadersList          *template.Template
 	adminLeadersList     *template.Template
 	adminLeadersFormTmpl *template.Template
+
+	fundraiserStorefront *template.Template
+	fundraiserThankYou   *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -311,6 +315,12 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.adminLeadersFormTmpl, err = parse("admin-leaders-form.html"); err != nil {
 		return nil, err
 	}
+	if h.fundraiserStorefront, err = parse("fundraiser-storefront.html"); err != nil {
+		return nil, err
+	}
+	if h.fundraiserThankYou, err = parse("fundraiser-thank-you.html"); err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
@@ -325,6 +335,8 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(staticSub)))
 
 	mux.HandleFunc("GET /{$}", h.Home)
+	mux.HandleFunc("GET /fundraiser", h.FundraiserStorefront)
+	mux.HandleFunc("POST /fundraiser/order", h.FundraiserPlaceOrder)
 	mux.HandleFunc("GET /login", h.LoginForm)
 	mux.HandleFunc("POST /login", h.LoginSubmit)
 	mux.HandleFunc("POST /logout", h.Logout)
@@ -402,6 +414,13 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /treasury/fundraisers/{id}/allocate", h.TreasuryAllocateFundraiser)
 	mux.HandleFunc("POST /treasury/fundraisers/{id}/allocate-bulk", h.TreasuryAllocateFundraiserBulk)
 	mux.HandleFunc("POST /treasury/fundraisers/{id}/confirm-cap", h.TreasuryConfirmFundraiserCap)
+	mux.HandleFunc("POST /treasury/fundraisers/{id}/items", h.TreasuryFundraiserAddItem)
+	mux.HandleFunc("POST /treasury/fundraisers/{id}/items/{itemID}", h.TreasuryFundraiserUpdateItem)
+	mux.HandleFunc("POST /treasury/fundraisers/{id}/items/{itemID}/delete", h.TreasuryFundraiserDeleteItem)
+	mux.HandleFunc("POST /treasury/fundraisers/{id}/button-image", h.TreasuryFundraiserSetButtonImage)
+	mux.HandleFunc("POST /treasury/fundraisers/{id}/orders/{orderID}/mark-paid", h.TreasuryOrderMarkPaid)
+	mux.HandleFunc("POST /treasury/fundraisers/{id}/orders/{orderID}/resolve-scout", h.TreasuryOrderResolveScout)
+	mux.HandleFunc("POST /treasury/fundraisers/{id}/orders/{orderID}/cancel", h.TreasuryOrderCancel)
 
 	// Site-wide settings — super_admin only.
 	mux.HandleFunc("GET /admin/settings", h.SystemSettingsView)
@@ -410,6 +429,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/settings/unit/{key}/toggle", h.UnitSettingsToggle)
 	mux.HandleFunc("POST /admin/settings/unit/text", h.UnitSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/social", h.SocialSettingsUpdateText)
+	mux.HandleFunc("POST /admin/settings/unit/fundraiser-storefront", h.FundraiserStorefrontSettingsUpdate)
 
 	// News/announcements and photo galleries (internal/web/content_posts.go).
 	mux.HandleFunc("GET /news", h.NewsList)
@@ -838,28 +858,39 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		activities = append(activities, homeActivity{Title: p.Title, URL: "/gallery/" + p.ID, Photos: photos})
 	}
 
+	storefront, storefrontActive, err := ledger.ActiveStorefrontFundraiser(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading active storefront fundraiser for homepage: %v", err)
+	}
+
 	data := struct {
 		baseData
-		Events          []calendar.Event
-		Activities      []homeActivity
-		Hero            string
-		HeroImageURL    string
-		ProgramItems    []string
-		ProgramImageURL string
-		Meeting         string
-		Leadership      string
-		SocialURL       string
+		Events              []calendar.Event
+		Activities          []homeActivity
+		Hero                string
+		HeroImageURL        string
+		ProgramItems        []string
+		ProgramImageURL     string
+		Meeting             string
+		Leadership          string
+		SocialURL           string
+		StorefrontActive    bool
+		StorefrontName      string
+		StorefrontButtonURL string
 	}{
-		baseData:        h.base(r, ""),
-		Events:          events,
-		Activities:      activities,
-		Hero:            text["home-hero"],
-		HeroImageURL:    text["home-hero-image"],
-		ProgramItems:    programItems,
-		ProgramImageURL: text["home-program-image"],
-		Meeting:         text["home-meeting"],
-		Leadership:      text["home-leadership"],
-		SocialURL:       text["home-social"],
+		baseData:            h.base(r, ""),
+		Events:              events,
+		Activities:          activities,
+		Hero:                text["home-hero"],
+		HeroImageURL:        text["home-hero-image"],
+		ProgramItems:        programItems,
+		ProgramImageURL:     text["home-program-image"],
+		Meeting:             text["home-meeting"],
+		Leadership:          text["home-leadership"],
+		SocialURL:           text["home-social"],
+		StorefrontActive:    storefrontActive,
+		StorefrontName:      storefront.Name,
+		StorefrontButtonURL: storefront.ButtonImageURL,
 	}
 
 	h.render(w, h.home, data)

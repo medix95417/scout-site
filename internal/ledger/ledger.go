@@ -108,6 +108,8 @@ type Fundraiser struct {
 	CreatedBy                string
 	EventID                  string // "" unless tied to a specific calendar event
 	EventTitle               string // "" unless EventID is set — joined in for display, not stored
+	StorefrontEnabled        bool   // this fundraiser is the one shown on the public storefront/homepage button for UnitID — see SetStorefrontFundraiser
+	ButtonImageURL           string // graphic for the homepage storefront button; "" falls back to a generic default in the template
 }
 
 // FundraiserAllocation is one Scout's credited share from a Fundraiser,
@@ -839,7 +841,7 @@ func ConfirmFundraiserCap(ctx context.Context, pool *pgxpool.Pool, fundraiserID,
 // created first.
 func ListFundraisersForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Fundraiser, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT f.id, f.unit_id, f.name, f.allocation_mode::text, COALESCE(f.allocation_percent::text, ''), COALESCE(f.allocation_fixed_cents, 0), f.needs_council_confirmation, f.created_by, COALESCE(f.event_id::text, ''), COALESCE(e.title, '')
+		SELECT f.id, f.unit_id, f.name, f.allocation_mode::text, COALESCE(f.allocation_percent::text, ''), COALESCE(f.allocation_fixed_cents, 0), f.needs_council_confirmation, f.created_by, COALESCE(f.event_id::text, ''), COALESCE(e.title, ''), f.storefront_enabled, f.button_image_url
 		FROM fundraisers f
 		LEFT JOIN events e ON e.id = f.event_id
 		WHERE f.unit_id = $1 ORDER BY f.created_at DESC
@@ -852,7 +854,7 @@ func ListFundraisersForUnit(ctx context.Context, pool *pgxpool.Pool, unitID stri
 	var out []Fundraiser
 	for rows.Next() {
 		var f Fundraiser
-		if err := rows.Scan(&f.ID, &f.UnitID, &f.Name, &f.AllocationMode, &f.AllocationPercent, &f.AllocationFixedCents, &f.NeedsCouncilConfirmation, &f.CreatedBy, &f.EventID, &f.EventTitle); err != nil {
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Name, &f.AllocationMode, &f.AllocationPercent, &f.AllocationFixedCents, &f.NeedsCouncilConfirmation, &f.CreatedBy, &f.EventID, &f.EventTitle, &f.StorefrontEnabled, &f.ButtonImageURL); err != nil {
 			return nil, err
 		}
 		out = append(out, f)
@@ -864,11 +866,11 @@ func ListFundraisersForUnit(ctx context.Context, pool *pgxpool.Pool, unitID stri
 func GetFundraiser(ctx context.Context, pool *pgxpool.Pool, fundraiserID string) (Fundraiser, error) {
 	var f Fundraiser
 	err := pool.QueryRow(ctx, `
-		SELECT f.id, f.unit_id, f.name, f.allocation_mode::text, COALESCE(f.allocation_percent::text, ''), COALESCE(f.allocation_fixed_cents, 0), f.needs_council_confirmation, f.created_by, COALESCE(f.event_id::text, ''), COALESCE(e.title, '')
+		SELECT f.id, f.unit_id, f.name, f.allocation_mode::text, COALESCE(f.allocation_percent::text, ''), COALESCE(f.allocation_fixed_cents, 0), f.needs_council_confirmation, f.created_by, COALESCE(f.event_id::text, ''), COALESCE(e.title, ''), f.storefront_enabled, f.button_image_url
 		FROM fundraisers f
 		LEFT JOIN events e ON e.id = f.event_id
 		WHERE f.id = $1
-	`, fundraiserID).Scan(&f.ID, &f.UnitID, &f.Name, &f.AllocationMode, &f.AllocationPercent, &f.AllocationFixedCents, &f.NeedsCouncilConfirmation, &f.CreatedBy, &f.EventID, &f.EventTitle)
+	`, fundraiserID).Scan(&f.ID, &f.UnitID, &f.Name, &f.AllocationMode, &f.AllocationPercent, &f.AllocationFixedCents, &f.NeedsCouncilConfirmation, &f.CreatedBy, &f.EventID, &f.EventTitle, &f.StorefrontEnabled, &f.ButtonImageURL)
 	return f, err
 }
 

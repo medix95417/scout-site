@@ -30,6 +30,50 @@
     </div>
   {{end}}
 
+  <section class="rounded-lg border border-gray-200 bg-white p-4 mb-8 max-w-lg">
+    <h2 class="text-lg font-semibold mb-2">Storefront</h2>
+    <p class="text-xs text-gray-500 mb-3">
+      Turn this fundraiser into an online storefront by adding items below, then enable it from
+      <a href="/admin/settings" class="underline" style="color: var(--unit-color);">Settings</a> to show its "Buy Now"
+      button on the homepage. Only one fundraiser can be the active storefront at a time.
+    </p>
+
+    <h3 class="text-sm font-semibold mb-2">Homepage Button Image</h3>
+    <form method="post" action="/treasury/fundraisers/{{.Fundraiser.ID}}/button-image" class="flex gap-2 mb-6">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input aria-label="Button image URL" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="button_image_url" value="{{.Fundraiser.ButtonImageURL}}" placeholder="Image URL for the homepage button">
+      <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent whitespace-nowrap">Save</button>
+    </form>
+
+    <h3 class="text-sm font-semibold mb-2">Items for Sale</h3>
+    {{if .Items}}
+      <ul class="space-y-2 mb-4">
+        {{range .Items}}
+          <li class="flex items-center gap-2">
+            <form method="post" action="/treasury/fundraisers/{{$.Fundraiser.ID}}/items/{{.ID}}" class="flex flex-1 items-center gap-2">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <input aria-label="Item name" class="flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm" type="text" name="name" value="{{.Name}}" required>
+              <input aria-label="Item price" class="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm" type="text" name="price" value="{{.PriceDisplay}}" required>
+              <button type="submit" class="rounded-md px-3 py-1 text-xs btn-accent whitespace-nowrap">Save</button>
+            </form>
+            <form method="post" action="/treasury/fundraisers/{{$.Fundraiser.ID}}/items/{{.ID}}/delete" onsubmit="return confirm('Remove this item?');">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit" class="rounded-md px-3 py-1 text-xs bg-red-50 text-red-900 hover:bg-red-100">Remove</button>
+            </form>
+          </li>
+        {{end}}
+      </ul>
+    {{else}}
+      <p class="text-sm text-gray-500 mb-4">No items yet — add the first one below.</p>
+    {{end}}
+    <form method="post" action="/treasury/fundraisers/{{.Fundraiser.ID}}/items" class="flex items-center gap-2">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input aria-label="New item name" class="flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm" type="text" name="name" placeholder="Item name, e.g. Popcorn Tin" required>
+      <input aria-label="New item price" class="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm" type="text" name="price" placeholder="20.00" required>
+      <button type="submit" class="rounded-md px-3 py-1 text-xs btn-accent whitespace-nowrap">Add Item</button>
+    </form>
+  </section>
+
   <section class="rounded-lg border border-gray-200 bg-white p-4 mb-8 max-w-sm">
     <h2 class="text-lg font-semibold mb-3">Record Proceeds for a Scout</h2>
     {{if .Scouts}}
@@ -90,6 +134,81 @@
       </div>
     {{end}}
   </section>
+
+  <h2 class="text-lg font-semibold mb-3">Storefront Orders</h2>
+  {{if .Orders}}
+    <div class="overflow-x-auto mb-8">
+      <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <thead class="bg-gray-100 text-left">
+          <tr>
+            <th class="px-4 py-2">Buyer</th>
+            <th class="px-4 py-2">Items</th>
+            <th class="px-4 py-2 text-right">Total</th>
+            <th class="px-4 py-2">Scout Credit</th>
+            <th class="px-4 py-2">Status</th>
+            <th class="px-4 py-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Orders}}
+            <tr class="border-t border-gray-100 align-top">
+              <td class="px-4 py-2">
+                {{.BuyerName}}
+                {{if .BuyerEmail}}<div class="text-xs text-gray-500">{{.BuyerEmail}}</div>{{end}}
+                {{if .BuyerPhone}}<div class="text-xs text-gray-500">{{.BuyerPhone}}</div>{{end}}
+              </td>
+              <td class="px-4 py-2">
+                <ul class="space-y-0.5">
+                  {{range .ItemViews}}<li>{{.Quantity}}&times; {{.ItemName}} ({{.LineTotalDisplay}})</li>{{end}}
+                </ul>
+              </td>
+              <td class="px-4 py-2 text-right font-mono">{{.TotalDisplay}}</td>
+              <td class="px-4 py-2">
+                <div class="text-xs text-gray-500 mb-1">"{{.ScoutNameEntered}}"</div>
+                {{if .ScoutMemberID}}
+                  <span class="text-green-700 text-xs">matched</span>
+                {{else if $.Scouts}}
+                  <form method="post" action="/treasury/fundraisers/{{$.Fundraiser.ID}}/orders/{{.ID}}/resolve-scout" class="flex gap-1">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <select aria-label="Match to a Scout" name="scout_member_id" class="rounded-md border border-gray-300 px-1 py-1 text-xs" required>
+                      <option value="">Match to…</option>
+                      {{range $.Scouts}}<option value="{{.ID}}">{{.FirstName}} {{.LastName}}</option>{{end}}
+                    </select>
+                    <button type="submit" class="rounded-md px-2 py-1 text-xs btn-accent whitespace-nowrap">Match</button>
+                  </form>
+                {{end}}
+              </td>
+              <td class="px-4 py-2">
+                <span class="rounded px-2 py-0.5 text-xs
+                  {{if eq .Status "credited"}}bg-green-50 text-green-900
+                  {{else if eq .Status "paid"}}bg-amber-50 text-amber-900
+                  {{else if eq .Status "canceled"}}bg-gray-100 text-gray-500
+                  {{else}}bg-sky-50 text-sky-900{{end}}">
+                  {{.Status}}
+                </span>
+              </td>
+              <td class="px-4 py-2">
+                {{if eq .Status "pending"}}
+                  <form method="post" action="/treasury/fundraisers/{{$.Fundraiser.ID}}/orders/{{.ID}}/mark-paid" class="inline">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <button type="submit" class="rounded-md px-2 py-1 text-xs btn-accent whitespace-nowrap">Mark Paid</button>
+                  </form>
+                {{end}}
+                {{if or (eq .Status "pending") (eq .Status "paid")}}
+                  <form method="post" action="/treasury/fundraisers/{{$.Fundraiser.ID}}/orders/{{.ID}}/cancel" class="inline" onsubmit="return confirm('Cancel this order?');">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <button type="submit" class="rounded-md px-2 py-1 text-xs bg-red-50 text-red-900 hover:bg-red-100 whitespace-nowrap">Cancel</button>
+                  </form>
+                {{end}}
+              </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  {{else}}
+    <p class="text-sm text-gray-500 mb-8">No storefront orders yet.</p>
+  {{end}}
 
   <h2 class="text-lg font-semibold mb-3">Allocations</h2>
   {{if .Allocations}}

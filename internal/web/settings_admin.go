@@ -8,6 +8,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/content"
 	"github.com/47-yonkers/scout-site/internal/family"
+	"github.com/47-yonkers/scout-site/internal/ledger"
 	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
@@ -170,6 +171,22 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Fundraiser storefront: which single fundraiser (if any) shows its
+	// "Buy Now" button on the homepage — see ledger.SetStorefrontFundraiser.
+	fundraisers, err := ledger.ListFundraisersForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading fundraisers for settings: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	var activeStorefrontID string
+	for _, f := range fundraisers {
+		if f.StorefrontEnabled {
+			activeStorefrontID = f.ID
+			break
+		}
+	}
+
 	data := struct {
 		baseData
 		Toggles             []toggleView
@@ -179,6 +196,8 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		PaymentTextSettings []unitTextSettingView
 		SocialToggles       []unitToggleView
 		SocialTextSettings  []unitTextSettingView
+		Fundraisers         []ledger.Fundraiser
+		ActiveStorefrontID  string
 	}{
 		baseData:            h.base(r, "Site Settings"),
 		Toggles:             views,
@@ -188,8 +207,34 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		PaymentTextSettings: paymentTextViews,
 		SocialToggles:       socialToggleViews,
 		SocialTextSettings:  socialTextViews,
+		Fundraisers:         fundraisers,
+		ActiveStorefrontID:  activeStorefrontID,
 	}
 	h.render(w, h.systemSettings, data)
+}
+
+// FundraiserStorefrontSettingsUpdate sets which fundraiser (if any) shows
+// its "Buy Now" button on the homepage — the Settings-page half of the
+// fundraiser storefront feature; the fundraiser's own item catalog and
+// button image are managed on its Treasury page instead (see
+// treasury.go's TreasuryFundraiserAddItem/TreasuryFundraiserSetButtonImage).
+func (h *Handlers) FundraiserStorefrontSettingsUpdate(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	if _, ok := h.requireSuperAdmin(w, r, "/admin/settings"); !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	enabled := r.FormValue("enabled") == "on"
+	if err := ledger.SetStorefrontFundraiser(r.Context(), h.Pool, unit.ID, r.FormValue("fundraiser_id"), enabled); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
 }
 
 // SystemSettingsUpdateText saves every text setting (currently just the
