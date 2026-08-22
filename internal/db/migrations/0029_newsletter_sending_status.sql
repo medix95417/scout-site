@@ -1,0 +1,18 @@
+-- 0029_newsletter_sending_status.sql
+--
+-- Adds an intermediate "sending" status between "draft" and "sent" — see
+-- internal/newsletter.BeginSend/SendNow. Sending a newsletter to a whole
+-- roster over real SMTP can take a while (each recipient is a real
+-- network round-trip, and a slow/unreachable mail server can burn up to
+-- internal/mailer's own dial+conversation timeout per recipient), so the
+-- actual send now runs detached from the HTTP request that started it —
+-- "sending" is what a newsletter sits at while that background work is
+-- in progress, both to show the admin something's happening and to stop
+-- a second click from starting an overlapping send.
+--
+-- This migration ONLY adds the enum value and nothing else — see
+-- 0005_treasurer_role.sql's comment for why (Postgres won't allow a
+-- brand-new enum value to be referenced by other statements in the same
+-- transaction that added it, and this project's migration runner applies
+-- each file inside its own transaction).
+ALTER TYPE newsletter_status ADD VALUE 'sending';

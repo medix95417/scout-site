@@ -20,6 +20,29 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Newsletter sending now happens in the background, so a slow mail
+server (or a closed browser tab) can no longer lose track of what
+actually went out.**
+- Clicking "Send Now" used to block the whole request until every single
+  recipient's email finished sending — for a real unreachable/slow SMTP
+  server, that's minutes, all inside one HTTP request. If the browser
+  disconnected or a reverse proxy gave up first, the newsletter's final
+  "sent" status, recipient count, and audit log entry never got written —
+  it stayed stuck as a draft with no record anything was attempted, and a
+  retry would resend to everyone (including anyone who *did* get it the
+  first time).
+- Sending is now: an immediate, atomic "start sending" step (checks mail is
+  configured and there are recipients, then marks the newsletter
+  "sending" so a second click can't start an overlapping send) followed by
+  the actual per-recipient sending running in the background — detached
+  from the request, so a browser disconnect can't cut it short or lose
+  the final bookkeeping. The Newsletters list and the newsletter's own
+  page show a "Sending" badge while this is in progress, and the page
+  auto-refreshes every few seconds until it's done.
+- A newsletter that somehow got stuck at "sending" (e.g. the server
+  restarted mid-send) becomes sendable again after 40 minutes, rather
+  than being stuck there forever with no way to retry.
+
 **Fixed emails (password reset, newsletters) sometimes hanging until the
 browser gives up with "site can't be reached."**
 - A slow or unresponsive SMTP server used to be able to block a send

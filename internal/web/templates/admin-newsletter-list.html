@@ -18,6 +18,9 @@
               {{if eq .Status "draft"}}
                 <a href="/admin/newsletters/{{.ID}}/edit" class="font-medium hover:underline truncate" style="color: var(--unit-color);">{{.Subject}}</a>
                 <span class="rounded-full bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5">Draft</span>
+              {{else if eq .Status "sending"}}
+                <a href="/admin/newsletters/{{.ID}}/edit" class="font-medium hover:underline truncate" style="color: var(--unit-color);">{{.Subject}}</a>
+                <span class="rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-2 py-0.5">Sending</span>
               {{else}}
                 <span class="font-medium truncate">{{.Subject}}</span>
                 <span class="rounded-full bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5">Sent</span>
@@ -27,6 +30,8 @@
               <div class="text-xs text-gray-400 mt-1">
                 Sent {{.SentOn}} to {{.RecipientCount}} recipient{{if ne .RecipientCount 1}}s{{end}}
               </div>
+            {{else if eq .Status "sending"}}
+              <div class="text-xs text-gray-400 mt-1">Sending now — this can take a few minutes for a large roster</div>
             {{else}}
               <div class="text-xs text-gray-400 mt-1">Not sent yet</div>
             {{end}}

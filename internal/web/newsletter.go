@@ -13,6 +13,7 @@ package web
 // many).
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -186,6 +187,12 @@ func (h *Handlers) AdminNewsletterUpdate(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, "/admin/newsletters/"+id+"/edit", http.StatusSeeOther)
 }
 
+// newsletterSendTimeout bounds how long the background half of a send
+// (see newsletter.SendNow) is allowed to run — generous enough to cover
+// a full roster each taking internal/mailer's own worst-case per-message
+// time, but finite, so a fundamentally stuck send can't run forever.
+const newsletterSendTimeout = 30 * time.Minute
+
 func (h *Handlers) AdminNewsletterSend(w http.ResponseWriter, r *http.Request) {
 	unit, actor, ok := h.requireContentEditor(w, r, "/admin/newsletters")
 	if !ok {
@@ -193,24 +200,44 @@ func (h *Handlers) AdminNewsletterSend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := r.PathValue("id")
-	result, err := newsletter.Send(r.Context(), h.Pool, h.Mailer, id, unit.ID, actor.ID)
+	n, err := newsletter.BeginSend(r.Context(), h.Pool, h.Mailer, id, unit.ID)
 	if err != nil {
 		switch {
 		case errors.Is(err, newsletter.ErrNotFound):
 			http.NotFound(w, r)
 		case errors.Is(err, newsletter.ErrAlreadySent):
-			http.Error(w, "this newsletter has already been sent", http.StatusBadRequest)
+			http.Error(w, "this newsletter is already sending, or has already been sent", http.StatusBadRequest)
 		case errors.Is(err, newsletter.ErrNoRecipients):
 			http.Error(w, "no recipients found — is anyone on this unit's roster yet?", http.StatusBadRequest)
 		default:
-			log.Printf("web: sending newsletter %s: %v", id, err)
+			log.Printf("web: starting newsletter send %s: %v", id, err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 		return
 	}
 
-	log.Printf("web: newsletter %s sent: %d succeeded, %d failed", id, result.Sent, result.Failed)
-	http.Redirect(w, r, "/admin/newsletters", http.StatusSeeOther)
+	// The actual per-recipient sending happens here, detached from this
+	// request: context.Background() (bounded by its own generous timeout),
+	// never r.Context() — so a browser disconnect or reverse-proxy
+	// timeout can no longer cut a send short or lose track of what
+	// actually went out, which is exactly what used to happen (see
+	// newsletter.BeginSend/SendNow's comments). A panic here would
+	// otherwise crash the whole process — this goroutine runs outside any
+	// request's callstack, so it isn't covered by net/http's own
+	// per-request recovery.
+	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("web: newsletter send %s panicked: %v", id, rec)
+			}
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), newsletterSendTimeout)
+		defer cancel()
+		result := newsletter.SendNow(ctx, h.Pool, h.Mailer, n, actor.ID)
+		log.Printf("web: newsletter %s sent: %d succeeded, %d failed", id, result.Sent, result.Failed)
+	}()
+
+	http.Redirect(w, r, "/admin/newsletters/"+id+"/edit", http.StatusSeeOther)
 }
 
 // newsletterSentOn formats a newsletter's SentAt for the admin list —
