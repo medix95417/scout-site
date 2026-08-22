@@ -48,11 +48,8 @@ type SectionDef struct {
 // indefinitely isn't ideal for a permanent production site, and real
 // troop/pack photos will always beat stock ones.
 const (
-	stockPhotoCampfire  = "https://commons.wikimedia.org/wiki/Special:FilePath/Cole_Canoe_Base_Boy_Scout_Campfire.JPG"
-	stockPhotoHiking    = "https://commons.wikimedia.org/wiki/Special:FilePath/Children_hiking_in_the_forest.jpg"
-	stockPhotoCampsite  = "https://commons.wikimedia.org/wiki/Special:FilePath/Campsite_at_NoBeBoSco_07152018.jpg"
-	stockPhotoDerby     = "https://commons.wikimedia.org/wiki/Special:FilePath/Pinewood_derby_cars_02.jpg"
-	stockPhotoTroopCamp = "https://commons.wikimedia.org/wiki/Special:FilePath/Boy_Scouts_~_Camp_Pioneer_(7839747376).jpg"
+	stockPhotoCampfire = "https://commons.wikimedia.org/wiki/Special:FilePath/Cole_Canoe_Base_Boy_Scout_Campfire.JPG"
+	stockPhotoHiking   = "https://commons.wikimedia.org/wiki/Special:FilePath/Children_hiking_in_the_forest.jpg"
 	// Philmont Scout Ranch's "Tooth of Time" — a mountain landscape, not a
 	// campfire — so the Troop hero reads distinctly older/more rugged
 	// (high-adventure) rather than reusing the Pack's cozier campfire photo.
@@ -60,15 +57,16 @@ const (
 )
 
 // HomepageSections is unit-type-aware: Packs and Troops get slightly
-// different default copy (and, for the second gallery photo, a slightly
-// different stock image), but the same editing mechanism. The Pack layout
+// different default copy, but the same editing mechanism. The Pack layout
 // mirrors pack6crestwood.org's structure — full-bleed hero banner with
 // photo, a bulleted "Our Program" list with a program photo, meeting/
-// leadership info, a two-photo gallery strip, and an optional social
-// link — adapted to only link to pages this site actually has.
+// leadership info, and an optional social link — adapted to only link to
+// pages this site actually has. The homepage's photo preview is no longer
+// a leader-curated field here — see HomeActivityPhotos, which pulls
+// straight from recent Photo Album posts instead, "by activity" per the
+// request that replaced the old single hand-picked strip.
 func HomepageSections(unitType string) []SectionDef {
 	imageHelp := "Paste a link to an image hosted elsewhere (e.g. a photo you've uploaded to Google Photos/Drive and shared publicly). Defaults to a stock Scouting photo until you swap it for your own."
-	galleryHelp := "One photo per line: paste a link to an image hosted elsewhere, or click one from your library below — either way, optionally followed by | and a caption. One photo shows plain; more than one becomes a swipeable carousel. Defaults to stock Scouting photos until you add your own."
 
 	if unitType == "troop" {
 		return []SectionDef{
@@ -78,7 +76,6 @@ func HomepageSections(unitType string) []SectionDef {
 			{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 			{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Meetings are held weekly — contact us for the current time and location."},
 			{Slug: "home-leadership", Label: "Leadership & contact", Placeholder: "Contact our Scoutmaster to learn more about joining."},
-			{Slug: "home-gallery", Label: "Gallery photos", Kind: "images", Placeholder: stockPhotoCampsite + " | The Great Outdoors\n" + stockPhotoTroopCamp + " | Adventure Awaits", Help: galleryHelp},
 			{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your troop's Facebook or Instagram page."},
 		}
 	}
@@ -89,7 +86,6 @@ func HomepageSections(unitType string) []SectionDef {
 		{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 		{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Contact us for our current meeting time and location."},
 		{Slug: "home-leadership", Label: "Leadership & contact", Placeholder: "Contact our Cubmaster to learn more about joining."},
-		{Slug: "home-gallery", Label: "Gallery photos", Kind: "images", Placeholder: stockPhotoCampsite + " | The Great Outdoors\n" + stockPhotoDerby + " | Pinewood Derby Fun", Help: galleryHelp},
 		{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your pack's Instagram or Facebook page."},
 	}
 }
