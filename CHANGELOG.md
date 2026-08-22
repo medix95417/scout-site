@@ -20,6 +20,31 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Security/robustness audit pass — two defects found and fixed.** See
+`SECURITY_AUDIT.md`'s "Audit pass 3" for the full write-up, including
+everything that was checked and came back clean.
+- **Fixed eight kinds of activity-log entry being recorded but never
+  shown.** Advancement records, custom roles, leader profiles,
+  newsletters, permission slips and their signatures, saved treasury
+  reports, and per-unit setting changes were all written to the audit log
+  correctly, but no read path could ever display them — so the activity
+  log quietly gave an incomplete answer for those categories (48 real
+  entries in the development database). Most consequential: creating a
+  custom role can grant treasury access, and per-unit settings now
+  include the newsletter and password-reset switches, so "who granted
+  that" and "who turned that off" were both unanswerable. Nothing was
+  exposed that shouldn't have been — the log showed less than it should,
+  never more.
+- **Fixed a single empty event description being able to take down the
+  calendar for everyone.** An event whose description or location was
+  genuinely empty at the database level (rather than blank text) made
+  `/calendar` fail to load entirely and blanked the homepage's upcoming
+  events list — for every visitor, not just on that one event. Events
+  created through the site were never affected; this could only come from
+  a hand-written database change, a restored backup, or a future import.
+- Both fixes ship with a test that fails the build if the same mistake is
+  reintroduced.
+
 **Two new toggles: turn off a unit's newsletters, or turn off self-service
 email password reset site-wide.**
 - New per-unit "Newsletters" toggle in `/admin/settings` (default on):

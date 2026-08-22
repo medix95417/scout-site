@@ -180,3 +180,192 @@ This pass audited every call site of `units.RolesForFamilyInUnit` and `family.Ac
 - The atomic fixes from the original pass (approval/RSVP unit checks, session invalidation on reset) and this pass's lockout counter logic were all written as single SQL statements (`INSERT ... ON CONFLICT ... DO UPDATE` for the failure counter) specifically to avoid a check-then-act race under concurrent requests.
 - **New this pass (individual Scout logins, `/accounts`, SMTP settings):** `gofmt -l .` clean across the whole repository after every change. The unused-import checker's `github.com/jackc/pgx/v5` false positive (see above) now also appears in `internal/settings/settings.go` and `internal/ledger/ledger.go`, both re-confirmed as the same false positive via `grep "pgx\."` (real usage: `pgx.ErrNoRows`, `pgx.Row`). The duplicate-declaration checker is clean. Every new/changed exported function signature (`auth.User.MemberID`, `auth.DestroySessionsForMember`, `family.GetMember`, `roster.CreateMemberLogin`/`ResetMemberLoginPassword`/`MemberHasLogin`/`MemberLoginEmail`/`ScopeForMember`, `units.MemberHasAnyTreasuryRole`, `ledger.ScoutAccountForMember`, `settings.GetText`/`SetText`/`AllText`, `mailer.New`'s new `pool` parameter and `Mailer.Enabled`'s new `ctx` parameter) was manually cross-checked against every call site — including re-ordering `cmd/server/main.go` so the mailer is constructed after the database pool connects, since `mailer.New` now needs it. This sandbox still cannot run `go build` end-to-end (same transitive-dependency caveat as every prior pass), so this manual cross-check plus the template-execution harness below remain the strongest verification available here.
 - The `/tmp/tmplcheck2` template-execution harness (persistent across this project's sessions) was extended with new scenarios for every new/changed template this pass touched: `accounts.html` (with accounts and empty), `admin-roster.html` (editable/non-editable rows, including the new "Reset Password" list link), `admin-roster-member.html` (an adult with no individual login yet, and a youth member who has one — covering both the family-password branch, which is adult-only, and the individual-login branch, which isn't), `admin-roster-credentials.html`, and `admin-settings.html`'s new text-settings section (including an adversarial `"><script>alert(1)</script>` value in a stored settings field, confirming contextual auto-escaping holds for admin-entered configuration text the same way it already did for leader-authored content and system-generated QR data). All render with zero errors; the adversarial value round-trips HTML-escaped, not executable, in the rendered output.
+
+---
+
+# Audit pass 3 — post-public-site changes (2026-08-22)
+
+**Scope:** everything merged since the last pass — PRs #42–#55: settings-page
+social media toggles, the accessibility pass, the family-directory fix,
+per-event permission slips, the email-hang and background-newsletter fixes,
+and the public-site batch (nav/footer, calendar end dates, homepage layout,
+Photos redesign, the new Our Leaders page, accordion disclosures, and the
+newsletter / password-reset kill switches).
+
+**Method — and how this pass differs from the previous two:** every prior pass
+carried the caveat that the sandbox could not run `go build`, reach a database,
+or exercise the app. That is no longer true. This pass was run against a real
+Postgres instance with the demo dataset loaded and the server actually running,
+so every claim below is backed by an executed request rather than by reading
+code alone. Findings were reproduced live before being fixed and re-verified
+live afterwards; both fixes also ship with a regression test, and each test was
+confirmed to actually fail when its fix is reverted (a passing test that cannot
+fail proves nothing).
+
+## Findings fixed in this pass
+
+### 1. MEDIUM (accountability, not exposure) — eight audit entity types were written but could never be displayed
+
+**File:** `internal/audit/audit.go` (`entityScopeSQL`)
+
+`audit_log` rows are filtered for display by `entityScopeSQL`, a UNION that
+answers "which entity IDs belong to this unit." Eight of the twenty-two
+`EntityType` values the codebase logs had no branch in it, so their rows were
+written correctly and then were unreachable from every read path — the activity
+log page, its CSV export, and its filter dropdowns alike:
+
+`advancement_record`, `custom_role`, `leader`, `newsletter`, `permission_slip`,
+`permission_slip_signature`, `saved_treasury_report`, `unit_setting`.
+
+Measured on the demo database, **48 real audit rows were affected**. The most
+consequential are `custom_role` and `unit_setting`: creating a custom role is a
+privilege-granting action (a role can carry `manage_ledger`), and per-unit
+settings now include security-relevant kill switches — so "who granted treasury
+access" and "who turned off self-service password reset" were both
+unanswerable from the activity log. `leader` was introduced by PR #52 in this
+very batch; the other seven predate it.
+
+This is the *same defect the previous pass already found and fixed once* for
+`family`/`member`/`role_assignment`/`sub_group`. It recurred because nothing
+enforced the invariant — adding an `audit.Log` call with a new `EntityType`
+requires a matching `entityScopeSQL` branch, and omitting the second half fails
+silently and invisibly.
+
+**Impact:** not a data exposure — strictly less was shown than should have
+been, and the write path was never affected, so no attacker could use this to
+hide their own actions differently than anyone else's. It is a real
+accountability gap: a leader relying on `/audit` to answer "who changed this"
+got a confidently incomplete answer for those eight categories.
+
+**Fix:** all eight added to `entityScopeSQL`, with
+`permission_slip_signatures` scoped through its parent slip (it has no
+`unit_id` of its own). Verified live: the filter dropdown now offers every
+type, and per-unit counts are strict subsets of the global totals — the Troop's
+log shows 2 leader entries and the Pack's shows 1, exactly matching the
+database — confirming the new branches did not introduce cross-unit leakage
+into the activity log, which is the obvious way this fix could have gone wrong.
+
+**Durable fix:** `internal/audit/audit_entity_scope_test.go` walks the whole
+repository for `EntityType:` literals and fails the build if any is missing
+from `entityScopeSQL`, plus a second test that catches stale mappings left
+behind after a call site is removed. This is the third occurrence of this class
+of bug; a comment asking future authors to remember was demonstrably not enough.
+
+### 2. LOW–MEDIUM (availability) — one NULL event description took down the calendar and homepage for everyone
+
+**File:** `internal/calendar/calendar.go` (`eventColumns`)
+
+`events.description` and `events.location` are nullable in `0001_init.sql`, but
+`eventColumns` selected them bare into plain `string` scan targets. Because
+`queryEvents` scans rows in a loop, a single NULL row does not degrade that one
+row — it aborts the entire query. Found accidentally while seeding test events
+for the calendar end-date checks below: one hand-written `INSERT` that left
+`description` NULL turned `/calendar` into a 500 and blanked the homepage's
+upcoming-events list, for every visitor, anonymous and logged-in alike.
+
+**Impact:** availability only; no confidentiality or integrity dimension. Not
+reachable through the application's own write paths today — `calendar.Create`
+takes Go `string`s and therefore always writes `''`, never NULL — so this is
+latent rather than live. It becomes reachable through a hand-written `INSERT`,
+a restored or migrated backup, or any future import path, and the blast radius
+is a total outage of two of the site's most-visited pages rather than one
+missing row. The rest of the codebase already defends against exactly this with
+`COALESCE(col, '')`, including on `events.location` in `internal/files`' own
+join against this same table, so this was an inconsistency rather than a
+considered decision.
+
+**Fix:** both columns `COALESCE`'d in `eventColumns`, matching the existing
+convention.
+
+**Durable fix:** `internal/calendar/event_columns_test.go` parses the
+migrations for the `events` table's nullable columns and asserts every one that
+is scanned into a plain string is `COALESCE`'d — so a nullable column added to
+`events` by a future migration fails in CI rather than in production. It runs
+without a database, since CI has no Postgres service.
+
+**Related sweep, came back clean:** the whole schema was checked for the same
+class. There are eight nullable `text` columns across all tables
+(`events.description`, `events.location`, `families.address`,
+`members.cell_phone`/`email`/`home_phone`, `resources.url`,
+`sub_groups.description`, `system_settings.value_text`,
+`unit_settings.value_text`, `units.logo_url`). Every one other than the two
+above is already either `COALESCE`'d or scanned into a pointer, which is the
+correct idiom. `sub_groups.description` was additionally verified empirically —
+forced to NULL in the live database, after which `/groups`, the group detail
+page, `/admin/groups/{id}`, `/admin/roster` and `/calendar` all still returned
+200 with nothing in the error log.
+
+## Checked and clean (executed, not assumed)
+
+- **XSS in the new Leaders feature, across all three escaping contexts.** A
+  leader profile was created through the real admin form with
+  `X"><script>alert(1)</script> O'Brien');alert(2);//` as the name,
+  `</p><svg onload=alert(3)>` as the role title, `<img src=x onerror=alert(4)>`
+  as the bio, and `javascript:alert(5)` as the photo URL, then rendered on both
+  the public page and the admin list. HTML context escaped
+  (`&#34;&gt;&lt;script&gt;`); the JS-in-attribute context — the
+  `onsubmit="return confirm('Remove {{.Name}}…')"` delete confirmation, the
+  riskiest new markup in the batch — correctly JS-escaped to
+  `"><script>` and `O'Brien'`, so the apostrophe
+  cannot terminate the `confirm()` string; and the `javascript:` URL was
+  neutralised by `html/template`'s URL filter to `#ZgotmplZ`. No payload
+  survived in executable form anywhere.
+- **Cross-tenant isolation on the new Leaders CRUD.** A Troop Scoutmaster
+  holding no Pack role, given a Pack leader's UUID, got 404 on all four routes
+  (`GET .../edit`, `POST` update, publish, delete); the row was confirmed
+  unchanged afterwards, and the Pack leader never appeared on the Troop's
+  public page. A Parent got 403 on the admin list. This is the same shape as
+  pass 1's Finding 1, re-tested against new code.
+- **Members-only content never leaks to anonymous visitors** — the highest-risk
+  question for the redesigned homepage and Photos pages, since the Photos list
+  now carries every photo of every album rather than just a cover image. A
+  published members-only album was invisible on the anonymous homepage and
+  `/gallery` (title and captions both), returned 404 on its direct URL, and was
+  correctly visible to a logged-in family. The homepage's "Recent Activities"
+  preview stayed public-only even when rendered for a logged-in user.
+- **Draft leader profiles are never public** — verified through the full
+  draft → publish → unpublish lifecycle.
+- **Permission model, swept as a matrix rather than spot-checked.** 27 routes ×
+  4 Troop personas (anonymous, parent, scoutmaster, super admin) and 10 routes ×
+  3 Pack personas. Every cell matched intent: anonymous redirects on everything
+  non-public, parents 403 on all admin surfaces, scoutmasters 403 on treasury /
+  settings / custom roles, super admin through. No regressions from the
+  accordion refactors, which touched many of these templates.
+- **Den-leader scoping.** A Den Leader saw 3 editable members against a
+  Cubmaster's 15, got the scoped-notice copy, and was 403'd on a member outside
+  her den — the area pass 2 found a second-order bug in.
+- **The two new kill switches are properly gated.** Neither a scoutmaster nor a
+  parent can flip the site-wide password-reset switch or the per-unit
+  newsletter switch (403 both); the switch's stored value was confirmed
+  unchanged after the attempts. Both routes reject a missing *and* a forged
+  CSRF token (403).
+- **No `{{range}}`-nested bare `.CSRFToken`.** The accordion work moved many
+  forms inside `<details>` blocks, which is exactly the situation that produces
+  pass 2's silent-empty-token bug. A nesting-aware scan of all templates found
+  none; every CSRF field inside a loop correctly uses `{{$.CSRFToken}}`.
+- **Newsletter sending has not regressed to hanging** (PRs #46/#47). With SMTP
+  unconfigured, "Send now" returned HTTP 400 with a clear message in 2ms and
+  left the newsletter as a draft, rather than blocking the request.
+- **Calendar end-date filtering** (PR #49) behaves correctly against a
+  discriminating set: a multi-day event still running shows, one that finished
+  three days ago does not, a future single-day event shows, a past one does
+  not. The `/calendar` month grid still shows past events in the current month,
+  which is correct for a grid and distinct from the "upcoming" list.
+- **Permission-slip enforcement** (PR #45): with enforcement off both a
+  slip-requiring event and a weekly meeting offer the link; with it on the
+  weekly meeting drops to none. The documented leader escape hatch works (200
+  for a leader on an unflagged event, 404 for a parent, 303 for anonymous, 404
+  cross-unit).
+
+## Verification
+
+- `gofmt -l .` clean and stable across repeated runs; `go build ./...`,
+  `go vet ./...`, and `go test ./...` all pass, including the two new test
+  files. The template-parse smoke test passes over all templates.
+- Both new tests were confirmed non-vacuous by reverting their fix and watching
+  them fail with the intended message, then restoring it.
+- One caveat worth stating plainly: `go vet` and the test suite run without a
+  database, and CI has no Postgres service, so both regression tests added here
+  are deliberately static (they parse migrations and SQL constants) rather than
+  round-tripping real rows. They catch the specific defects found, not every
+  possible NULL-handling or audit-scope mistake.

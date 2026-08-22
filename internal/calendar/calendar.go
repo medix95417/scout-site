@@ -33,7 +33,20 @@ type Event struct {
 // exact order queryEvents/GetEvent scan them — kept as one constant so
 // adding a column (like RequiresPermissionSlip) is a one-line change
 // instead of finding every duplicated SELECT.
-const eventColumns = `id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text, requires_permission_slip`
+//
+// description and location are nullable in the schema (0001_init.sql) but
+// scan into plain strings, so they're COALESCE'd here — the same
+// convention the rest of the codebase already uses for nullable text
+// (internal/files already COALESCEs events.location in its own join on
+// this very table). Without it a single NULL takes down far more than the
+// row it's on: queryEvents aborts the whole scan, so one such row 500s the
+// entire /calendar page and blanks the homepage's upcoming-events list for
+// every visitor. Event.Create only ever writes "" (its inputs are Go
+// strings, never nil), so this isn't reachable through the app's own write
+// paths today — it's defence against a hand-written INSERT, a restored
+// backup, or a future import path introducing what the schema plainly
+// allows.
+const eventColumns = `id, unit_id, title, COALESCE(description, ''), COALESCE(location, ''), starts_at, ends_at, visibility::text, status::text, sub_group_id::text, requires_permission_slip`
 
 // DateRangeDisplay is the human-friendly date/time string used everywhere
 // an event's schedule is shown — the calendar list, the month grid, and the
