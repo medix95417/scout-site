@@ -92,8 +92,8 @@ type publicPostView struct {
 	ID       string
 	Title    string
 	PostedOn string
-	Excerpt  string // news only; "" for galleries
-	CoverURL string // galleries only; "" for news
+	Excerpt  string                 // news only; "" for galleries
+	Photos   []content.GalleryPhoto // galleries only; nil for news
 }
 
 func postedOn(t time.Time) string {
@@ -179,11 +179,7 @@ func (h *Handlers) newsDetail(w http.ResponseWriter, r *http.Request, p content.
 func (h *Handlers) galleryList(w http.ResponseWriter, r *http.Request, posts []content.Post) {
 	items := make([]publicPostView, 0, len(posts))
 	for _, p := range posts {
-		coverURL := ""
-		if photos := content.ParseGalleryPhotos(p.Body); len(photos) > 0 {
-			coverURL = photos[0].URL
-		}
-		items = append(items, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.CreatedAt), CoverURL: coverURL})
+		items = append(items, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.CreatedAt), Photos: content.ParseGalleryPhotos(p.Body)})
 	}
 	data := struct {
 		baseData

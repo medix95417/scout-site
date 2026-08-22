@@ -4,7 +4,10 @@
   <div class="text-xs text-gray-400 mb-6">{{.PostedOn}}</div>
 
   {{if .Photos}}
-    {{template "photoCarousel" (dict "Photos" .Photos "HeightClass" "h-80")}}
+    <div data-carousel-group>
+      {{template "photoCarousel" (dict "Photos" .Photos "HeightClass" "h-80")}}
+      {{template "photoCarouselThumbnails" .}}
+    </div>
     {{template "photoCarouselScript" .}}
   {{else}}
     <p class="text-sm text-gray-500">No photos in this gallery yet.</p>

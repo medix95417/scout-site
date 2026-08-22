@@ -103,7 +103,50 @@
       var autorotate = car.getAttribute('data-carousel-autorotate');
       if (autorotate) setInterval(advance, parseInt(autorotate, 10));
     });
+
+    // Wires a photoCarouselThumbnails strip to the photoCarousel it's
+    // grouped with (see gallery-detail.html's data-carousel-group wrapper):
+    // clicking a thumbnail jumps the main carousel to that photo, and the
+    // active thumbnail stays in sync as the visitor scrolls/swipes the
+    // main carousel directly.
+    document.querySelectorAll('[data-carousel-group]').forEach(function (group) {
+      var car = group.querySelector('[data-carousel]');
+      var thumbs = Array.prototype.slice.call(group.querySelectorAll('[data-carousel-thumb]'));
+      if (!car || !thumbs.length) return;
+      function setActive(index) {
+        thumbs.forEach(function (t, i) {
+          t.classList.toggle('border-blue-500', i === index);
+          t.classList.toggle('border-gray-200', i !== index);
+        });
+      }
+      thumbs.forEach(function (t, i) {
+        t.addEventListener('click', function () { car.scrollTo({ left: i * car.clientWidth, behavior: 'smooth' }); });
+      });
+      car.addEventListener('scroll', function () {
+        setActive(Math.round(car.scrollLeft / (car.clientWidth || 1)));
+      });
+      setActive(0);
+    });
   </script>
+{{end}}
+
+{{/* photoCarouselThumbnails renders a row of small clickable thumbnails
+     below a photoCarousel, one per photo, so a visitor can jump straight
+     to a photo instead of only stepping through with prev/next. Pair it
+     with photoCarousel inside a common [data-carousel-group] wrapper —
+     see gallery-detail.html — so photoCarouselScript above can find both.
+     Takes the same Photos as photoCarousel; renders nothing for a single
+     photo, same threshold as the prev/next buttons. */}}
+{{define "photoCarouselThumbnails"}}
+  {{if gt (len .Photos) 1}}
+    <div class="mt-3 flex gap-2 overflow-x-auto pb-1">
+      {{range $i, $p := .Photos}}
+        <button type="button" class="flex-shrink-0 w-20 h-16 rounded-md overflow-hidden border-2 {{if eq $i 0}}border-blue-500{{else}}border-gray-200{{end}}" data-carousel-thumb="{{$i}}" aria-label="{{if $p.Caption}}{{$p.Caption}}{{else}}View photo{{end}}">
+          <img src="{{$p.URL}}" alt="{{$p.Caption}}" class="h-full w-full object-cover">
+        </button>
+      {{end}}
+    </div>
+  {{end}}
 {{end}}
 
 {{/* imagePickerScript wires up every [data-image-picker] on the page —
