@@ -57,14 +57,18 @@
        Photos      anything rangeable with .URL/.Caption fields (e.g.
                    []content.GalleryPhoto)
        HeightClass a Tailwind height class for each photo, e.g. "h-80"
+       AutoRotate  if true (and there's more than one photo), advances to
+                   the next photo on a timer instead of waiting for a
+                   click/swipe — used for unattended previews like the
+                   homepage's recent-activity strip.
 
      Pure CSS scroll-snap under the hood, so swipe/scroll navigation works
      with zero JS; photoCarouselScript below only adds the prev/next
-     button behavior on top. */}}
+     button behavior (and the auto-rotate timer) on top. */}}
 {{define "photoCarousel"}}
   {{if .Photos}}
     <div class="relative">
-      <div class="flex overflow-x-auto snap-x snap-mandatory rounded-lg border border-gray-200 bg-white" data-carousel>
+      <div class="flex overflow-x-auto snap-x snap-mandatory rounded-lg border border-gray-200 bg-white" data-carousel {{if and .AutoRotate (gt (len .Photos) 1)}}data-carousel-autorotate="4000"{{end}}>
         {{$height := .HeightClass}}
         {{range .Photos}}
           <figure class="snap-start flex-shrink-0 w-full">
@@ -87,8 +91,17 @@
       var wrap = car.closest('.relative');
       var prev = wrap.querySelector('[data-carousel-prev]');
       var next = wrap.querySelector('[data-carousel-next]');
+      function advance() {
+        if (car.scrollLeft + car.clientWidth >= car.scrollWidth - 1) {
+          car.scrollTo({ left: 0, behavior: 'smooth' });
+        } else {
+          car.scrollBy({ left: car.clientWidth, behavior: 'smooth' });
+        }
+      }
       if (prev) prev.addEventListener('click', function () { car.scrollBy({ left: -car.clientWidth, behavior: 'smooth' }); });
-      if (next) next.addEventListener('click', function () { car.scrollBy({ left: car.clientWidth, behavior: 'smooth' }); });
+      if (next) next.addEventListener('click', function () { advance(); });
+      var autorotate = car.getAttribute('data-carousel-autorotate');
+      if (autorotate) setInterval(advance, parseInt(autorotate, 10));
     });
   </script>
 {{end}}

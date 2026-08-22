@@ -20,6 +20,19 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Homepage now previews recent Photo Album activities alongside upcoming
+events, side by side.**
+- Added a two-column section: upcoming public events (from the calendar) on
+  the right, and a preview of recent, published, public Photo Album
+  activities on the left — each activity showing its own auto-rotating
+  photo carousel (advancing every few seconds) when it has more than one
+  photo, so a visitor gets a glance at what the unit's been up to without
+  clicking into `/gallery`.
+- This replaces the old, leader-curated "Gallery photos" homepage field
+  (a fixed, manually-maintained photo strip) — the homepage now pulls
+  straight from whatever Photo Album posts are actually published, so it
+  stays current automatically as new albums go up.
+
 **Fixed multi-day events disappearing from "Upcoming Events" before they
 actually ended.**
 - The homepage and `/calendar`'s "Upcoming Events" list only checked an

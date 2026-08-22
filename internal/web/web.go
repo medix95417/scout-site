@@ -740,29 +740,19 @@ func sectionText(saved map[string]content.Section, def content.SectionDef) strin
 	return def.Placeholder
 }
 
-// legacyGalleryPhotos reconstructs the pre-carousel, two-fixed-photo
-// homepage gallery strip from its old separate slugs (home-gallery-1/
-// home-gallery-2, retired in favor of one combined home-gallery field —
-// see content.HomepageSections) — so a unit that had already configured
-// those two photos doesn't lose them the first time this handler runs
-// after the upgrade, just because it hasn't saved the new combined field
-// yet. ok is false if neither legacy slug was ever saved (nothing to
-// migrate, the caller should fall back to the new field's own default).
-func legacyGalleryPhotos(saved map[string]content.Section, unitType string) (photos []content.GalleryPhoto, ok bool) {
-	photo2Caption := "Pinewood Derby Fun"
-	if unitType == "troop" {
-		photo2Caption = "Adventure Awaits"
-	}
-	if s, exists := saved["home-gallery-1"]; exists && s.Body != "" {
-		photos = append(photos, content.GalleryPhoto{URL: s.Body, Caption: "The Great Outdoors"})
-		ok = true
-	}
-	if s, exists := saved["home-gallery-2"]; exists && s.Body != "" {
-		photos = append(photos, content.GalleryPhoto{URL: s.Body, Caption: photo2Caption})
-		ok = true
-	}
-	return photos, ok
+// homeActivity is one recent, published, public Photo Album shown in the
+// homepage's left-column preview — see maxHomeActivities below.
+type homeActivity struct {
+	Title  string
+	URL    string
+	Photos []content.GalleryPhoto
 }
+
+// maxHomeActivities caps how many recent Photo Album posts the homepage
+// previews — ListPublishedPublicForUnit returns every one, newest first,
+// but the homepage only has room for a handful before it should send
+// visitors to the full /gallery listing instead.
+const maxHomeActivities = 3
 
 func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
@@ -790,38 +780,47 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// The combined home-gallery field replaced two separate fixed-photo
-	// slugs (home-gallery-1/home-gallery-2) — fall back to reconstructing
-	// those if a leader configured the old layout but hasn't saved the new
-	// field yet, so upgrading never silently drops an already-set photo.
-	galleryPhotos := content.ParseGalleryPhotos(text["home-gallery"])
-	if _, alreadySaved := saved["home-gallery"]; !alreadySaved {
-		if legacy, ok := legacyGalleryPhotos(saved, unit.UnitType); ok {
-			galleryPhotos = legacy
+	// The left-column preview shows recent Photo Album activities, newest
+	// first, each with its own auto-rotating carousel — replacing the old
+	// single leader-curated home-gallery strip with something that updates
+	// itself as new albums get published.
+	galleryPosts, err := content.ListPublishedPublicForUnit(r.Context(), h.Pool, unit.ID, "gallery")
+	if err != nil {
+		log.Printf("web: listing public photo albums: %v", err)
+	}
+	var activities []homeActivity
+	for _, p := range galleryPosts {
+		if len(activities) >= maxHomeActivities {
+			break
 		}
+		photos := content.ParseGalleryPhotos(p.Body)
+		if len(photos) == 0 {
+			continue
+		}
+		activities = append(activities, homeActivity{Title: p.Title, URL: "/gallery/" + p.ID, Photos: photos})
 	}
 
 	data := struct {
 		baseData
 		Events          []calendar.Event
+		Activities      []homeActivity
 		Hero            string
 		HeroImageURL    string
 		ProgramItems    []string
 		ProgramImageURL string
 		Meeting         string
 		Leadership      string
-		GalleryPhotos   []content.GalleryPhoto
 		SocialURL       string
 	}{
 		baseData:        h.base(r, ""),
 		Events:          events,
+		Activities:      activities,
 		Hero:            text["home-hero"],
 		HeroImageURL:    text["home-hero-image"],
 		ProgramItems:    programItems,
 		ProgramImageURL: text["home-program-image"],
 		Meeting:         text["home-meeting"],
 		Leadership:      text["home-leadership"],
-		GalleryPhotos:   galleryPhotos,
 		SocialURL:       text["home-social"],
 	}
 
