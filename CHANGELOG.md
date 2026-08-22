@@ -20,6 +20,23 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Permission slips are now a per-event choice, with a unit-wide option to
+only show them where they're actually needed.**
+- **"Requires a permission slip" checkbox** when creating a calendar event —
+  most events (a weekly meeting) don't need one; a trip or campout does.
+  Existing events that already had a permission slip attached were
+  backfilled to "required," so nothing already in use changed.
+- **New `/admin/settings` toggle: "Only show permission slips on events
+  that need one."** Off by default — every event keeps showing the
+  "Permission slip" link, exactly as before. Turned on, the link (and the
+  page itself, even by direct URL) only shows for events marked as
+  requiring one — a weekly meeting won't display it at all. A leader can
+  always reach an event's permission slip page either way, since there's
+  no way yet to edit an event's "requires a permission slip" flag after
+  creation. An event a leader already attached a real slip to also always
+  stays reachable to families, regardless of the checkbox, so a slip
+  never becomes undiscoverable once it exists.
+
 **Fixed the Family Directory showing admin/technical accounts as if they
 were families.**
 - A login whose only role in a unit is `super_admin` (e.g. a bootstrap

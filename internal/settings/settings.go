@@ -194,6 +194,18 @@ const AdvancementEnabled = "advancement_enabled"
 // browsing balances turn that off without dropping the treasury feature.
 const ScoutAccountSelfService = "scout_account_self_service"
 
+// PermissionSlipEnforcement controls whether the "Permission slip" link on
+// /calendar only shows for events a leader has explicitly marked as
+// requiring one (see calendar.Event.RequiresPermissionSlip) — a weekly
+// meeting doesn't need it cluttering every single event. Defaults to
+// false: every event keeps showing the link, same as before this existed,
+// so nothing changes until a unit opts in. A leader (CanEditUnitContent)
+// can always reach an event's permission-slip page regardless of this
+// setting or the event's own flag — there's no way to edit an event after
+// creation yet, so a leader who forgot to check the box still needs an
+// escape hatch to attach a slip after the fact.
+const PermissionSlipEnforcement = "permission_slip_enforcement"
+
 // Payments toggles — whether this unit accepts online payments through
 // each processor. Off by default: a unit shouldn't start accepting real
 // payments just because it upgraded to a version of the app that added
@@ -249,6 +261,12 @@ var UnitToggles = []UnitToggle{
 		Label:       "Family access to Scout account balances",
 		Description: "Lets a family (or a Scout's own login) view their own Scout account balance and history under \"My Accounts\". Turn off to keep account balances treasurer-only — the Treasury area is unchanged, this just shuts off the family-facing self-service view.",
 		Default:     true,
+	},
+	{
+		Key:         PermissionSlipEnforcement,
+		Label:       "Only show permission slips on events that need one",
+		Description: "Off (default): every event shows a \"Permission slip\" link, whether or not it needs one. On: only events a leader marks \"Requires a permission slip\" when creating them show that link — a weekly meeting won't display it at all. Leaders can always reach an event's permission slip page either way.",
+		Default:     false,
 	},
 	{
 		Key:         PaymentsStripeEnabled,

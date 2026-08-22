@@ -23,6 +23,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/calendar"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/permission"
+	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
 
@@ -74,6 +75,27 @@ func (h *Handlers) PermissionSlipView(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: loading permission slip: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+
+	// Mirrors calendar.html's ShowPermissionSlip: once a unit turns on
+	// settings.PermissionSlipEnforcement, an event that's neither marked
+	// as requiring one nor already has a real slip attached is off-limits
+	// to everyone but a leader (who always keeps access, since there's no
+	// way yet to edit an event's flag after creation) — not just hidden
+	// from the calendar list, but unreachable by URL too. An event a
+	// leader already attached a slip to stays reachable regardless, so a
+	// family can still find and sign it.
+	if !canEdit && !event.RequiresPermissionSlip && !hasSlip {
+		enforced, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.PermissionSlipEnforcement)
+		if err != nil {
+			log.Printf("web: loading permission slip enforcement setting: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if enforced {
+			http.NotFound(w, r)
+			return
+		}
 	}
 
 	var signatures []permission.Signature

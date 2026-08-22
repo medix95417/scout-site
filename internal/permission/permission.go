@@ -128,6 +128,30 @@ func GetSlip(ctx context.Context, pool *pgxpool.Pool, id, unitID string) (Slip, 
 	return s, nil
 }
 
+// EventIDsWithSlips returns, as a set, every event ID in a unit that
+// already has a permission slip attached — what the calendar page uses
+// (alongside settings.PermissionSlipEnforcement) to decide whether to
+// show the "Permission slip" link: an event a leader already attached a
+// real slip to should never lose that link just because it wasn't also
+// marked "requires a permission slip" at creation time.
+func EventIDsWithSlips(ctx context.Context, pool *pgxpool.Pool, unitID string) (map[string]bool, error) {
+	rows, err := pool.Query(ctx, `SELECT event_id FROM permission_slips WHERE unit_id = $1`, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := make(map[string]bool)
+	for rows.Next() {
+		var eventID string
+		if err := rows.Scan(&eventID); err != nil {
+			return nil, err
+		}
+		ids[eventID] = true
+	}
+	return ids, rows.Err()
+}
+
 // GetSlipForEvent looks up an event's permission slip, if it has one.
 func GetSlipForEvent(ctx context.Context, pool *pgxpool.Pool, eventID, unitID string) (Slip, bool, error) {
 	s, err := scanSlip(pool.QueryRow(ctx, `SELECT `+slipColumns+` FROM permission_slips WHERE event_id = $1 AND unit_id = $2`, eventID, unitID))

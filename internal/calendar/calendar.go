@@ -16,17 +16,24 @@ import (
 )
 
 type Event struct {
-	ID          string
-	UnitID      string
-	Title       string
-	Description string
-	Location    string
-	StartsAt    time.Time
-	EndsAt      *time.Time
-	Visibility  string  // "public" | "members"
-	Status      string  // "draft" | "pending_approval" | "published" | "rejected"
-	SubGroupID  *string // nil = whole-unit event; set = scoped to one patrol/den (see migration 0018)
+	ID                     string
+	UnitID                 string
+	Title                  string
+	Description            string
+	Location               string
+	StartsAt               time.Time
+	EndsAt                 *time.Time
+	Visibility             string  // "public" | "members"
+	Status                 string  // "draft" | "pending_approval" | "published" | "rejected"
+	SubGroupID             *string // nil = whole-unit event; set = scoped to one patrol/den (see migration 0018)
+	RequiresPermissionSlip bool    // set by the creator — most events (a weekly meeting) don't need one; see migration 0028
 }
+
+// eventColumns is the column list every event query below selects, in the
+// exact order queryEvents/GetEvent scan them — kept as one constant so
+// adding a column (like RequiresPermissionSlip) is a one-line change
+// instead of finding every duplicated SELECT.
+const eventColumns = `id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text, requires_permission_slip`
 
 // DateRangeDisplay is the human-friendly date/time string used everywhere
 // an event's schedule is shown — the calendar list, the month grid, and the
@@ -65,15 +72,16 @@ func sameDay(a, b time.Time) bool {
 // decided by Create based on the submitter's roles, not passed in by the
 // caller — that keeps "can this role publish directly?" logic in one place.
 type CreateInput struct {
-	UnitID      string
-	Title       string
-	Description string
-	Location    string
-	StartsAt    time.Time
-	EndsAt      *time.Time
-	Visibility  string
-	CreatedBy   string  // member ID
-	SubGroupID  *string // nil = whole-unit event; set = scoped to one patrol/den
+	UnitID                 string
+	Title                  string
+	Description            string
+	Location               string
+	StartsAt               time.Time
+	EndsAt                 *time.Time
+	Visibility             string
+	CreatedBy              string  // member ID
+	SubGroupID             *string // nil = whole-unit event; set = scoped to one patrol/den
+	RequiresPermissionSlip bool
 }
 
 // Create inserts an event. If canPublishDirectly is false (the creator only
@@ -89,11 +97,11 @@ func Create(ctx context.Context, pool *pgxpool.Pool, in CreateInput, canPublishD
 
 	var e Event
 	err := pool.QueryRow(ctx, `
-		INSERT INTO events (unit_id, title, description, location, starts_at, ends_at, visibility, status, created_by, sub_group_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
-	`, in.UnitID, in.Title, in.Description, in.Location, in.StartsAt, in.EndsAt, in.Visibility, status, in.CreatedBy, in.SubGroupID,
-	).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID)
+		INSERT INTO events (unit_id, title, description, location, starts_at, ends_at, visibility, status, created_by, sub_group_id, requires_permission_slip)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING `+eventColumns+`
+	`, in.UnitID, in.Title, in.Description, in.Location, in.StartsAt, in.EndsAt, in.Visibility, status, in.CreatedBy, in.SubGroupID, in.RequiresPermissionSlip,
+	).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID, &e.RequiresPermissionSlip)
 	if err != nil {
 		return Event{}, err
 	}
@@ -120,7 +128,7 @@ func Create(ctx context.Context, pool *pgxpool.Pool, in CreateInput, canPublishD
 // visitors should use ListUpcomingPublicForUnit instead.
 func ListUpcomingForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Event, error) {
 	return queryEvents(ctx, pool, `
-		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
+		SELECT `+eventColumns+`
 		FROM events
 		WHERE unit_id = $1 AND status = 'published' AND starts_at >= now() - interval '1 day'
 		ORDER BY starts_at
@@ -131,7 +139,7 @@ func ListUpcomingForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string)
 // what the unauthenticated landing page shows.
 func ListUpcomingPublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Event, error) {
 	return queryEvents(ctx, pool, `
-		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
+		SELECT `+eventColumns+`
 		FROM events
 		WHERE unit_id = $1 AND status = 'published' AND visibility = 'public' AND starts_at >= now() - interval '1 day'
 		ORDER BY starts_at
@@ -145,7 +153,7 @@ func ListUpcomingPublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID s
 // as opposed to ListUpcomingForUnit's "starting from today" list.
 func ListForRangeForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string, rangeStart, rangeEnd time.Time) ([]Event, error) {
 	return queryEvents(ctx, pool, `
-		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
+		SELECT `+eventColumns+`
 		FROM events
 		WHERE unit_id = $1 AND status = 'published'
 			AND starts_at < $3 AND COALESCE(ends_at, starts_at) >= $2
@@ -157,7 +165,7 @@ func ListForRangeForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string,
 // events, for the month grid shown to unauthenticated visitors.
 func ListForRangePublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string, rangeStart, rangeEnd time.Time) ([]Event, error) {
 	return queryEvents(ctx, pool, `
-		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
+		SELECT `+eventColumns+`
 		FROM events
 		WHERE unit_id = $1 AND status = 'published' AND visibility = 'public'
 			AND starts_at < $3 AND COALESCE(ends_at, starts_at) >= $2
@@ -172,7 +180,7 @@ func ListForRangePublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID s
 // forward-looking list.
 func ListAllForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Event, error) {
 	return queryEvents(ctx, pool, `
-		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
+		SELECT `+eventColumns+`
 		FROM events
 		WHERE unit_id = $1 AND status = 'published'
 		ORDER BY starts_at DESC
@@ -188,9 +196,9 @@ func ListAllForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]E
 func GetEvent(ctx context.Context, pool *pgxpool.Pool, eventID, unitID string) (Event, bool, error) {
 	var e Event
 	err := pool.QueryRow(ctx, `
-		SELECT id, unit_id, title, description, location, starts_at, ends_at, visibility::text, status::text, sub_group_id::text
+		SELECT `+eventColumns+`
 		FROM events WHERE id = $1 AND unit_id = $2
-	`, eventID, unitID).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID)
+	`, eventID, unitID).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID, &e.RequiresPermissionSlip)
 	if err != nil {
 		return Event{}, false, nil //nolint:nilerr // "no such event in this unit" is a normal, expected outcome
 	}
@@ -207,7 +215,7 @@ func queryEvents(ctx context.Context, pool *pgxpool.Pool, sql string, args ...an
 	var events []Event
 	for rows.Next() {
 		var e Event
-		if err := rows.Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID); err != nil {
+		if err := rows.Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID, &e.RequiresPermissionSlip); err != nil {
 			return nil, err
 		}
 		events = append(events, e)
