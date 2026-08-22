@@ -211,15 +211,17 @@
     {{template "content" .}}
   </main>
 
-  <!-- Dark Scouting-Blue footer bar, per the BSA Digital Brand Guidelines'
-       footer anatomy (container / social icons / copyright). Deliberately
-       leaves out the guideline's national-property link row (About,
-       Careers, Terms, Privacy Policy, Donor Privacy, Connect, Contact) —
-       those assume a BSA National/council site; this unit has no jobs
-       page or national donor-privacy policy for "Careers"/"Donor Privacy"
-       to point at, and adding them as dead links would look broken, not
-       polished. -->
-  <footer class="w-full" style="background-color: #003366;">
+  <!-- Footer bar, per the BSA Digital Brand Guidelines' footer anatomy
+       (container / social icons / copyright). Deliberately leaves out the
+       guideline's national-property link row (About, Careers, Terms,
+       Privacy Policy, Donor Privacy, Connect, Contact) — those assume a
+       BSA National/council site; this unit has no jobs page or national
+       donor-privacy policy for "Careers"/"Donor Privacy" to point at, and
+       adding them as dead links would look broken, not polished.
+       Matches the header's own --unit-color rather than a fixed navy, so
+       the two bars read as one consistent band in each unit's own color
+       instead of a green header sitting above an unrelated blue footer. -->
+  <footer class="w-full" style="background-color: var(--unit-color);">
     <div class="max-w-4xl mx-auto px-4 py-8 text-center">
       {{if or .FooterFacebookURL .FooterInstagramURL .FooterTikTokURL}}
         <!-- Simple, generic single-color glyphs (the common "follow us"

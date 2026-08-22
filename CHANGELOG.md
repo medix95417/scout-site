@@ -20,6 +20,11 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Footer now matches the header's color, instead of a fixed navy.**
+Troop's footer previously stayed a fixed dark blue no matter what, which
+clashed with its green header — it now matches the header's color for
+every unit, so the two bars read as one consistent band top and bottom.
+
 **Security/robustness audit pass — two defects found and fixed.** See
 `SECURITY_AUDIT.md`'s "Audit pass 3" for the full write-up, including
 everything that was checked and came back clean.
