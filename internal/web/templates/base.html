@@ -68,6 +68,18 @@
         {{.Unit.Name}}
       </a>
 
+      <!-- Quick links to the site's main public pages, visible without
+           opening the hamburger — hidden below sm since there isn't room
+           next to the logo/name on a phone-width screen; the hamburger
+           (which already lists these plus everything else) still covers
+           that case. Shown to every visitor, logged in or not — these are
+           all public pages either way. -->
+      <nav class="hidden sm:flex items-center gap-5 text-sm">
+        <a href="/resources" class="hover:underline">Resources</a>
+        <a href="/gallery" class="hover:underline">Photos</a>
+        <a href="/calendar" class="hover:underline">Calendar</a>
+      </nav>
+
       <!-- A <details>/<summary> disclosure needs no JS to open/close —
            see menu.js below for the small enhancement that auto-closes it
            on an outside click or after following a link, which <details>
@@ -83,7 +95,7 @@
         <nav class="absolute right-0 mt-2 w-64 max-w-[90vw] rounded-md bg-white text-gray-900 shadow-lg ring-1 ring-black/10 py-2 text-sm z-50">
           <a href="/calendar" class="block px-4 py-2 hover:bg-gray-100">Calendar</a>
           <a href="/news" class="block px-4 py-2 hover:bg-gray-100">News</a>
-          <a href="/gallery" class="block px-4 py-2 hover:bg-gray-100">Gallery</a>
+          <a href="/gallery" class="block px-4 py-2 hover:bg-gray-100">Photos</a>
           <a href="/resources" class="block px-4 py-2 hover:bg-gray-100">Resources</a>
           {{if .LoggedIn}}
             <div class="border-t border-gray-100 my-1"></div>
@@ -125,7 +137,7 @@
                 {{if .AdvancementEnabled}}<a href="/admin/advancement" class="block px-4 py-2 hover:bg-gray-100">Manage Advancement</a>{{end}}
                 <a href="/admin/home" class="block px-4 py-2 hover:bg-gray-100">Edit Homepage</a>
                 <a href="/admin/news" class="block px-4 py-2 hover:bg-gray-100">Manage News</a>
-                <a href="/admin/gallery" class="block px-4 py-2 hover:bg-gray-100">Manage Gallery</a>
+                <a href="/admin/gallery" class="block px-4 py-2 hover:bg-gray-100">Manage Photos</a>
                 <a href="/admin/newsletters" class="block px-4 py-2 hover:bg-gray-100">Newsletters</a>
               {{end}}
               {{if .CanManageLedger}}
@@ -208,18 +220,30 @@
   <footer class="w-full" style="background-color: #003366;">
     <div class="max-w-4xl mx-auto px-4 py-8 text-center">
       {{if or .FooterFacebookURL .FooterInstagramURL .FooterTikTokURL}}
+        <!-- Simple, generic single-color glyphs (the common "follow us"
+             convention nearly every site uses) rather than the platforms'
+             own multi-color trademarked logo art — recognizable, but not
+             a reproduction of brand assets. -->
         <div class="flex items-center justify-center gap-3 mb-4">
           {{if .FooterFacebookURL}}
-            <a href="{{.FooterFacebookURL}}" target="_blank" rel="noopener"
-               class="rounded-full border border-white/30 text-white px-4 py-1.5 text-xs hover:bg-white/10">Facebook</a>
+            <a href="{{.FooterFacebookURL}}" target="_blank" rel="noopener" aria-label="Facebook"
+               class="flex items-center justify-center h-9 w-9 rounded-full border border-white/30 text-white hover:bg-white/10">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5"><path d="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.4 2.9h-2.4v7A10 10 0 0 0 22 12z"/></svg>
+            </a>
           {{end}}
           {{if .FooterInstagramURL}}
-            <a href="{{.FooterInstagramURL}}" target="_blank" rel="noopener"
-               class="rounded-full border border-white/30 text-white px-4 py-1.5 text-xs hover:bg-white/10">Instagram</a>
+            <a href="{{.FooterInstagramURL}}" target="_blank" rel="noopener" aria-label="Instagram"
+               class="flex items-center justify-center h-9 w-9 rounded-full border border-white/30 text-white hover:bg-white/10">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                <rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
+              </svg>
+            </a>
           {{end}}
           {{if .FooterTikTokURL}}
-            <a href="{{.FooterTikTokURL}}" target="_blank" rel="noopener"
-               class="rounded-full border border-white/30 text-white px-4 py-1.5 text-xs hover:bg-white/10">TikTok</a>
+            <a href="{{.FooterTikTokURL}}" target="_blank" rel="noopener" aria-label="TikTok"
+               class="flex items-center justify-center h-9 w-9 rounded-full border border-white/30 text-white hover:bg-white/10">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5"><path d="M16.6 5.8a4.8 4.8 0 0 1-3.8-4.7h-3.2v14.4a2.7 2.7 0 1 1-2.7-2.7c.3 0 .5 0 .8.1V9.7a5.9 5.9 0 0 0-.8-.1A5.9 5.9 0 1 0 12.8 15V9.3a8 8 0 0 0 4.6 1.5V7.6a4.8 4.8 0 0 1-.8-1.8z"/></svg>
+            </a>
           {{end}}
         </div>
       {{end}}

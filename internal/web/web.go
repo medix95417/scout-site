@@ -801,11 +801,6 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	facebook, instagram, tiktok, err := h.socialLinks(r.Context(), unit.ID)
-	if err != nil {
-		log.Printf("web: loading social links for homepage: %v", err)
-	}
-
 	data := struct {
 		baseData
 		Events          []calendar.Event
@@ -817,9 +812,6 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		Leadership      string
 		GalleryPhotos   []content.GalleryPhoto
 		SocialURL       string
-		FacebookURL     string
-		InstagramURL    string
-		TikTokURL       string
 	}{
 		baseData:        h.base(r, ""),
 		Events:          events,
@@ -831,9 +823,6 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		Leadership:      text["home-leadership"],
 		GalleryPhotos:   galleryPhotos,
 		SocialURL:       text["home-social"],
-		FacebookURL:     facebook,
-		InstagramURL:    instagram,
-		TikTokURL:       tiktok,
 	}
 
 	h.render(w, h.home, data)

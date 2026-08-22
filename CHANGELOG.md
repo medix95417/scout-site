@@ -20,6 +20,23 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Nav/footer cleanup on the public site.**
+- Added a top-of-page quick-link row (Resources / Photos / Calendar) visible
+  on tablet/desktop, alongside the existing hamburger menu — no need to open
+  the hamburger just to reach the site's main public pages. (Home page's own
+  "Our Leaders" link joins this once that page ships.)
+- **Renamed "Gallery" to "Photos"** everywhere it's user-facing (nav, page
+  heading, admin "Manage Photos" / "New Photo Album") — the underlying
+  `/gallery` route and database `page_type` are unchanged, so this is a
+  display-only rename, not a URL migration.
+- **Removed the duplicate social media links section from the homepage** —
+  Facebook/Instagram/TikTok now show exactly once, in the site-wide footer,
+  instead of also repeating at the bottom of the homepage.
+- **Social links now show as recognizable icon glyphs** (a simple, generic
+  monochrome icon per platform — the common "follow us" convention most
+  sites use) instead of plain text buttons reading "Facebook"/"Instagram"/
+  "TikTok".
+
 **Newsletter sending now happens in the background, so a slow mail
 server (or a closed browser tab) can no longer lose track of what
 actually went out.**
