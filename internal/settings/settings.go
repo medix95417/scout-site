@@ -40,6 +40,17 @@ const (
 	// that part isn't a toggle, it's just what "enrolled in two-factor"
 	// means.
 	RequireTwoFactorForAll = "require_two_factor_for_all"
+
+	// PasswordResetEnabled controls whether the self-service "Forgot your
+	// password?" flow (/forgot-password) sends a reset email at all.
+	// Defaults to true — existing installs keep working exactly as before
+	// until an admin explicitly turns this off, e.g. because a unit wants
+	// every reset to go through a leader (see /admin/roster's own
+	// leader-triggered reset, which is unaffected either way — that's a
+	// separate code path). Site-wide, not per-unit: both Troop and Pack
+	// share one login system, so a token issued before this was turned off
+	// still works — this only stops new reset emails from going out.
+	PasswordResetEnabled = "password_reset_enabled"
 )
 
 // Toggle describes one setting for the /admin/settings page — the label
@@ -59,6 +70,12 @@ var Toggles = []Toggle{
 		Label:       "Require two-factor authentication for everyone",
 		Description: "Shows the two-factor setup reminder banner to every logged-in user, not just Treasurer and Admin logins. Nobody is ever blocked from logging in for not having set it up — this only broadens who gets reminded.",
 		Default:     false,
+	},
+	{
+		Key:         PasswordResetEnabled,
+		Label:       "Allow self-service email password reset",
+		Description: "On (default): the \"Forgot your password?\" link on the login page emails a reset link. Off: that link explains resets are turned off and points to a leader instead — a leader can still reset anyone's password directly from /admin/roster either way. A reset link already sent before this is turned off keeps working.",
+		Default:     true,
 	},
 }
 
@@ -206,6 +223,16 @@ const ScoutAccountSelfService = "scout_account_self_service"
 // escape hatch to attach a slip after the fact.
 const PermissionSlipEnforcement = "permission_slip_enforcement"
 
+// NewsletterEnabled controls whether /admin/newsletters (and sending) is
+// reachable for a unit. Defaults to true (newsletters are part of the
+// normal feature set) so existing units see no behavior change until an
+// admin explicitly turns it off — e.g. because a unit sends its
+// newsletter through some other system and doesn't want this one
+// duplicating it. Already-sent newsletters and their audit history aren't
+// deleted, just the admin UI for managing/sending new ones is hidden —
+// same non-destructive shape as AdvancementEnabled above.
+const NewsletterEnabled = "newsletter_enabled"
+
 // Payments toggles — whether this unit accepts online payments through
 // each processor. Off by default: a unit shouldn't start accepting real
 // payments just because it upgraded to a version of the app that added
@@ -254,6 +281,12 @@ var UnitToggles = []UnitToggle{
 		Key:         AdvancementEnabled,
 		Label:       "Rank/badge advancement tracking",
 		Description: "Shows /advancement and /admin/advancement for this unit. Turn off if you're tracking advancement elsewhere (e.g. Scoutbook) and don't need it duplicated here — the data isn't deleted, just hidden, so turning it back on picks up right where it left off.",
+		Default:     true,
+	},
+	{
+		Key:         NewsletterEnabled,
+		Label:       "Newsletters",
+		Description: "Shows /admin/newsletters for this unit, including sending new ones. Turn off if this unit sends its newsletter some other way — already-sent newsletters and their history aren't deleted, just the admin UI for managing new ones is hidden.",
 		Default:     true,
 	},
 	{

@@ -20,6 +20,21 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Two new toggles: turn off a unit's newsletters, or turn off self-service
+email password reset site-wide.**
+- New per-unit "Newsletters" toggle in `/admin/settings` (default on):
+  turns off `/admin/newsletters` for that unit, including sending new
+  ones — already-sent newsletters and their history aren't deleted, just
+  the admin UI for managing new ones is hidden. Same shape as the
+  existing advancement-tracking toggle.
+- New site-wide "Allow self-service email password reset" toggle in
+  `/admin/settings` (default on): turns off the "Forgot your password?"
+  email flow across both units — the page explains resets are off and
+  points to a leader instead, who can still reset anyone's password
+  directly from `/admin/roster` either way. A reset link already emailed
+  before this is turned off keeps working; this only stops new ones from
+  going out.
+
 **Accordion-style collapsible sections on Roster and Advancement.**
 - `/admin/roster`'s three "add" forms (Add an Existing Person, Add a New
   Family, Add a Member to an Existing Family) and its Dens & Patrols

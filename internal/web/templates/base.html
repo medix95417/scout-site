@@ -140,7 +140,7 @@
                 <a href="/admin/home" class="block px-4 py-2 hover:bg-gray-100">Edit Homepage</a>
                 <a href="/admin/news" class="block px-4 py-2 hover:bg-gray-100">Manage News</a>
                 <a href="/admin/gallery" class="block px-4 py-2 hover:bg-gray-100">Manage Photos</a>
-                <a href="/admin/newsletters" class="block px-4 py-2 hover:bg-gray-100">Newsletters</a>
+                {{if .NewsletterEnabled}}<a href="/admin/newsletters" class="block px-4 py-2 hover:bg-gray-100">Newsletters</a>{{end}}
               {{end}}
               {{if .CanManageLedger}}
                 <a href="/treasury" class="block px-4 py-2 hover:bg-gray-100">Treasury</a>

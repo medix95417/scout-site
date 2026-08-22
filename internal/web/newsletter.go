@@ -23,7 +23,28 @@ import (
 	"time"
 
 	"github.com/47-yonkers/scout-site/internal/newsletter"
+	"github.com/47-yonkers/scout-site/internal/settings"
 )
+
+// requireNewsletterEnabled reports whether the newsletter feature is on
+// for unitID (see settings.NewsletterEnabled), writing a clear 403 if
+// not — hiding the "Newsletters" nav link (see base.html) isn't itself a
+// security boundary, so every newsletter route checks this directly too,
+// the same way advancement.go's requireAdvancementEnabled does for
+// /admin/advancement.
+func (h *Handlers) requireNewsletterEnabled(w http.ResponseWriter, r *http.Request, unitID string) bool {
+	enabled, err := settings.GetForUnit(r.Context(), h.Pool, unitID, settings.NewsletterEnabled)
+	if err != nil {
+		log.Printf("web: checking newsletter-enabled setting: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return false
+	}
+	if !enabled {
+		http.Error(w, "newsletters are turned off for this unit — an admin can re-enable them from /admin/settings", http.StatusForbidden)
+		return false
+	}
+	return true
+}
 
 // newsletterRow is one newsletter on the admin list, with its pointer
 // fields (SentAt, RecipientCount — nil for a still-draft newsletter)
@@ -42,6 +63,9 @@ type newsletterRow struct {
 func (h *Handlers) AdminNewsletterList(w http.ResponseWriter, r *http.Request) {
 	unit, _, ok := h.requireContentEditor(w, r, "/admin/newsletters")
 	if !ok {
+		return
+	}
+	if !h.requireNewsletterEnabled(w, r, unit.ID) {
 		return
 	}
 
@@ -71,6 +95,9 @@ func (h *Handlers) AdminNewsletterList(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) AdminNewsletterNew(w http.ResponseWriter, r *http.Request) {
 	unit, _, ok := h.requireContentEditor(w, r, "/admin/newsletters/new")
 	if !ok {
+		return
+	}
+	if !h.requireNewsletterEnabled(w, r, unit.ID) {
 		return
 	}
 
@@ -107,6 +134,9 @@ func (h *Handlers) AdminNewsletterEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.requireNewsletterEnabled(w, r, unit.ID) {
+		return
+	}
 
 	n, err := newsletter.GetNewsletter(r.Context(), h.Pool, r.PathValue("id"), unit.ID)
 	if err != nil {
@@ -130,6 +160,9 @@ func (h *Handlers) AdminNewsletterEdit(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) AdminNewsletterCreate(w http.ResponseWriter, r *http.Request) {
 	unit, actor, ok := h.requireContentEditor(w, r, "/admin/newsletters")
 	if !ok {
+		return
+	}
+	if !h.requireNewsletterEnabled(w, r, unit.ID) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -156,6 +189,9 @@ func (h *Handlers) AdminNewsletterCreate(w http.ResponseWriter, r *http.Request)
 func (h *Handlers) AdminNewsletterUpdate(w http.ResponseWriter, r *http.Request) {
 	unit, actor, ok := h.requireContentEditor(w, r, "/admin/newsletters")
 	if !ok {
+		return
+	}
+	if !h.requireNewsletterEnabled(w, r, unit.ID) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -196,6 +232,9 @@ const newsletterSendTimeout = 30 * time.Minute
 func (h *Handlers) AdminNewsletterSend(w http.ResponseWriter, r *http.Request) {
 	unit, actor, ok := h.requireContentEditor(w, r, "/admin/newsletters")
 	if !ok {
+		return
+	}
+	if !h.requireNewsletterEnabled(w, r, unit.ID) {
 		return
 	}
 
