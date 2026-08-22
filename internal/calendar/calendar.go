@@ -126,22 +126,29 @@ func Create(ctx context.Context, pool *pgxpool.Pool, in CreateInput, canPublishD
 // ListUpcomingForUnit returns published events from today forward, visible
 // to a logged-in member (i.e. both public and members-only). Unauthenticated
 // visitors should use ListUpcomingPublicForUnit instead.
+//
+// Filters on COALESCE(ends_at, starts_at), not starts_at alone — a
+// multi-day event (a weekend campout, say Fri-Sun) needs to keep
+// showing as "upcoming" through its actual last day, not just until a
+// day after it started. Single-day events (ends_at NULL) are unaffected,
+// since COALESCE falls back to starts_at for those exactly as before.
 func ListUpcomingForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Event, error) {
 	return queryEvents(ctx, pool, `
 		SELECT `+eventColumns+`
 		FROM events
-		WHERE unit_id = $1 AND status = 'published' AND starts_at >= now() - interval '1 day'
+		WHERE unit_id = $1 AND status = 'published' AND COALESCE(ends_at, starts_at) >= now() - interval '1 day'
 		ORDER BY starts_at
 	`, unitID)
 }
 
 // ListUpcomingPublicForUnit is the same, restricted to public events —
-// what the unauthenticated landing page shows.
+// what the unauthenticated landing page shows. See ListUpcomingForUnit's
+// comment for why this filters on COALESCE(ends_at, starts_at).
 func ListUpcomingPublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Event, error) {
 	return queryEvents(ctx, pool, `
 		SELECT `+eventColumns+`
 		FROM events
-		WHERE unit_id = $1 AND status = 'published' AND visibility = 'public' AND starts_at >= now() - interval '1 day'
+		WHERE unit_id = $1 AND status = 'published' AND visibility = 'public' AND COALESCE(ends_at, starts_at) >= now() - interval '1 day'
 		ORDER BY starts_at
 	`, unitID)
 }
