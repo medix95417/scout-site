@@ -1,5 +1,33 @@
 {{define "content"}}
-  <h1 class="text-2xl font-bold mb-2">Two-Factor Authentication</h1>
+  <h1 class="text-2xl font-bold mb-6">Security</h1>
+
+  <section class="rounded-lg border border-gray-200 bg-white p-4 max-w-md mb-8">
+    <h2 class="text-lg font-semibold mb-3">Change Password</h2>
+    <form method="post" action="/settings/password" class="space-y-2">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div>
+        <label class="block text-sm font-medium mb-1" for="current_password">Current password</label>
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="password" id="current_password" name="current_password" autocomplete="current-password" required>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="new_password">New password</label>
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="password" id="new_password" name="new_password" autocomplete="new-password" required>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="new_password_confirm">Confirm new password</label>
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="password" id="new_password_confirm" name="new_password_confirm" autocomplete="new-password" required>
+      </div>
+      <p class="text-xs text-gray-500">
+        Changing your password signs this login out everywhere — you'll need to log back in
+        {{if .Confirmed}}with your two-factor code{{end}} right after.
+      </p>
+      <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
+        Change Password
+      </button>
+    </form>
+  </section>
+
+  <h2 class="text-lg font-semibold mb-2">Two-Factor Authentication</h2>
   <p class="text-sm text-gray-600 mb-6">
     Adds a second step (a 6-digit code from your phone) to logging in. Required for accounts that hold Treasurer or
     unit-wide admin access, since those can see or move real money — optional, but recommended, for everyone else.

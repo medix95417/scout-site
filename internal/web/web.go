@@ -380,6 +380,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /settings/2fa/enroll", h.TwoFactorEnroll)
 	mux.HandleFunc("POST /settings/2fa/confirm", h.TwoFactorConfirm)
 	mux.HandleFunc("POST /settings/2fa/disable", h.TwoFactorDisable)
+	mux.HandleFunc("POST /settings/password", h.AccountChangePassword)
 
 	// Phase 2: fund accounting — Treasurer-only unless noted.
 	mux.HandleFunc("GET /treasury", h.TreasuryDashboard)
@@ -1119,6 +1120,25 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 
 // --- Roster ---------------------------------------------------------------
 
+// rosterContactDisplay joins whichever of a roster entry's Email/HomePhone/
+// CellPhone fields are actually set (i.e. released — see
+// family.RosterEntry's doc comment) into one "· "-separated string for a
+// single-line/single-cell display, used by both roster.html and the
+// roster PDF export so the two stay in sync.
+func rosterContactDisplay(e family.RosterEntry) string {
+	var parts []string
+	if e.Email != "" {
+		parts = append(parts, e.Email)
+	}
+	if e.HomePhone != "" {
+		parts = append(parts, "home "+e.HomePhone)
+	}
+	if e.CellPhone != "" {
+		parts = append(parts, "cell "+e.CellPhone)
+	}
+	return strings.Join(parts, " · ")
+}
+
 func (h *Handlers) Roster(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
 	if _, loggedIn := auth.UserFromContext(r.Context()); !loggedIn {
@@ -1162,12 +1182,20 @@ func (h *Handlers) RosterExportPDF(w http.ResponseWriter, r *http.Request) {
 		if subGroup == "" {
 			subGroup = "—"
 		}
-		rows = append(rows, []string{e.FirstName + " " + e.LastName, e.MemberType, subGroup, strings.Join(e.Roles, ", ")})
+		contact := rosterContactDisplay(e)
+		if contact == "" {
+			contact = "—"
+		}
+		address := e.Address
+		if address == "" {
+			address = "—"
+		}
+		rows = append(rows, []string{e.FirstName + " " + e.LastName, e.MemberType, subGroup, strings.Join(e.Roles, ", "), contact, address})
 	}
 
 	data, err := simpleTablePDF(unit.Name+" — Roster", "",
-		[]string{"Name", "Type", "Den/Patrol", "Roles"},
-		[]float64{50, 25, 40, 65}, []string{"L", "L", "L", "L"}, rows)
+		[]string{"Name", "Type", "Den/Patrol", "Roles", "Contact", "Address"},
+		[]float64{40, 14, 22, 28, 38, 38}, []string{"L", "L", "L", "L", "L", "L"}, rows)
 	if err != nil {
 		log.Printf("web: rendering roster PDF: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)

@@ -20,6 +20,30 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Five fixes/additions to existing admin and account features.**
+- **Fixed a missing "Manage Leaders" link** — the Our Leaders admin page
+  (`/admin/leaders`) has existed since it shipped, but the hamburger
+  menu's Admin section never linked to it, so there was no way to reach
+  it short of typing the URL directly.
+- **Calendar's "Add an event" is now a collapsible accordion**, matching
+  the "Print Events" section right below it, instead of always being
+  expanded and taking up space above the calendar itself.
+- **Roster now shows each member's contact info and address** — email,
+  home/cell phone, and family address — but only whatever that family
+  has actually chosen to share (the same release toggles from My Family
+  already used elsewhere); nothing nobody opted to release ever shows.
+  Added to the printable roster PDF too.
+- **Dens and Patrols can now have their own hero banner photo**, separate
+  from the unit-wide per-page banners, editable by that den's/patrol's
+  own leader (or any unit-wide leader) right alongside its description.
+- **Added a "Change Password" section to the Security page** — previously
+  the only way to change your password was the forced flow after a
+  leader-issued temporary one; now any logged-in login can change its own
+  password after confirming the current one. Same as every other password
+  change in this app, it signs the login out everywhere (including the
+  current session) as a security measure, so it's immediately followed by
+  a fresh login (through two-factor first, if enabled).
+
 **Footer now matches the header's color, instead of a fixed navy.**
 Troop's footer previously stayed a fixed dark blue no matter what, which
 clashed with its green header — it now matches the header's color for

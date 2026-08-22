@@ -1,0 +1,13 @@
+-- 0031_sub_group_hero_image.sql
+--
+-- A per-den/patrol hero banner, distinct from content.HeroPages' per-page
+-- banners (unit-wide, editable only by CanEditUnitContent leaders): a
+-- den/patrol's own hero image is scoped to that one sub_group and
+-- editable by the leaders scoped to manage it specifically (Den Leader/
+-- Patrol Leader — see roster.Scope.CanManageSubGroup, already the gate
+-- admin-group.html's Description/Photos sections use), not just unit-wide
+-- leaders. A plain column on sub_groups (rather than another
+-- content_pages page_type) fits the same reasoning HeroPages itself and
+-- the standalone leaders table already used: this is one URL tied
+-- directly to one row, not a leader-authored list of sections.
+ALTER TABLE sub_groups ADD COLUMN hero_image_url text;
