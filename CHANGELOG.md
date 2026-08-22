@@ -20,6 +20,27 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed emails (password reset, newsletters) sometimes hanging until the
+browser gives up with "site can't be reached."**
+- A slow or unresponsive SMTP server used to be able to block a send
+  indefinitely — only the very first step (the TCP connect) had a timeout;
+  everything after that (the SMTP handshake, login, and actually
+  transmitting the message) had none, since the standard library's SMTP
+  client has no concept of a context deadline on its own. Fixed with a
+  30-second deadline set directly on the connection, covering the whole
+  conversation.
+- That alone wasn't quite enough: the server's own HTTP timeout was
+  shorter (10s) than even the original connection timeout (15s), so the
+  connection could get forcibly dropped by the server itself before a
+  slow send ever got the chance to fail gracefully and show its own error
+  message — which is what actually produced the "site can't be reached"
+  browser error, rather than a normal "couldn't send that email" page.
+  Raised to 60 seconds, comfortably above the mailer's own worst case.
+- Added a regression test (`TestSend_HungServerDoesNotBlockForever`)
+  simulating exactly this — a server that accepts the connection and then
+  never responds — confirming the send now fails within a bounded time
+  instead of hanging.
+
 **Permission slips are now a per-event choice, with a unit-wide option to
 only show them where they're actually needed.**
 - **"Requires a permission slip" checkbox** when creating a calendar event —

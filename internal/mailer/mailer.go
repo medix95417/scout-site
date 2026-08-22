@@ -116,6 +116,20 @@ func (m *Mailer) Enabled(ctx context.Context) bool {
 	return m.effective(ctx).Enabled()
 }
 
+// dialTimeout bounds the initial TCP connect; overallTimeout bounds
+// everything after that — the SMTP handshake, STARTTLS, AUTH, and the
+// MAIL/RCPT/DATA/QUIT exchange — via a deadline set directly on the
+// connection (see deliver). net/smtp has no context support of its own,
+// so without that deadline a server that accepts the TCP connection but
+// then never responds (a slow/hung server, or a firewall that silently
+// drops packets after the handshake) would block the caller forever, not
+// just for dialTimeout. Both are vars rather than consts so a test can
+// shrink them instead of waiting out the real duration.
+var (
+	dialTimeout    = 15 * time.Second
+	overallTimeout = 30 * time.Second
+)
+
 // Send delivers a single plain-text email. Bounded by a connection timeout
 // so a misconfigured or unreachable SMTP server can't hang the caller
 // indefinitely — that matters here since this can be called synchronously
@@ -156,13 +170,21 @@ func (m *Mailer) deliver(ctx context.Context, to string, buildBody func(from str
 	}
 
 	addr := net.JoinHostPort(cfg.Host, cfg.Port)
-	dialer := &net.Dialer{Timeout: 15 * time.Second}
+	dialer := &net.Dialer{Timeout: dialTimeout}
 
 	rawConn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("mailer: connecting to %s: %w", addr, err)
 	}
 	defer rawConn.Close() //nolint:errcheck // best-effort; the real error (if any) already surfaced above
+
+	// Bounds the entire conversation from here on — see overallTimeout's
+	// comment above. Set on the raw connection (not the TLS-wrapped one
+	// below) since a deadline applies to the underlying socket either way,
+	// regardless of which layer is doing the reading/writing through it.
+	if err := rawConn.SetDeadline(time.Now().Add(overallTimeout)); err != nil {
+		return fmt.Errorf("mailer: setting connection deadline: %w", err)
+	}
 
 	var conn net.Conn = rawConn
 	if cfg.TLSMode == "tls" {
