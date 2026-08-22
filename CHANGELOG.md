@@ -20,6 +20,18 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Added a public "Our Leaders" page.**
+- New `/leaders` public page lists a unit's adult leaders — name, role
+  title, a brief bio, and an optional photo (choosable from the unit's
+  file library, same picker used for hero images).
+- New `/admin/leaders` management page for adding/editing/removing
+  leaders, gated the same way `/admin/home`, `/admin/news`, and
+  `/admin/gallery` already are. New leader profiles start as a draft, same
+  draft/published lifecycle news posts and photo albums already have, so
+  a half-written profile never shows on the public page.
+- "Our Leaders" joins the top-nav quick-link row and hamburger menu
+  alongside Resources/Photos/Calendar.
+
 **Photos page redesign: auto-rotating album previews, and a thumbnail
 strip on each album's detail page.**
 - The `/gallery` ("Photos") listing now shows each album's photos as an

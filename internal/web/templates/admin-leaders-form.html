@@ -1,0 +1,73 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-2">{{if .IsEdit}}Edit{{else}}New{{end}} Leader — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-6">
+    {{if .IsEdit}}
+      Saving keeps its current {{if eq .Leader.Status "published"}}published{{else}}draft{{end}} state — use the
+      {{if eq .Leader.Status "published"}}Unpublish{{else}}Publish{{end}} button on the
+      <a href="/admin/leaders" class="underline" style="color: var(--unit-color);">Our Leaders list</a> to change that.
+    {{else}}
+      Saves as a draft — nothing visitors see until you publish it from the Our Leaders list.
+    {{end}}
+  </p>
+
+  <form method="post" action="{{if .IsEdit}}/admin/leaders/{{.Leader.ID}}{{else}}/admin/leaders{{end}}" class="space-y-4 max-w-2xl">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="name">Name</label>
+      <input
+        id="name" name="name" type="text" required
+        value="{{.Leader.Name}}"
+        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+      >
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="role_title">Role title</label>
+      <input
+        id="role_title" name="role_title" type="text"
+        value="{{.Leader.RoleTitle}}"
+        placeholder="e.g. Scoutmaster, Committee Chair"
+        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+      >
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="bio">Brief bio</label>
+      <textarea
+        id="bio" name="bio" rows="5"
+        placeholder="A sentence or two about this leader."
+        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+      >{{.Leader.Bio}}</textarea>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="photo_url">Photo</label>
+      <input
+        id="photo_url" name="photo_url" type="url"
+        value="{{.Leader.PhotoURL}}"
+        placeholder="https://… or choose from your library below"
+        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        data-image-url-input="leader-photo"
+      >
+      {{template "imagePicker" (dict "Slug" "leader-photo" "Images" .PublicImages "CurrentURL" .Leader.PhotoURL)}}
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="sort_order">Sort order</label>
+      <p class="text-xs text-gray-500 mb-2">Leaders are listed lowest-number-first, then alphabetically — use this to put your Scoutmaster/Cubmaster ahead of the rest.</p>
+      <input
+        id="sort_order" name="sort_order" type="number" step="1"
+        value="{{.Leader.SortOrder}}"
+        class="w-32 rounded-md border border-gray-300 px-3 py-2 text-sm"
+      >
+    </div>
+
+    <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
+      Save
+    </button>
+    <a href="/admin/leaders" class="text-sm underline ml-2">Cancel</a>
+  </form>
+
+  {{template "imagePickerScript" .}}
+{{end}}
