@@ -1,6 +1,12 @@
 {{define "extrahead"}}
   <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/2.0.2/quill.snow.min.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/2.0.2/quill.min.js"></script>
+  {{if eq .Newsletter.Status "sending"}}
+    <!-- The background send (see newsletter.SendNow) transitions this
+         newsletter to "sent" on its own; a plain refresh is enough to
+         pick that up without any JS polling. -->
+    <meta http-equiv="refresh" content="5">
+  {{end}}
 {{end}}
 
 {{define "content"}}
@@ -9,6 +15,8 @@
     {{if .IsEdit}}
       {{if eq .Newsletter.Status "sent"}}
         Already sent — no further changes are possible.
+      {{else if eq .Newsletter.Status "sending"}}
+        Sending now — this page will update on its own once it's done; no need to keep it open.
       {{else}}
         Saves as a draft. Nobody sees it until you send it from the
         <a href="/admin/newsletters" class="underline" style="color: var(--unit-color);">Newsletters list</a>.
@@ -35,7 +43,7 @@
       <input
         id="subject" name="subject" type="text" required
         value="{{.Newsletter.Subject}}"
-        {{if eq .Newsletter.Status "sent"}}disabled{{end}}
+        {{if and .IsEdit (ne .Newsletter.Status "draft")}}disabled{{end}}
         class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
       >
     </div>
@@ -48,7 +56,7 @@
       <input type="hidden" id="body-input" name="body">
     </div>
 
-    {{if ne .Newsletter.Status "sent"}}
+    {{if or (not .IsEdit) (eq .Newsletter.Status "draft")}}
       <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
         Save Draft
       </button>
@@ -91,7 +99,7 @@
       if (initial) {
         quill.root.innerHTML = initial;
       }
-      {{if eq .Newsletter.Status "sent"}}
+      {{if and .IsEdit (ne .Newsletter.Status "draft")}}
         quill.enable(false);
       {{end}}
 
