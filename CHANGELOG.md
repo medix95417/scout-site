@@ -20,6 +20,17 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Photos page redesign: auto-rotating album previews, and a thumbnail
+strip on each album's detail page.**
+- The `/gallery` ("Photos") listing now shows each album's photos as an
+  auto-rotating carousel (advancing every few seconds) instead of a single
+  static cover image — the same auto-rotate mechanism the homepage's
+  recent-activities preview uses.
+- An album's detail page now shows a row of clickable thumbnails below the
+  main photo, one per photo — click one to jump straight to that photo,
+  with the active thumbnail staying in sync as you browse with the
+  existing prev/next arrows or by swiping.
+
 **Homepage now previews recent Photo Album activities alongside upcoming
 events, side by side.**
 - Added a two-column section: upcoming public events (from the calendar) on
