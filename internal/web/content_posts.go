@@ -33,7 +33,7 @@ import (
 // handlers.
 type contentKind struct {
 	PageType        string // content_pages.page_type value
-	Label           string // singular, for page titles/buttons — "News Post" / "Gallery"
+	Label           string // singular, for page titles/buttons — "News Post" / "Photo Album"
 	LabelPlural     string
 	BasePath        string // admin base path — "/admin/news" / "/admin/gallery"
 	PublicPath      string // public base path — "/news" / "/gallery"
@@ -51,8 +51,13 @@ var (
 		BodyHelp:        "Plain text — line breaks are preserved, but no HTML.",
 		BodyPlaceholder: "What's the news?",
 	}
+	// Label/LabelPlural are "Photo Album"/"Photos" rather than the
+	// PageType/BasePath's own "gallery" — the public-facing name is
+	// "Photos" (see base.html's nav), but the underlying route/DB
+	// page_type stays "gallery" to avoid a URL migration for something
+	// that's purely a display-name change.
 	galleryKind = contentKind{
-		PageType: "gallery", Label: "Gallery", LabelPlural: "Galleries",
+		PageType: "gallery", Label: "Photo Album", LabelPlural: "Photos",
 		BasePath: "/admin/gallery", PublicPath: "/gallery",
 		BodyLabel:       "Photos",
 		BodyHelp:        "One photo per line: paste a link to an image hosted elsewhere (e.g. a photo shared publicly from Google Photos/Drive), or click one from your library below — either way, optionally followed by | and a caption, e.g. https://example.com/photo.jpg | Sam at the summit.",
@@ -183,7 +188,7 @@ func (h *Handlers) galleryList(w http.ResponseWriter, r *http.Request, posts []c
 	data := struct {
 		baseData
 		Items []publicPostView
-	}{baseData: h.base(r, "Gallery"), Items: items}
+	}{baseData: h.base(r, "Photos"), Items: items}
 	h.render(w, h.galleryListTmpl, data)
 }
 
