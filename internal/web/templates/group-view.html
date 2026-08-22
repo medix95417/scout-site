@@ -1,4 +1,10 @@
 {{define "content"}}
+  {{if .Group.HeroImageURL}}
+    <!-- This den's/patrol's own hero banner (distinct from base.html's
+         per-page PageHeroImageURL, which is unit-wide) — same visual
+         treatment, full-bleed within <main>'s own column. -->
+    <section class="w-full h-40 sm:h-56 mb-6 rounded-lg bg-gray-200 bg-cover bg-center" style="background-image: url('{{.Group.HeroImageURL}}');"></section>
+  {{end}}
   <p class="mb-4"><a href="/groups" class="text-sm underline" style="color: var(--unit-color);">&larr; All {{.SubGroupNoun}}s</a></p>
   <div class="flex items-center justify-between gap-2 mb-1">
     <h1 class="text-2xl font-bold">{{.Group.Name}}</h1>

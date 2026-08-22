@@ -98,11 +98,21 @@ func ActingMemberForFamilyInUnit(ctx context.Context, pool *pgxpool.Pool, family
 }
 
 // RosterEntry is a member plus the roles they hold in the current unit —
-// what the roster page actually needs to display.
+// what the roster page actually needs to display. Email/HomePhone/
+// CellPhone/Address are already filtered down to only what that member/
+// family has actually chosen to release (see migration 0015's release_*
+// columns) — same "never show anything nobody opted to share" rule
+// internal/roster.DirectoryForUnit already applies for the Family
+// Directory page. A member/family that's never released anything simply
+// shows blank fields here, same as on that page.
 type RosterEntry struct {
 	Member
 	SubGroupName string // den/patrol name, if assigned; empty if unit-wide
 	Roles        []string
+	Email        string // "" if not released
+	HomePhone    string // "" if not released
+	CellPhone    string // "" if not released
+	Address      string // "" if not released — family-level, so shared by every member in the family
 }
 
 // RosterForUnit lists every active member with at least one role
@@ -124,12 +134,19 @@ func RosterForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Ro
 		SELECT
 			members.id, members.family_id, members.first_name, members.last_name, members.member_type::text,
 			COALESCE(sub_groups.name, ''),
-			array_agg(DISTINCT role_assignments.role::text) AS roles
+			array_agg(DISTINCT role_assignments.role::text) AS roles,
+			CASE WHEN members.release_email THEN COALESCE(members.email, '') ELSE '' END,
+			CASE WHEN members.release_phone THEN COALESCE(members.home_phone, '') ELSE '' END,
+			CASE WHEN members.release_phone THEN COALESCE(members.cell_phone, '') ELSE '' END,
+			CASE WHEN families.release_address THEN COALESCE(families.address, '') ELSE '' END
 		FROM role_assignments
 		JOIN members ON members.id = role_assignments.member_id
+		JOIN families ON families.id = members.family_id
 		LEFT JOIN sub_groups ON sub_groups.id = role_assignments.sub_group_id
 		WHERE role_assignments.unit_id = $1 AND members.active
-		GROUP BY members.id, members.family_id, members.first_name, members.last_name, members.member_type, sub_groups.name
+		GROUP BY members.id, members.family_id, members.first_name, members.last_name, members.member_type, sub_groups.name,
+			members.release_email, members.release_phone, members.email, members.home_phone, members.cell_phone,
+			families.release_address, families.address
 		HAVING NOT bool_and(role_assignments.role::text = 'super_admin')
 		ORDER BY (members.member_type = 'youth'), members.last_name, members.first_name
 	`, unitID)
@@ -144,6 +161,7 @@ func RosterForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Ro
 		if err := rows.Scan(
 			&e.ID, &e.FamilyID, &e.FirstName, &e.LastName, &e.MemberType,
 			&e.SubGroupName, &e.Roles,
+			&e.Email, &e.HomePhone, &e.CellPhone, &e.Address,
 		); err != nil {
 			return nil, err
 		}

@@ -459,6 +459,38 @@ func ConsumeResetToken(ctx context.Context, pool *pgxpool.Pool, token, newPasswo
 	return userID, nil
 }
 
+// ChangePassword is a logged-in login voluntarily changing its own
+// password (from /settings/2fa, alongside two-factor setup) — distinct
+// from ConsumeResetToken (a forgot-password token) and
+// ConsumePendingPasswordChange (a forced temporary-password replacement
+// before a session even exists). The caller must have already verified
+// the current password (VerifyPassword) before calling this — this
+// function only performs the write.
+//
+// Same "invalidate every existing session" behavior as every other
+// password change in this codebase — including this request's own
+// session — so a leaked/stolen session cookie can't outlive a password
+// change meant to shut it out. The caller is responsible for clearing the
+// now-dead session cookie and sending the visitor back to /login.
+func ChangePassword(ctx context.Context, pool *pgxpool.Pool, userID, newPasswordHash string) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op if already committed
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2`, newPasswordHash, userID,
+	); err != nil {
+		return err
+	}
+	if err := DestroySessionsForUserTx(ctx, tx, userID); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
 // CreatePendingPasswordChange records that a login has passed the password
 // check but is using a temporary password (users.must_change_password) and
 // must set a new one before a real session is issued, returning an opaque

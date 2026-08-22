@@ -227,8 +227,9 @@ func (h *Handlers) AdminGroupUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := roster.UpdateSubGroupDescription(r.Context(), h.Pool, subGroupID, unit.ID, r.PostFormValue("description"), actor.ID); err != nil {
-		log.Printf("web: updating sub-group description: %v", err)
+	heroImageURL := strings.TrimSpace(r.PostFormValue("hero_image_url"))
+	if err := roster.UpdateSubGroupPage(r.Context(), h.Pool, subGroupID, unit.ID, r.PostFormValue("description"), heroImageURL, actor.ID); err != nil {
+		log.Printf("web: updating sub-group page: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
