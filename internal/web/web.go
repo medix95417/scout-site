@@ -26,6 +26,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/files"
 	"github.com/47-yonkers/scout-site/internal/mailer"
+	"github.com/47-yonkers/scout-site/internal/permission"
 	"github.com/47-yonkers/scout-site/internal/roster"
 	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/storage"
@@ -1162,8 +1163,9 @@ type pendingApprovalView struct {
 // linked to it — the calendar page's event list shows both inline.
 type eventView struct {
 	calendar.Event
-	Files        []files.File
-	SubGroupName string // "" if unscoped — see calendar.Event.SubGroupID
+	Files              []files.File
+	SubGroupName       string // "" if unscoped — see calendar.Event.SubGroupID
+	ShowPermissionSlip bool   // whether calendar.html renders the "Permission slip" link at all — see settings.PermissionSlipEnforcement
 }
 
 // parseMonthParam resolves the year/month a calendar page should show from
@@ -1212,7 +1214,7 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var canCreate, requiresApproval, canApprove, canManageFiles bool
+	var canCreate, requiresApproval, canApprove, canManageFiles, canEditContent bool
 	var pendingViews []pendingApprovalView
 	var creatableSubGroups []roster.SubGroup
 
@@ -1221,7 +1223,7 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("web: loading capabilities: %v", err)
 		}
-		canEditContent := units.CanEditUnitContent(caps)
+		canEditContent = units.CanEditUnitContent(caps)
 		canCreate = canEditContent || units.CanSubmitForApproval(caps)
 		requiresApproval = !canEditContent && units.CanSubmitForApproval(caps)
 		canApprove = units.CanApprove(caps)
@@ -1300,13 +1302,31 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		subGroupNameByID[g.ID] = g.Name
 	}
 
+	// Whether the "Permission slip" link shows on every event (the
+	// historical, still-default behavior) or only on ones that need one —
+	// see settings.PermissionSlipEnforcement. Shown regardless of
+	// enforcement for a leader (no way yet to edit an event's "requires a
+	// permission slip" flag after creation, so they always need a way in)
+	// or for an event a leader already attached a real slip to (it should
+	// never become undiscoverable to families just because it wasn't also
+	// marked "required" up front).
+	slipEnforcement, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.PermissionSlipEnforcement)
+	if err != nil {
+		log.Printf("web: loading permission slip enforcement setting: %v", err)
+	}
+	eventsWithSlips, err := permission.EventIDsWithSlips(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading events with permission slips: %v", err)
+	}
+
 	eventViews := make([]eventView, len(events))
 	for i, e := range events {
 		var subGroupName string
 		if e.SubGroupID != nil {
 			subGroupName = subGroupNameByID[*e.SubGroupID]
 		}
-		eventViews[i] = eventView{Event: e, Files: filesByEvent[e.ID], SubGroupName: subGroupName}
+		showSlip := !slipEnforcement || e.RequiresPermissionSlip || canEditContent || eventsWithSlips[e.ID]
+		eventViews[i] = eventView{Event: e, Files: filesByEvent[e.ID], SubGroupName: subGroupName, ShowPermissionSlip: showSlip}
 	}
 
 	data := struct {
@@ -1460,15 +1480,16 @@ func (h *Handlers) CalendarCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = calendar.Create(r.Context(), h.Pool, calendar.CreateInput{
-		UnitID:      unit.ID,
-		Title:       r.FormValue("title"),
-		SubGroupID:  subGroupID,
-		Description: r.FormValue("description"),
-		Location:    r.FormValue("location"),
-		StartsAt:    startsAt,
-		EndsAt:      endsAt,
-		Visibility:  visibility,
-		CreatedBy:   actor.ID,
+		UnitID:                 unit.ID,
+		Title:                  r.FormValue("title"),
+		SubGroupID:             subGroupID,
+		Description:            r.FormValue("description"),
+		Location:               r.FormValue("location"),
+		StartsAt:               startsAt,
+		EndsAt:                 endsAt,
+		Visibility:             visibility,
+		CreatedBy:              actor.ID,
+		RequiresPermissionSlip: r.FormValue("requires_permission_slip") == "1",
 	}, units.CanEditUnitContent(caps))
 	if err != nil {
 		log.Printf("web: creating event: %v", err)
