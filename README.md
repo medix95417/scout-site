@@ -215,13 +215,14 @@ logs). No architecture change is needed for this move — see
 **Not in Phase 1** (see `scout-website-requirements.md` Section 6): any
 payment processing, fund ledgers, individual Scout accounts, or trip-fund
 transfers — Phase 2 (below) adds the ledger, accounts, and trip funds, but
-still not real payment processing. Also not yet built, deliberately left
-for a later round: a newsletter email feature (see
-`scout-website-requirements.md`'s Phase 3 candidates), the Scoutbook CSV
-import job, digital permission slips/consent forms, and rank/badge
-advancement tracking (the `advancement_records` table exists but nothing
-populates or displays it yet — it's meant to be filled by the not-yet-built
-Scoutbook import).
+still not real payment processing (Stripe/PayPal credentials and
+per-unit on/off toggles exist in `/admin/settings`; there's no actual
+checkout flow wired up to them yet). The newsletter email feature,
+digital permission slips, rank/badge advancement tracking, and the
+Scoutbook CSV import job (`/admin/roster/import` — a leader pastes a
+Scoutbook roster export, matched by header names) were all originally
+listed here as Phase 3 candidates not yet built; all four have since
+shipped.
 
 **Also added post-Phase-2 — news, photo galleries, and a filterable/
 exportable activity log:** a public news feed (`/news`) and photo
