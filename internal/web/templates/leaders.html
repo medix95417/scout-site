@@ -1,0 +1,24 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-6">Our Leaders — {{.Unit.Name}}</h1>
+
+  {{if .Leaders}}
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+      {{range .Leaders}}
+        <div class="rounded-lg border border-gray-200 bg-white overflow-hidden">
+          {{if .PhotoURL}}
+            <img src="{{.PhotoURL}}" alt="{{.Name}}" class="h-48 w-full object-cover">
+          {{else}}
+            <div class="h-48 w-full bg-gray-100"></div>
+          {{end}}
+          <div class="p-4">
+            <h2 class="font-semibold" style="color: var(--unit-color);">{{.Name}}</h2>
+            {{if .RoleTitle}}<div class="text-sm text-gray-500 mb-2">{{.RoleTitle}}</div>{{end}}
+            {{if .Bio}}<p class="text-sm text-gray-700 whitespace-pre-line">{{.Bio}}</p>{{end}}
+          </div>
+        </div>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="text-sm text-gray-500">No leaders posted yet.</p>
+  {{end}}
+{{end}}

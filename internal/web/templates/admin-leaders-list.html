@@ -1,0 +1,54 @@
+{{define "content"}}
+  <div class="flex items-center justify-between mb-2">
+    <h1 class="text-2xl font-bold">Manage Our Leaders — {{.Unit.Name}}</h1>
+    <a href="/admin/leaders/new" class="rounded-md px-4 py-2 text-sm btn-accent">
+      + New Leader
+    </a>
+  </div>
+  <p class="text-sm text-gray-600 mb-6">
+    New leaders start as a draft — nothing visitors see until you publish them.
+    <a href="/leaders" class="underline" style="color: var(--unit-color);">View the public Our Leaders page &rarr;</a>
+  </p>
+
+  {{if .Leaders}}
+    <div class="space-y-3">
+      {{range .Leaders}}
+        <div class="rounded-lg border border-gray-200 bg-white p-4 flex items-center justify-between gap-4">
+          <div class="min-w-0 flex items-center gap-3">
+            {{if .PhotoURL}}
+              <img src="{{.PhotoURL}}" alt="" class="h-12 w-12 rounded-full object-cover flex-shrink-0">
+            {{end}}
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <a href="/admin/leaders/{{.ID}}/edit" class="font-medium hover:underline truncate" style="color: var(--unit-color);">{{.Name}}</a>
+                {{if eq .Status "published"}}
+                  <span class="rounded-full bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5">Published</span>
+                {{else}}
+                  <span class="rounded-full bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5">Draft</span>
+                {{end}}
+              </div>
+              {{if .RoleTitle}}<div class="text-xs text-gray-500 mt-1 truncate">{{.RoleTitle}}</div>{{end}}
+            </div>
+          </div>
+          <div class="flex-shrink-0 flex items-center gap-2">
+            <a href="/admin/leaders/{{.ID}}/edit" class="text-sm underline" style="color: var(--unit-color);">Edit</a>
+            <form method="post" action="/admin/leaders/{{.ID}}/publish">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              {{if eq .Status "published"}}
+                <button type="submit" class="rounded-full bg-gray-100 text-gray-600 text-xs font-medium px-3 py-1.5 hover:bg-gray-200">Unpublish</button>
+              {{else}}
+                <button type="submit" class="rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1.5 hover:bg-green-200">Publish</button>
+              {{end}}
+            </form>
+            <form method="post" action="/admin/leaders/{{.ID}}/delete" onsubmit="return confirm('Remove {{.Name}} from Our Leaders? This can\'t be undone.');">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit" class="rounded-full bg-red-100 text-red-800 text-xs font-medium px-3 py-1.5 hover:bg-red-200">Delete</button>
+            </form>
+          </div>
+        </div>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="text-sm text-gray-500">No leaders yet — click "+ New Leader" to add the first one.</p>
+  {{end}}
+{{end}}

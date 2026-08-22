@@ -115,6 +115,10 @@ type Handlers struct {
 
 	treasuryReports    *template.Template
 	treasuryReportView *template.Template
+
+	leadersList          *template.Template
+	adminLeadersList     *template.Template
+	adminLeadersFormTmpl *template.Template
 }
 
 // templateFuncs are available to every page template. formatCents is the
@@ -298,6 +302,15 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.treasuryReportView, err = parse("treasury-report-view.html"); err != nil {
 		return nil, err
 	}
+	if h.leadersList, err = parse("leaders.html"); err != nil {
+		return nil, err
+	}
+	if h.adminLeadersList, err = parse("admin-leaders-list.html"); err != nil {
+		return nil, err
+	}
+	if h.adminLeadersFormTmpl, err = parse("admin-leaders-form.html"); err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
@@ -416,6 +429,16 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/gallery/{id}/edit", h.AdminGalleryEdit)
 	mux.HandleFunc("POST /admin/gallery/{id}", h.AdminGalleryUpdate)
 	mux.HandleFunc("POST /admin/gallery/{id}/publish", h.AdminGalleryPublishToggle)
+
+	// Public "Our Leaders" page and its admin CRUD (internal/web/leaders.go).
+	mux.HandleFunc("GET /leaders", h.LeadersList)
+	mux.HandleFunc("GET /admin/leaders", h.AdminLeadersList)
+	mux.HandleFunc("GET /admin/leaders/new", h.AdminLeadersNew)
+	mux.HandleFunc("POST /admin/leaders", h.AdminLeadersCreate)
+	mux.HandleFunc("GET /admin/leaders/{id}/edit", h.AdminLeadersEdit)
+	mux.HandleFunc("POST /admin/leaders/{id}", h.AdminLeadersUpdate)
+	mux.HandleFunc("POST /admin/leaders/{id}/publish", h.AdminLeadersPublishToggle)
+	mux.HandleFunc("POST /admin/leaders/{id}/delete", h.AdminLeadersDelete)
 
 	mux.HandleFunc("GET /admin/newsletters", h.AdminNewsletterList)
 	mux.HandleFunc("GET /admin/newsletters/new", h.AdminNewsletterNew)
