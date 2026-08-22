@@ -20,6 +20,17 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed multi-day events disappearing from "Upcoming Events" before they
+actually ended.**
+- The homepage and `/calendar`'s "Upcoming Events" list only checked an
+  event's *start* date, so a multi-day event (a weekend campout, say
+  Friday through Sunday) vanished from the list a day after it started —
+  Saturday, Sunday, and the rest of the campout no longer showed as
+  upcoming even though it was still happening. Now checks the event's
+  actual end date (already settable as an optional field when creating an
+  event) when it has one, falling back to the start date for a normal
+  single-day event exactly as before.
+
 **Nav/footer cleanup on the public site.**
 - Added a top-of-page quick-link row (Resources / Photos / Calendar) visible
   on tablet/desktop, alongside the existing hamburger menu — no need to open
