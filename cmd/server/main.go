@@ -188,10 +188,22 @@ func main() {
 	handler = requestLogger(handler)
 
 	srv := &http.Server{
-		Addr:         cfg.ListenAddr,
-		Handler:      handler,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		Addr:        cfg.ListenAddr,
+		Handler:     handler,
+		ReadTimeout: 10 * time.Second,
+		// Must comfortably exceed the slowest a single request can
+		// legitimately block for — currently that's a synchronous outbound
+		// SMTP send (forgot-password, a newsletter recipient), bounded by
+		// internal/mailer's own dial+conversation timeouts at ~30-45s
+		// worst case. WriteTimeout counts from when the request headers
+		// are read and covers the handler's own execution time, not just
+		// writing the response body, so it previously being shorter than
+		// even the mailer's dial timeout meant the standard library could
+		// kill the connection out from under a slow-but-otherwise-fine
+		// send before the handler ever got to render its own error page —
+		// the client just sees a dropped connection, not a friendly
+		// "couldn't send that email" message.
+		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
