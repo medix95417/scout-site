@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/47-yonkers/scout-site/internal/auth"
+	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
 
@@ -32,8 +33,24 @@ func (h *Handlers) ForgotPasswordForm(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		baseData
 		Submitted bool
-	}{baseData: h.base(r, "Forgot Password")}
+		Disabled  bool
+	}{baseData: h.base(r, "Forgot Password"), Disabled: !h.passwordResetEnabled(r)}
 	h.render(w, h.forgotPassword, data)
+}
+
+// passwordResetEnabled checks settings.PasswordResetEnabled directly,
+// rather than trusting baseData.PasswordResetEnabled (computed the same
+// way, but logging its own error and defaulting to false on failure) —
+// this is the one place that value actually gates behavior (whether an
+// email goes out) rather than just what a link says, so it re-checks
+// instead of reusing a value another handler already logged.
+func (h *Handlers) passwordResetEnabled(r *http.Request) bool {
+	enabled, err := settings.Get(r.Context(), h.Pool, settings.PasswordResetEnabled)
+	if err != nil {
+		log.Printf("web: checking password-reset-enabled setting: %v", err)
+		return false
+	}
+	return enabled
 }
 
 // ForgotPasswordSubmit always shows the same confirmation regardless of
@@ -44,6 +61,22 @@ func (h *Handlers) ForgotPasswordForm(w http.ResponseWriter, r *http.Request) {
 // message; the operator sees a clear warning in the server log instead,
 // since that's the audience who can actually act on it.
 func (h *Handlers) ForgotPasswordSubmit(w http.ResponseWriter, r *http.Request) {
+	if !h.passwordResetEnabled(r) {
+		// Reached directly (a bookmarked form, a stale page) rather than
+		// through ForgotPasswordForm, which wouldn't have shown the form in
+		// the first place — same "disabled means disabled, however this
+		// request arrived" posture as requireAdvancementEnabled/
+		// requireNewsletterEnabled, just presented as this page's own
+		// explanation instead of a 403.
+		data := struct {
+			baseData
+			Submitted bool
+			Disabled  bool
+		}{baseData: h.base(r, "Forgot Password"), Disabled: true}
+		h.render(w, h.forgotPassword, data)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return

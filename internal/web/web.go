@@ -494,7 +494,9 @@ type baseData struct {
 	CanManageLedger          bool              // Treasurer/super_admin in *this* unit — drives the "Treasury" nav link
 	IsSuperAdmin             bool              // super_admin in *this* unit — drives the "Site Settings" nav link (see internal/web/settings_admin.go)
 	AdvancementEnabled       bool              // this unit's settings.AdvancementEnabled toggle — drives the "Advancement"/"Manage Advancement" nav links, see internal/web/advancement.go
+	NewsletterEnabled        bool              // this unit's settings.NewsletterEnabled toggle — drives the "Newsletters" nav link, see internal/web/newsletter.go
 	ScoutAccountsSelfService bool              // this unit's settings.ScoutAccountSelfService toggle — drives the "My Accounts" nav link and family self-service account access, see internal/web/accounts.go
+	PasswordResetEnabled     bool              // site-wide settings.PasswordResetEnabled toggle — drives whether the login page's "Forgot your password?" link points to the reset form or an explanation, see internal/web/password_reset.go. Computed for every request (not just logged-in ones), since /login and /forgot-password are reached signed out
 	NeedsTwoFactorSetup      bool              // this login holds a treasury role, or the require-two-factor-for-all setting is on, and hasn't confirmed TOTP enrollment yet — drives a persistent nudge banner, see base.html
 	NavSubGroups             []roster.SubGroup // every patrol/den in this unit, for the hamburger nav's Patrols/Dens submenu (see base.html) — named distinctly from any page's own "Groups" field (e.g. internal/web/groups.go's GroupsList) so embedding baseData never shadows a page's own data
 	PageHeroImageURL         string            // this request's page hero banner image, if the current path is one of content.HeroPages and a leader has set one — see heroKeyForPath and base.html. Named distinctly from the Home handler's own "HeroImageURL" field (for the homepage's separate, richer hero mechanism) so embedding baseData never lets one shadow the other
@@ -678,6 +680,12 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 		}
 	}
 
+	if enabled, err := settings.Get(r.Context(), h.Pool, settings.PasswordResetEnabled); err != nil {
+		log.Printf("web: checking password-reset-enabled setting: %v", err)
+	} else {
+		data.PasswordResetEnabled = enabled
+	}
+
 	if loggedIn {
 		caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 		if err != nil {
@@ -691,6 +699,12 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 			log.Printf("web: checking advancement-enabled setting: %v", err)
 		} else {
 			data.AdvancementEnabled = enabled
+		}
+
+		if enabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.NewsletterEnabled); err != nil {
+			log.Printf("web: checking newsletter-enabled setting: %v", err)
+		} else {
+			data.NewsletterEnabled = enabled
 		}
 
 		if enabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.ScoutAccountSelfService); err != nil {
