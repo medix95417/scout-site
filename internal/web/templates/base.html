@@ -129,7 +129,7 @@
             {{end}}
             {{if .AdvancementEnabled}}<a href="/advancement" class="block px-4 py-2 hover:bg-gray-100">Advancement</a>{{end}}
             <a href="/files" class="block px-4 py-2 hover:bg-gray-100">Files</a>
-            {{if or .ScoutAccountsSelfService .CanManageLedger}}<a href="/accounts" class="block px-4 py-2 hover:bg-gray-100">My Accounts</a>{{end}}
+            {{if and .TreasuryEnabled (or .ScoutAccountsSelfService .CanManageLedger)}}<a href="/accounts" class="block px-4 py-2 hover:bg-gray-100">My Accounts</a>{{end}}
             <a href="/my-family" class="block px-4 py-2 hover:bg-gray-100">My Family</a>
             {{if or .CanEditContent .CanManageLedger .IsSuperAdmin}}
               <div class="border-t border-gray-100 my-1"></div>
@@ -143,7 +143,7 @@
                 <a href="/admin/leaders" class="block px-4 py-2 hover:bg-gray-100">Manage Leaders</a>
                 {{if .NewsletterEnabled}}<a href="/admin/newsletters" class="block px-4 py-2 hover:bg-gray-100">Newsletters</a>{{end}}
               {{end}}
-              {{if .CanManageLedger}}
+              {{if and .TreasuryEnabled .CanManageLedger}}
                 <a href="/treasury" class="block px-4 py-2 hover:bg-gray-100">Treasury</a>
                 <a href="/treasury/reports" class="block px-4 py-2 hover:bg-gray-100">Reports</a>
               {{end}}

@@ -223,6 +223,24 @@ const ScoutAccountSelfService = "scout_account_self_service"
 // escape hatch to attach a slip after the fact.
 const PermissionSlipEnforcement = "permission_slip_enforcement"
 
+// TreasuryEnabled controls whether the Treasury area (/treasury and its
+// sub-pages, including the fundraiser storefront's admin management) and
+// the family self-service "My Accounts" view (/accounts) are reachable
+// for a unit. Defaults to true (fund accounting is part of the normal
+// feature set) so existing units see no behavior change until an admin
+// explicitly turns it off — e.g. a unit that doesn't handle its own
+// finances through this site. Turning it off doesn't touch any ledger
+// data underneath (accounts, balances, transaction history, fundraisers,
+// items, orders all stay exactly as they are); it just closes every entry
+// point to that data, the same non-destructive shape as
+// AdvancementEnabled below — including the public fundraiser storefront
+// page and homepage button, since those exist to feed the same ledger
+// this toggle gates. A Treasurer/super_admin gets the same "not
+// available" message as anyone else while this is off; it isn't a
+// per-role exception like ScoutAccountSelfService below, since disabling
+// the whole function has to actually mean off.
+const TreasuryEnabled = "treasury_enabled"
+
 // NewsletterEnabled controls whether /admin/newsletters (and sending) is
 // reachable for a unit. Defaults to true (newsletters are part of the
 // normal feature set) so existing units see no behavior change until an
@@ -281,6 +299,12 @@ var UnitToggles = []UnitToggle{
 		Key:         AdvancementEnabled,
 		Label:       "Rank/badge advancement tracking",
 		Description: "Shows /advancement and /admin/advancement for this unit. Turn off if you're tracking advancement elsewhere (e.g. Scoutbook) and don't need it duplicated here — the data isn't deleted, just hidden, so turning it back on picks up right where it left off.",
+		Default:     true,
+	},
+	{
+		Key:         TreasuryEnabled,
+		Label:       "Treasury (fund accounting)",
+		Description: "Shows /treasury and \"My Accounts\" for this unit, including the fundraiser storefront's admin pages and public order page/homepage button. Turn off if this unit doesn't handle its own finances through this site — no ledger data is deleted, every entry point (Treasurer and family self-service alike) is just closed until this is turned back on.",
 		Default:     true,
 	},
 	{

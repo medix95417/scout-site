@@ -29,6 +29,10 @@ type fundraiserItemView struct {
 
 func (h *Handlers) FundraiserStorefront(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
+	if !h.requireTreasuryEnabled(w, r, unit.ID) {
+		return
+	}
+
 	f, active, err := ledger.ActiveStorefrontFundraiser(r.Context(), h.Pool, unit.ID)
 	if err != nil {
 		log.Printf("web: loading active storefront fundraiser: %v", err)
@@ -92,6 +96,10 @@ func matchScoutByName(roster []family.RosterEntry, name string) string {
 
 func (h *Handlers) FundraiserPlaceOrder(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
+	if !h.requireTreasuryEnabled(w, r, unit.ID) {
+		return
+	}
+
 	f, active, err := ledger.ActiveStorefrontFundraiser(r.Context(), h.Pool, unit.ID)
 	if err != nil {
 		log.Printf("web: loading active storefront fundraiser: %v", err)

@@ -43,6 +43,9 @@ func (h *Handlers) AccountsView(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?next=/accounts", http.StatusSeeOther)
 		return
 	}
+	if !h.requireTreasuryEnabled(w, r, unit.ID) {
+		return
+	}
 
 	// Family self-service view can be turned off per unit (see
 	// settings.ScoutAccountSelfService). A treasurer/super_admin still
@@ -126,6 +129,9 @@ func (h *Handlers) AccountsExportPDF(w http.ResponseWriter, r *http.Request) {
 	user, loggedIn := auth.UserFromContext(r.Context())
 	if !loggedIn {
 		http.Redirect(w, r, "/login?next=/accounts", http.StatusSeeOther)
+		return
+	}
+	if !h.requireTreasuryEnabled(w, r, unit.ID) {
 		return
 	}
 
