@@ -20,6 +20,19 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Files can now be filtered/grouped by event, and Gallery albums can pull
+straight from an event's own photos.** On `/files`, checking one or more
+events switches the page from its ordinary flat list to grouping by
+event instead, so files from the same campout read together. On the
+Gallery editor, a new "add all of an event's photos" section lists every
+photo linked to a chosen event — public or private — letting a leader
+build a members-only album straight from a private event's photos instead
+of copying each download link by hand. Mixing public and private photos
+from the same event is fine: a private one simply won't display to a
+signed-out visitor even inside a "Public" album, since the existing
+file-download access check still applies wherever its URL ends up
+embedded — the picker just labels which is which.
+
 **Calendar events can now be edited and deleted, and can repeat.** Any
 leader who can publish an event directly can now also edit or delete it
 afterward from the calendar page — editing never re-triggers the

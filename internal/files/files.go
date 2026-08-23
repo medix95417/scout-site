@@ -232,6 +232,104 @@ func ListPublicImagesForUnit(ctx context.Context, pool *pgxpool.Pool, unitID str
 	return out, rows.Err()
 }
 
+// EventFileGroup is one event's linked files — see
+// ListForUnitGroupedByEvents and ListEventPhotoGroupsForUnit, its
+// images-only sibling.
+type EventFileGroup struct {
+	EventID    string
+	EventTitle string
+	Files      []File
+}
+
+// ListForUnitGroupedByEvents lists every file linked to any of eventIDs,
+// grouped by which event(s) it's linked to (a file linked to more than
+// one appears once per group) — what /files shows instead of its
+// ordinary flat list once a leader has filtered to specific events, so
+// files from the same campout read together instead of scattered through
+// upload order. Groups come back ordered by the event's start date, most
+// recent first; eventIDs not actually in this unit (or with no linked
+// files) simply produce no group.
+func ListForUnitGroupedByEvents(ctx context.Context, pool *pgxpool.Pool, unitID string, eventIDs []string) ([]EventFileGroup, error) {
+	if len(eventIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT e.id, e.title, f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at, f.is_public
+		FROM events e
+		JOIN event_files ef ON ef.event_id = e.id
+		JOIN files f ON f.id = ef.file_id
+		WHERE e.unit_id = $1 AND e.id = ANY($2)
+		ORDER BY e.starts_at DESC, f.created_at DESC
+	`, unitID, eventIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var groups []EventFileGroup
+	index := map[string]int{}
+	for rows.Next() {
+		var eventID, eventTitle string
+		var f File
+		if err := rows.Scan(&eventID, &eventTitle, &f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
+			return nil, err
+		}
+		i, ok := index[eventID]
+		if !ok {
+			i = len(groups)
+			index[eventID] = i
+			groups = append(groups, EventFileGroup{EventID: eventID, EventTitle: eventTitle})
+		}
+		groups[i].Files = append(groups[i].Files, f)
+	}
+	return groups, rows.Err()
+}
+
+// ListEventPhotoGroupsForUnit is ListForUnitGroupedByEvents' image-only
+// sibling, covering every event in the unit rather than a caller-chosen
+// subset — what the Gallery editor's "add an event's photos" picker
+// offers, so a leader building a members-only album can pull in a
+// private event's photos directly instead of copying each download link
+// by hand. Deliberately not filtered to is_public = true the way
+// ListPublicImagesForUnit is: the leader looking at this picker already
+// has file-library access to every photo regardless, and mixing public
+// and private photos from the same event is fine — a private one just
+// won't actually render for a logged-out visitor even inside a "Public"
+// album, since FileDownload's own access check still applies wherever
+// the photo's URL ends up embedded.
+func ListEventPhotoGroupsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]EventFileGroup, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT e.id, e.title, f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at, f.is_public
+		FROM events e
+		JOIN event_files ef ON ef.event_id = e.id
+		JOIN files f ON f.id = ef.file_id
+		WHERE e.unit_id = $1 AND f.content_type LIKE 'image/%'
+		ORDER BY e.starts_at DESC, f.created_at DESC
+	`, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var groups []EventFileGroup
+	index := map[string]int{}
+	for rows.Next() {
+		var eventID, eventTitle string
+		var f File
+		if err := rows.Scan(&eventID, &eventTitle, &f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
+			return nil, err
+		}
+		i, ok := index[eventID]
+		if !ok {
+			i = len(groups)
+			index[eventID] = i
+			groups = append(groups, EventFileGroup{EventID: eventID, EventTitle: eventTitle})
+		}
+		groups[i].Files = append(groups[i].Files, f)
+	}
+	return groups, rows.Err()
+}
+
 // Delete removes a file's metadata row, scoped to a unit. The caller is
 // responsible for also deleting the underlying object from storage — see
 // internal/web/files.go, which does both under one handler.

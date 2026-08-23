@@ -64,20 +64,12 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 	canManage := units.CanEditUnitContent(caps)
 
-	all, err := files.ListForUnit(r.Context(), h.Pool, unit.ID)
-	if err != nil {
-		log.Printf("web: listing files: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
 	events, err := calendar.ListAllForUnit(r.Context(), h.Pool, unit.ID)
 	if err != nil {
 		log.Printf("web: listing events for file library: %v", err)
 	}
 
-	rows := make([]fileRow, 0, len(all))
-	for _, f := range all {
+	decorate := func(f files.File) fileRow {
 		row := fileRow{File: f, SizeDisplay: displaySize(f.SizeBytes)}
 		if canManage {
 			linkedIDs, err := files.EventIDsForFile(r.Context(), h.Pool, f.ID)
@@ -89,19 +81,66 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 				row.LinkedEventIDs[id] = true
 			}
 		}
-		rows = append(rows, row)
+		return row
+	}
+
+	// Filtering to one or more events switches the page from its ordinary
+	// flat, most-recent-first list to grouping by event instead — so
+	// files from the same campout read together rather than scattered
+	// through upload order. No filter selected (the common case) keeps
+	// the flat list exactly as it's always been.
+	selectedEventIDs := r.URL.Query()["event_id"]
+	var rows []fileRow
+	var groups []eventFileGroupView
+	if len(selectedEventIDs) > 0 {
+		fileGroups, err := files.ListForUnitGroupedByEvents(r.Context(), h.Pool, unit.ID, selectedEventIDs)
+		if err != nil {
+			log.Printf("web: listing files grouped by event: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		groups = make([]eventFileGroupView, 0, len(fileGroups))
+		for _, g := range fileGroups {
+			groupRows := make([]fileRow, 0, len(g.Files))
+			for _, f := range g.Files {
+				groupRows = append(groupRows, decorate(f))
+			}
+			groups = append(groups, eventFileGroupView{EventID: g.EventID, EventTitle: g.EventTitle, Files: groupRows})
+		}
+	} else {
+		all, err := files.ListForUnit(r.Context(), h.Pool, unit.ID)
+		if err != nil {
+			log.Printf("web: listing files: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		rows = make([]fileRow, 0, len(all))
+		for _, f := range all {
+			rows = append(rows, decorate(f))
+		}
+	}
+
+	selectedEventSet := make(map[string]bool, len(selectedEventIDs))
+	for _, id := range selectedEventIDs {
+		selectedEventSet[id] = true
 	}
 
 	data := struct {
 		baseData
 		Files             []fileRow
+		EventGroups       []eventFileGroupView
+		GroupedByEvent    bool
 		Events            []calendar.Event
+		SelectedEventIDs  map[string]bool
 		CanManage         bool
 		StorageConfigured bool
 	}{
 		baseData:          h.base(r, "Files"),
 		Files:             rows,
+		EventGroups:       groups,
+		GroupedByEvent:    len(selectedEventIDs) > 0,
 		Events:            events,
+		SelectedEventIDs:  selectedEventSet,
 		CanManage:         canManage,
 		StorageConfigured: h.Storage != nil,
 	}
@@ -113,6 +152,14 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 		data.Flash = strconv.Itoa(len(skipped)) + " file(s) were too large (20 MB max each) and were skipped: " + strings.Join(skipped, ", ")
 	}
 	h.render(w, h.fileLibrary, data)
+}
+
+// eventFileGroupView is one event's files, decorated for the template —
+// see files.EventFileGroup.
+type eventFileGroupView struct {
+	EventID    string
+	EventTitle string
+	Files      []fileRow
 }
 
 // storageUnavailableMsg is shown instead of doing any actual storage I/O

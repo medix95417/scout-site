@@ -46,6 +46,39 @@
   {{end}}
 {{end}}
 
+{{/* eventPhotoPicker is imagePicker's "one specific event, any photo
+     regardless of public/private" sibling — the Gallery editor's "add an
+     event's photos" section (admin-content-form.html) renders one of
+     these per event that has linked images, via files.EventFileGroup.
+     Always append mode (a gallery holds many photos), and always shows a
+     "Private" badge on anything not marked public — mixing public and
+     private photos from the same event into one album draft is fine
+     (the leader here already has full file-library access either way);
+     the badge just makes clear which ones won't actually render for a
+     logged-out visitor if the album ends up "Public", since
+     FileDownload's own access check still applies to wherever the photo's
+     URL is embedded, independent of the album's own visibility setting.
+
+     Takes a dict with:
+       Slug         field id, ties the picker to its target element —
+                    must be unique per picker on the page (e.g. the
+                    event's ID), unlike imagePicker's single shared slug
+       Files        []files.File
+       AppendTarget id of the <textarea> to append to */}}
+{{define "eventPhotoPicker"}}
+  {{if .Files}}
+    <div class="flex gap-2 overflow-x-auto pb-1" data-image-picker="{{.Slug}}" data-image-picker-mode="append" data-image-append-target="{{.AppendTarget}}">
+      {{range .Files}}
+        {{$url := printf "/files/%s/download" .ID}}
+        <button type="button" class="flex-shrink-0 w-20 text-center relative" data-image-picker-option="{{$url}}" title="{{.DisplayLabel}}">
+          <img src="{{$url}}" alt="{{.DisplayLabel}}" loading="lazy" class="h-16 w-20 object-cover rounded-md border-2 border-gray-200 hover:border-gray-400">
+          {{if not .Public}}<span class="absolute top-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">Private</span>{{end}}
+        </button>
+      {{end}}
+    </div>
+  {{end}}
+{{end}}
+
 {{/* photoCarousel renders a scrollable, snap-to-photo carousel — the
      public-facing counterpart to the multi-select pickers above. Used
      wherever more than one photo can be chosen for one spot (a Gallery

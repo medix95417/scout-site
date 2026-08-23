@@ -33,6 +33,25 @@
       {{if .Kind.HasImagePicker}}
         <p class="text-xs text-gray-500 mt-2 mb-1">Or click a photo from your library to add it to the list above:</p>
         {{template "imagePicker" (dict "Slug" "gallery-photos" "Images" .PublicImages "Mode" "append" "AppendTarget" "body")}}
+        {{if .EventPhotoGroups}}
+          <details class="mt-3">
+            <summary class="cursor-pointer select-none text-xs" style="color: var(--unit-color);">Or add all of an event's photos</summary>
+            <p class="text-xs text-gray-500 mt-1 mb-2">
+              Shows every photo linked to that event, public or private — handy for building a members-only album
+              straight from a private event's photos. A private photo only shows up here for you; if this album ends
+              up "Public" below, it still won't actually display to a signed-out visitor until it's also marked
+              public on <a href="/files" class="underline" style="color: var(--unit-color);">Files</a>.
+            </p>
+            <div class="space-y-3">
+              {{range .EventPhotoGroups}}
+                <div>
+                  <p class="text-xs font-medium mb-1">{{.EventTitle}}</p>
+                  {{template "eventPhotoPicker" (dict "Slug" (printf "event-photos-%s" .EventID) "Files" .Files "AppendTarget" "body")}}
+                </div>
+              {{end}}
+            </div>
+          </details>
+        {{end}}
       {{end}}
     </div>
 
