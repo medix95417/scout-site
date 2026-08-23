@@ -13,9 +13,11 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/47-yonkers/scout-site/internal/approval"
@@ -356,6 +358,8 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /calendar", h.Calendar)
 	mux.HandleFunc("GET /calendar/export.pdf", h.CalendarExportPDF)
 	mux.HandleFunc("POST /calendar", h.CalendarCreate)
+	mux.HandleFunc("POST /calendar/{id}", h.CalendarUpdate)
+	mux.HandleFunc("POST /calendar/{id}/delete", h.CalendarDelete)
 	mux.HandleFunc("POST /calendar/{id}/rsvp", h.CalendarRSVP)
 	mux.HandleFunc("GET /calendar/{id}/attendees.pdf", h.CalendarEventAttendeesExportPDF)
 	mux.HandleFunc("POST /calendar/approvals/{id}/decide", h.ApprovalDecide)
@@ -476,6 +480,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /files/{id}/link", h.FileSetEventLinks)
 	mux.HandleFunc("POST /files/{id}/public", h.FileSetPublic)
 	mux.HandleFunc("POST /files/{id}/rename", h.FileSetDisplayName)
+	mux.HandleFunc("POST /files/{id}/category", h.FileSetCategory)
 
 	// Resources page — curated documents/links, public or members-only
 	// (internal/web/resources.go).
@@ -1266,6 +1271,10 @@ type eventView struct {
 	Files              []files.File
 	SubGroupName       string // "" if unscoped — see calendar.Event.SubGroupID
 	ShowPermissionSlip bool   // whether calendar.html renders the "Permission slip" link at all — see settings.PermissionSlipEnforcement
+	SeriesCount        int    // >1 if this event is one occurrence of a repeating series — see calendar.CountInSeries
+	StartsAtInput      string // e.StartsAt formatted for an <input type="datetime-local">'s value — see calendar.go's datetimeLocalFormat
+	EndsAtInput        string // "" if EndsAt is nil
+	SubGroupIDValue    string // e.SubGroupID dereferenced ("" if unscoped) — Go templates' eq can't compare a *string to a string, so the edit form's <select> needs this plain-string form to mark the current selection
 }
 
 // parseMonthParam resolves the year/month a calendar page should show from
@@ -1419,6 +1428,7 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: loading events with permission slips: %v", err)
 	}
 
+	const datetimeLocalFormat = "2006-01-02T15:04"
 	eventViews := make([]eventView, len(events))
 	for i, e := range events {
 		var subGroupName string
@@ -1426,7 +1436,24 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 			subGroupName = subGroupNameByID[*e.SubGroupID]
 		}
 		showSlip := !slipEnforcement || e.RequiresPermissionSlip || canEditContent || eventsWithSlips[e.ID]
-		eventViews[i] = eventView{Event: e, Files: filesByEvent[e.ID], SubGroupName: subGroupName, ShowPermissionSlip: showSlip}
+		v := eventView{Event: e, Files: filesByEvent[e.ID], SubGroupName: subGroupName, ShowPermissionSlip: showSlip}
+		if e.SubGroupID != nil {
+			v.SubGroupIDValue = *e.SubGroupID
+		}
+		if canEditContent {
+			v.StartsAtInput = e.StartsAt.Format(datetimeLocalFormat)
+			if e.EndsAt != nil {
+				v.EndsAtInput = e.EndsAt.Format(datetimeLocalFormat)
+			}
+			if e.SeriesID != nil {
+				if n, err := calendar.CountInSeries(r.Context(), h.Pool, *e.SeriesID); err != nil {
+					log.Printf("web: counting event series: %v", err)
+				} else {
+					v.SeriesCount = n
+				}
+			}
+		}
+		eventViews[i] = v
 	}
 
 	data := struct {
@@ -1579,20 +1606,210 @@ func (h *Handlers) CalendarCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = calendar.Create(r.Context(), h.Pool, calendar.CreateInput{
-		UnitID:                 unit.ID,
+	// "Repeats" creates several independent event rows up front (each with
+	// its own RSVPs, approval routing, and later edit/delete — see
+	// calendar.Update/Delete) rather than one row expanded at read time, so
+	// every occurrence behaves exactly like an event created by hand. count
+	// is clamped to maxRepeatOccurrences so a typo (or a hostile client)
+	// can't be asked to insert an unbounded number of rows in one request.
+	count := 1
+	frequency := r.FormValue("repeat_frequency")
+	if frequency != "" {
+		if n, err := strconv.Atoi(r.FormValue("repeat_count")); err == nil && n > 1 {
+			count = n
+		} else {
+			count = 2
+		}
+		if count > maxRepeatOccurrences {
+			count = maxRepeatOccurrences
+		}
+	}
+
+	var seriesID *string
+	if count > 1 {
+		id := uuid.NewString()
+		seriesID = &id
+	}
+
+	for i := 0; i < count; i++ {
+		occStart := addRepeatInterval(startsAt, frequency, i)
+		var occEnd *time.Time
+		if endsAt != nil {
+			e := addRepeatInterval(*endsAt, frequency, i)
+			occEnd = &e
+		}
+		_, err = calendar.Create(r.Context(), h.Pool, calendar.CreateInput{
+			UnitID:                 unit.ID,
+			Title:                  r.FormValue("title"),
+			SubGroupID:             subGroupID,
+			Description:            r.FormValue("description"),
+			Location:               r.FormValue("location"),
+			StartsAt:               occStart,
+			EndsAt:                 occEnd,
+			Visibility:             visibility,
+			CreatedBy:              actor.ID,
+			RequiresPermissionSlip: r.FormValue("requires_permission_slip") == "1",
+			SeriesID:               seriesID,
+		}, units.CanEditUnitContent(caps))
+		if err != nil {
+			log.Printf("web: creating event: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	http.Redirect(w, r, "/calendar", http.StatusSeeOther)
+}
+
+// maxRepeatOccurrences caps how many occurrences one "repeats" submission
+// may create at once — about a year of weekly meetings, generous for any
+// real unit schedule while keeping a single request's work bounded.
+const maxRepeatOccurrences = 52
+
+// addRepeatInterval returns t shifted forward by n repetitions of
+// frequency ("weekly", "biweekly", or "monthly"; any other value,
+// including "", is treated as no shift). n=0 always returns t unchanged —
+// the first occurrence in a series is never shifted.
+func addRepeatInterval(t time.Time, frequency string, n int) time.Time {
+	switch frequency {
+	case "weekly":
+		return t.AddDate(0, 0, 7*n)
+	case "biweekly":
+		return t.AddDate(0, 0, 14*n)
+	case "monthly":
+		return t.AddDate(0, n, 0)
+	default:
+		return t
+	}
+}
+
+// CalendarUpdate edits an existing event's details. Restricted to
+// CanEditUnitContent — the same broad-leader gate as publishing an event
+// directly — rather than also opening it to a scoped submitter (SPL/Patrol
+// Leader): editing doesn't re-run approval routing, so letting a
+// not-yet-approved event's own submitter silently change it after
+// submission would be a way around review, not a convenience.
+func (h *Handlers) CalendarUpdate(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	user, loggedIn := auth.UserFromContext(r.Context())
+	if !loggedIn {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
+		http.Error(w, "you don't have permission to edit events", http.StatusForbidden)
+		return
+	}
+
+	eventID := r.PathValue("id")
+	if _, found, err := calendar.GetEvent(r.Context(), h.Pool, eventID, unit.ID); err != nil {
+		log.Printf("web: loading event: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	} else if !found {
+		http.NotFound(w, r)
+		return
+	}
+
+	startsAt, err := time.ParseInLocation("2006-01-02T15:04", r.FormValue("starts_at"), time.Local)
+	if err != nil {
+		http.Error(w, "invalid start time", http.StatusBadRequest)
+		return
+	}
+	var endsAt *time.Time
+	if raw := strings.TrimSpace(r.FormValue("ends_at")); raw != "" {
+		parsed, err := time.ParseInLocation("2006-01-02T15:04", raw, time.Local)
+		if err != nil {
+			http.Error(w, "invalid end time", http.StatusBadRequest)
+			return
+		}
+		if parsed.Before(startsAt) {
+			http.Error(w, "end time can't be before the start time", http.StatusBadRequest)
+			return
+		}
+		endsAt = &parsed
+	}
+
+	visibility := "members"
+	if r.FormValue("public") == "1" {
+		visibility = "public"
+	}
+
+	var subGroupID *string
+	if raw := strings.TrimSpace(r.FormValue("sub_group_id")); raw != "" {
+		subGroupUnitID, ok, err := roster.SubGroupUnitID(r.Context(), h.Pool, raw)
+		if err != nil {
+			log.Printf("web: looking up sub-group: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if !ok || subGroupUnitID != unit.ID {
+			http.Error(w, "that "+subGroupNoun(unit.UnitType)+" doesn't exist in this unit", http.StatusBadRequest)
+			return
+		}
+		subGroupID = &raw
+		visibility = "members"
+	}
+
+	actor, err := h.actingMember(r.Context(), user, unit.ID)
+	if err != nil {
+		http.Error(w, "could not determine acting member — has your family been added to the roster yet?", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := calendar.Update(r.Context(), h.Pool, eventID, unit.ID, calendar.UpdateInput{
 		Title:                  r.FormValue("title"),
-		SubGroupID:             subGroupID,
 		Description:            r.FormValue("description"),
 		Location:               r.FormValue("location"),
 		StartsAt:               startsAt,
 		EndsAt:                 endsAt,
 		Visibility:             visibility,
-		CreatedBy:              actor.ID,
+		SubGroupID:             subGroupID,
 		RequiresPermissionSlip: r.FormValue("requires_permission_slip") == "1",
-	}, units.CanEditUnitContent(caps))
+	}, actor.ID); err != nil {
+		log.Printf("web: updating event: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/calendar", http.StatusSeeOther)
+}
+
+// CalendarDelete removes an event outright. Same CanEditUnitContent gate
+// as CalendarUpdate.
+func (h *Handlers) CalendarDelete(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	user, loggedIn := auth.UserFromContext(r.Context())
+	if !loggedIn {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
+		http.Error(w, "you don't have permission to delete events", http.StatusForbidden)
+		return
+	}
+
+	actor, err := h.actingMember(r.Context(), user, unit.ID)
 	if err != nil {
-		log.Printf("web: creating event: %v", err)
+		http.Error(w, "could not determine acting member — has your family been added to the roster yet?", http.StatusBadRequest)
+		return
+	}
+
+	eventID := r.PathValue("id")
+	if err := calendar.Delete(r.Context(), h.Pool, eventID, unit.ID, actor.ID); err != nil {
+		if errors.Is(err, calendar.ErrEventNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		log.Printf("web: deleting event: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

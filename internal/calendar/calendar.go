@@ -27,6 +27,7 @@ type Event struct {
 	Status                 string  // "draft" | "pending_approval" | "published" | "rejected"
 	SubGroupID             *string // nil = whole-unit event; set = scoped to one patrol/den (see migration 0018)
 	RequiresPermissionSlip bool    // set by the creator — most events (a weekly meeting) don't need one; see migration 0028
+	SeriesID               *string // nil unless created as one occurrence of a repeating series — see migration 0033
 }
 
 // eventColumns is the column list every event query below selects, in the
@@ -46,7 +47,7 @@ type Event struct {
 // paths today — it's defence against a hand-written INSERT, a restored
 // backup, or a future import path introducing what the schema plainly
 // allows.
-const eventColumns = `id, unit_id, title, COALESCE(description, ''), COALESCE(location, ''), starts_at, ends_at, visibility::text, status::text, sub_group_id::text, requires_permission_slip`
+const eventColumns = `id, unit_id, title, COALESCE(description, ''), COALESCE(location, ''), starts_at, ends_at, visibility::text, status::text, sub_group_id::text, requires_permission_slip, series_id::text`
 
 // DateRangeDisplay is the human-friendly date/time string used everywhere
 // an event's schedule is shown — the calendar list, the month grid, and the
@@ -95,6 +96,7 @@ type CreateInput struct {
 	CreatedBy              string  // member ID
 	SubGroupID             *string // nil = whole-unit event; set = scoped to one patrol/den
 	RequiresPermissionSlip bool
+	SeriesID               *string // nil unless this occurrence belongs to a repeating series (see migration 0033)
 }
 
 // Create inserts an event. If canPublishDirectly is false (the creator only
@@ -110,11 +112,11 @@ func Create(ctx context.Context, pool *pgxpool.Pool, in CreateInput, canPublishD
 
 	var e Event
 	err := pool.QueryRow(ctx, `
-		INSERT INTO events (unit_id, title, description, location, starts_at, ends_at, visibility, status, created_by, sub_group_id, requires_permission_slip)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO events (unit_id, title, description, location, starts_at, ends_at, visibility, status, created_by, sub_group_id, requires_permission_slip, series_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING `+eventColumns+`
-	`, in.UnitID, in.Title, in.Description, in.Location, in.StartsAt, in.EndsAt, in.Visibility, status, in.CreatedBy, in.SubGroupID, in.RequiresPermissionSlip,
-	).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID, &e.RequiresPermissionSlip)
+	`, in.UnitID, in.Title, in.Description, in.Location, in.StartsAt, in.EndsAt, in.Visibility, status, in.CreatedBy, in.SubGroupID, in.RequiresPermissionSlip, in.SeriesID,
+	).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID, &e.RequiresPermissionSlip, &e.SeriesID)
 	if err != nil {
 		return Event{}, err
 	}
@@ -218,11 +220,86 @@ func GetEvent(ctx context.Context, pool *pgxpool.Pool, eventID, unitID string) (
 	err := pool.QueryRow(ctx, `
 		SELECT `+eventColumns+`
 		FROM events WHERE id = $1 AND unit_id = $2
-	`, eventID, unitID).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID, &e.RequiresPermissionSlip)
+	`, eventID, unitID).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID, &e.RequiresPermissionSlip, &e.SeriesID)
 	if err != nil {
 		return Event{}, false, nil //nolint:nilerr // "no such event in this unit" is a normal, expected outcome
 	}
 	return e, true, nil
+}
+
+// UpdateInput is what an editor may change about an existing event — every
+// field CreateInput accepts except UnitID/CreatedBy/SeriesID, none of which
+// make sense to change after the fact (an event doesn't move units, its
+// creator doesn't change, and it doesn't join/leave a repeating series).
+type UpdateInput struct {
+	Title                  string
+	Description            string
+	Location               string
+	StartsAt               time.Time
+	EndsAt                 *time.Time
+	Visibility             string
+	SubGroupID             *string
+	RequiresPermissionSlip bool
+}
+
+// Update changes an existing event's details in place — its status
+// (published/pending_approval/rejected) and series membership are left
+// exactly as they were; editing never re-triggers approval routing.
+// Scoped to unitID like every other write here.
+func Update(ctx context.Context, pool *pgxpool.Pool, eventID, unitID string, in UpdateInput, actorID string) (Event, error) {
+	var e Event
+	err := pool.QueryRow(ctx, `
+		UPDATE events SET title = $1, description = $2, location = $3, starts_at = $4, ends_at = $5,
+			visibility = $6, sub_group_id = $7, requires_permission_slip = $8
+		WHERE id = $9 AND unit_id = $10
+		RETURNING `+eventColumns+`
+	`, in.Title, in.Description, in.Location, in.StartsAt, in.EndsAt, in.Visibility, in.SubGroupID, in.RequiresPermissionSlip, eventID, unitID,
+	).Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID, &e.RequiresPermissionSlip, &e.SeriesID)
+	if err != nil {
+		return Event{}, err
+	}
+
+	audit.Log(ctx, pool, audit.Entry{EntityType: "event", EntityID: e.ID, ActorID: &actorID, Action: "update", After: e})
+	return e, nil
+}
+
+// Delete removes an event outright. events' own foreign keys already
+// cascade what should disappear with it (RSVPs, its permission slip and
+// signatures, file links) and preserve what shouldn't (a trip fund or
+// fundraiser tied to the event keeps its own history, just unlinked — see
+// migrations 0006/0025). The one thing not modeled as a foreign key is a
+// pending approval_requests row (entity_type/entity_id is a polymorphic
+// reference, not an FK) — deleted here explicitly so retracting/removing
+// an unapproved event doesn't leave it stuck forever in some leader's
+// "Awaiting your approval" queue referencing a row that no longer exists.
+func Delete(ctx context.Context, pool *pgxpool.Pool, eventID, unitID string, actorID string) error {
+	e, found, err := GetEvent(ctx, pool, eventID, unitID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return ErrEventNotFound
+	}
+
+	if _, err := pool.Exec(ctx, `DELETE FROM approval_requests WHERE entity_type = 'event' AND entity_id = $1`, eventID); err != nil {
+		return err
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM events WHERE id = $1 AND unit_id = $2`, eventID, unitID); err != nil {
+		return err
+	}
+
+	audit.Log(ctx, pool, audit.Entry{EntityType: "event", EntityID: eventID, ActorID: &actorID, Action: "delete", Before: e})
+	return nil
+}
+
+// CountInSeries returns how many events currently share seriesID — what a
+// per-event view uses to show "part of a repeating series (N events)"
+// without needing a stored count that could drift as occurrences are
+// edited/deleted independently.
+func CountInSeries(ctx context.Context, pool *pgxpool.Pool, seriesID string) (int, error) {
+	var n int
+	err := pool.QueryRow(ctx, `SELECT count(*) FROM events WHERE series_id = $1`, seriesID).Scan(&n)
+	return n, err
 }
 
 func queryEvents(ctx context.Context, pool *pgxpool.Pool, sql string, args ...any) ([]Event, error) {
@@ -235,7 +312,7 @@ func queryEvents(ctx context.Context, pool *pgxpool.Pool, sql string, args ...an
 	var events []Event
 	for rows.Next() {
 		var e Event
-		if err := rows.Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID, &e.RequiresPermissionSlip); err != nil {
+		if err := rows.Scan(&e.ID, &e.UnitID, &e.Title, &e.Description, &e.Location, &e.StartsAt, &e.EndsAt, &e.Visibility, &e.Status, &e.SubGroupID, &e.RequiresPermissionSlip, &e.SeriesID); err != nil {
 			return nil, err
 		}
 		events = append(events, e)
