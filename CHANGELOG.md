@@ -20,6 +20,11 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Raised file upload limits** — a single file can now be up to 50 MB
+(was 20 MB), and one upload submission (a whole batch of files at once)
+can now total up to 500 MB (was 250 MB), enough headroom for phone
+photos and short videos from a full campout in one go.
+
 **Files can now be filtered/grouped by event, and Gallery albums can pull
 straight from an event's own photos.** On `/files`, checking one or more
 events switches the page from its ordinary flat list to grouping by

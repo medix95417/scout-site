@@ -52,11 +52,11 @@ const maxUploadMemory = 10 << 20 // 10 MB
 // request, not any one file — a multi-file upload (see internal/web/files.go's
 // FileUpload, which accepts a batch via <input multiple>) needs enough
 // headroom for several files at once, e.g. a phone's whole camera roll for
-// a campout, not just one. 250 MB comfortably fits a few dozen photos
+// a campout, not just one. 500 MB comfortably fits a few dozen photos
 // (each individually capped much lower — see files.go's maxUploadFileSize)
 // while still bounding how much one request can make the server buffer/
 // spill to disk.
-const maxRequestBodySize = 250 << 20 // 250 MB
+const maxRequestBodySize = 500 << 20 // 500 MB
 
 type contextKey string
 

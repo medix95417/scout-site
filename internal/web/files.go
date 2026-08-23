@@ -23,11 +23,11 @@ import (
 // pages already use.
 
 // maxUploadFileSize caps a single uploaded file's size. Kept comfortably
-// under csrf.maxRequestBodySize (250 MB, the TOTAL size of one submission —
+// under csrf.maxRequestBodySize (500 MB, the TOTAL size of one submission —
 // see that constant's own comment), so the error a leader sees for one
 // oversized file names the actual limit that tripped rather than a generic
 // "request too large."
-const maxUploadFileSize = 20 << 20 // 20 MB
+const maxUploadFileSize = 50 << 20 // 50 MB
 
 // fileRow is a files.File decorated with what the template needs to render
 // it and its "link to events" checkboxes.
@@ -149,7 +149,7 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 	// rest of the batch still succeeded, so this is a warning, not an error
 	// page.
 	if skipped := r.URL.Query()["skipped"]; len(skipped) > 0 {
-		data.Flash = strconv.Itoa(len(skipped)) + " file(s) were too large (20 MB max each) and were skipped: " + strings.Join(skipped, ", ")
+		data.Flash = strconv.Itoa(len(skipped)) + " file(s) were too large (50 MB max each) and were skipped: " + strings.Join(skipped, ", ")
 	}
 	h.render(w, h.fileLibrary, data)
 }
