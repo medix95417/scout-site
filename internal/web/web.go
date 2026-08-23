@@ -515,6 +515,7 @@ type baseData struct {
 	CanManageLedger          bool              // Treasurer/super_admin in *this* unit — drives the "Treasury" nav link
 	IsSuperAdmin             bool              // super_admin in *this* unit — drives the "Site Settings" nav link (see internal/web/settings_admin.go)
 	AdvancementEnabled       bool              // this unit's settings.AdvancementEnabled toggle — drives the "Advancement"/"Manage Advancement" nav links, see internal/web/advancement.go
+	TreasuryEnabled          bool              // this unit's settings.TreasuryEnabled toggle — drives the "My Accounts"/"Treasury"/"Reports" nav links, see internal/web/treasury.go's requireTreasuryEnabled
 	NewsletterEnabled        bool              // this unit's settings.NewsletterEnabled toggle — drives the "Newsletters" nav link, see internal/web/newsletter.go
 	ScoutAccountsSelfService bool              // this unit's settings.ScoutAccountSelfService toggle — drives the "My Accounts" nav link and family self-service account access, see internal/web/accounts.go
 	PasswordResetEnabled     bool              // site-wide settings.PasswordResetEnabled toggle — drives whether the login page's "Forgot your password?" link points to the reset form or an explanation, see internal/web/password_reset.go. Computed for every request (not just logged-in ones), since /login and /forgot-password are reached signed out
@@ -722,6 +723,12 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 			data.AdvancementEnabled = enabled
 		}
 
+		if enabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.TreasuryEnabled); err != nil {
+			log.Printf("web: checking treasury-enabled setting: %v", err)
+		} else {
+			data.TreasuryEnabled = enabled
+		}
+
 		if enabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.NewsletterEnabled); err != nil {
 			log.Printf("web: checking newsletter-enabled setting: %v", err)
 		} else {
@@ -858,9 +865,18 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		activities = append(activities, homeActivity{Title: p.Title, URL: "/gallery/" + p.ID, Photos: photos})
 	}
 
-	storefront, storefrontActive, err := ledger.ActiveStorefrontFundraiser(r.Context(), h.Pool, unit.ID)
-	if err != nil {
-		log.Printf("web: loading active storefront fundraiser for homepage: %v", err)
+	// The storefront button never shows while Treasury itself is off for
+	// this unit — see settings.TreasuryEnabled — since it exists to feed
+	// the same ledger that toggle gates.
+	var storefront ledger.Fundraiser
+	var storefrontActive bool
+	if treasuryEnabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.TreasuryEnabled); err != nil {
+		log.Printf("web: checking treasury-enabled setting for homepage: %v", err)
+	} else if treasuryEnabled {
+		storefront, storefrontActive, err = ledger.ActiveStorefrontFundraiser(r.Context(), h.Pool, unit.ID)
+		if err != nil {
+			log.Printf("web: loading active storefront fundraiser for homepage: %v", err)
+		}
 	}
 
 	data := struct {

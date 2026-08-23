@@ -20,6 +20,23 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Relabeled the existing "My Accounts" self-service toggle** on Settings
+from "Family access to Scout account balances" to "My Accounts (family
+access to Scout account balances)" — same setting, same behavior, just
+named after the actual page it controls so it's easier to find.
+
+**Added a "Treasury (fund accounting)" toggle to Settings**, letting a
+super_admin turn the whole Treasury function off per unit — `/treasury`
+and all its sub-pages, the family self-service "My Accounts" view, and
+(since it exists to feed the same ledger) the fundraiser storefront's
+admin pages, public order page, and homepage button all close, with a
+clear message for anyone who still has a URL bookmarked, Treasurer
+included — this isn't a per-role exception like the existing Scout-account
+self-service toggle, turning the function off means off for everyone.
+Defaults to on, so no existing unit sees any change; no ledger data is
+touched by turning it off, every entry point just comes back exactly as
+it was once it's turned back on.
+
 **Added a fundraiser storefront: an item catalog, a homepage "Buy Now"
 button, and an order queue — the first step toward online payments.**
 A Treasurer can now add sellable items and a button image to any existing

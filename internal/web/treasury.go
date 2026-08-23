@@ -16,6 +16,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/calendar"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/ledger"
+	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
 
@@ -112,6 +113,28 @@ func formatCents(cents int64) string {
 	return s
 }
 
+// requireTreasuryEnabled reports whether the Treasury function is on for
+// unitID (see settings.TreasuryEnabled), writing a clear 403 if not —
+// hiding the nav link (see base.html) isn't itself a security boundary,
+// so every treasury route checks this directly too, the same way a
+// disabled feature should behave for anyone who still has the URL
+// bookmarked or types it directly. Deliberately not skipped for a
+// Treasurer/super_admin — unlike ScoutAccountSelfService's per-role
+// exception, turning the whole function off has to actually mean off.
+func (h *Handlers) requireTreasuryEnabled(w http.ResponseWriter, r *http.Request, unitID string) bool {
+	enabled, err := settings.GetForUnit(r.Context(), h.Pool, unitID, settings.TreasuryEnabled)
+	if err != nil {
+		log.Printf("web: checking treasury-enabled setting: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return false
+	}
+	if !enabled {
+		http.Error(w, "the treasury function is turned off for this unit — an admin can re-enable it from /admin/settings", http.StatusForbidden)
+		return false
+	}
+	return true
+}
+
 // requireTreasurer resolves the current unit/user and checks
 // units.CanManageLedger, writing an HTTP error/redirect and returning
 // ok=false if the request should stop here. Shared preamble for every
@@ -121,6 +144,9 @@ func (h *Handlers) requireTreasurer(w http.ResponseWriter, r *http.Request, redi
 	user, loggedIn := auth.UserFromContext(r.Context())
 	if !loggedIn {
 		http.Redirect(w, r, "/login?next="+redirectPath, http.StatusSeeOther)
+		return unit, family.Member{}, false
+	}
+	if !h.requireTreasuryEnabled(w, r, unit.ID) {
 		return unit, family.Member{}, false
 	}
 
@@ -482,6 +508,9 @@ func (h *Handlers) TreasuryAccountView(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?next="+r.URL.Path, http.StatusSeeOther)
 		return
 	}
+	if !h.requireTreasuryEnabled(w, r, unit.ID) {
+		return
+	}
 
 	accountID := r.PathValue("id")
 	account, canManage, isOwner, err := h.resolveAccountAccess(r.Context(), unit, user, accountID)
@@ -641,6 +670,9 @@ func (h *Handlers) TreasuryAccountExportPDF(w http.ResponseWriter, r *http.Reque
 		http.Redirect(w, r, "/login?next="+r.URL.Path, http.StatusSeeOther)
 		return
 	}
+	if !h.requireTreasuryEnabled(w, r, unit.ID) {
+		return
+	}
 
 	accountID := r.PathValue("id")
 	account, canManage, isOwner, err := h.resolveAccountAccess(r.Context(), unit, user, accountID)
@@ -683,6 +715,9 @@ func (h *Handlers) TreasuryRequestTransfer(w http.ResponseWriter, r *http.Reques
 	user, loggedIn := auth.UserFromContext(r.Context())
 	if !loggedIn {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	if !h.requireTreasuryEnabled(w, r, unit.ID) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
