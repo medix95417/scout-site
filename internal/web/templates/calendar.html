@@ -67,6 +67,22 @@
         <label class="flex items-center gap-2 text-sm">
           <input type="checkbox" name="requires_permission_slip" value="1"> Requires a permission slip
         </label>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1" for="repeat_frequency">Repeats (optional)</label>
+          <div class="flex gap-2">
+            <select id="repeat_frequency" name="repeat_frequency" class="rounded-md border border-gray-300 px-3 py-2 text-sm">
+              <option value="">Does not repeat</option>
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Every 2 weeks</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <input class="w-28 rounded-md border border-gray-300 px-3 py-2 text-sm" type="number" name="repeat_count" min="2" max="52" placeholder="Times">
+          </div>
+          <p class="text-xs text-gray-500 mt-1">
+            "Times" is the total number of occurrences, including this first one (max 52). Each one is created as
+            its own event, individually editable and deletable afterward.
+          </p>
+        </div>
         <button type="submit" class="rounded-md px-4 py-2 btn-accent">
           {{if .RequiresApproval}}Submit for approval{{else}}Publish{{end}}
         </button>
@@ -153,10 +169,11 @@
             {{.Title}}
             {{if eq .Visibility "public"}}<span class="text-xs text-gray-400">(public)</span>{{end}}
             {{if .SubGroupName}}<span class="text-xs rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 ml-1">{{.SubGroupName}}</span>{{end}}
+            {{if gt .SeriesCount 1}}<span class="text-xs rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 ml-1">Repeating series ({{.SeriesCount}} events)</span>{{end}}
           </div>
           <div class="text-sm text-gray-500">{{.DateRangeDisplay}}{{if .Location}} · {{.Location}}{{end}}</div>
           {{if .Description}}<p class="text-sm mt-1">{{.Description}}</p>{{end}}
-          <form method="post" action="/calendar/{{.ID}}/rsvp" class="mt-2 flex gap-2 items-center">
+          <form method="post" action="/calendar/{{.ID}}/rsvp" class="mt-2 flex gap-2 items-center flex-wrap">
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <button name="response" value="yes" class="text-xs rounded-full border px-2 py-1">I'm going</button>
             <button name="response" value="maybe" class="text-xs rounded-full border px-2 py-1">Maybe</button>
@@ -165,6 +182,48 @@
             {{if $.CanManageFiles}}<a href="/files" class="text-xs underline ml-1" style="color: var(--unit-color);">Attach a file</a>{{end}}
             {{if $.CanManageFiles}}<a href="/calendar/{{.ID}}/attendees.pdf" class="text-xs underline ml-1" style="color: var(--unit-color);">Print attendee roster</a>{{end}}
           </form>
+
+          {{if $.CanEditContent}}
+            <div class="mt-2 flex gap-3 items-center">
+              <details class="text-xs">
+                <summary class="cursor-pointer select-none underline" style="color: var(--unit-color);">Edit</summary>
+                <form method="post" action="/calendar/{{.ID}}" class="mt-2 space-y-2 max-w-sm border border-gray-100 rounded-md p-3">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="title" value="{{.Title}}" required>
+                  <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="description">{{.Description}}</textarea>
+                  <div class="flex gap-2">
+                    <div class="flex-1">
+                      <label class="block text-xs text-gray-500 mb-1">Starts</label>
+                      <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="datetime-local" name="starts_at" value="{{.StartsAtInput}}" required>
+                    </div>
+                    <div class="flex-1">
+                      <label class="block text-xs text-gray-500 mb-1">Ends (optional)</label>
+                      <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="datetime-local" name="ends_at" value="{{.EndsAtInput}}">
+                    </div>
+                  </div>
+                  <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="location" value="{{.Location}}" placeholder="Location (optional)">
+                  {{if $.AllSubGroups}}
+                    <select name="sub_group_id" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+                      <option value="">Whole unit</option>
+                      {{$subGroupID := .SubGroupIDValue}}
+                      {{range $.AllSubGroups}}<option value="{{.ID}}" {{if eq .ID $subGroupID}}selected{{end}}>{{.Name}}</option>{{end}}
+                    </select>
+                  {{end}}
+                  <label class="flex items-center gap-2 text-xs">
+                    <input type="checkbox" name="public" value="1" {{if eq .Visibility "public"}}checked{{end}}> Visible to the public
+                  </label>
+                  <label class="flex items-center gap-2 text-xs">
+                    <input type="checkbox" name="requires_permission_slip" value="1" {{if .RequiresPermissionSlip}}checked{{end}}> Requires a permission slip
+                  </label>
+                  <button type="submit" class="rounded-md px-3 py-1.5 text-xs btn-accent">Save changes</button>
+                </form>
+              </details>
+              <form method="post" action="/calendar/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Title}}? This can\'t be undone — RSVPs and its permission slip go with it.');">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
+              </form>
+            </div>
+          {{end}}
 
           {{if .Files}}
             <div class="mt-3 flex flex-wrap gap-2">

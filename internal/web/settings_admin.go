@@ -8,10 +8,21 @@ import (
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/content"
 	"github.com/47-yonkers/scout-site/internal/family"
+	"github.com/47-yonkers/scout-site/internal/files"
 	"github.com/47-yonkers/scout-site/internal/ledger"
 	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
+
+// categorySummaryView decorates a files.CategorySummary with a
+// human-readable label and formatted size, and its own share of the
+// unit's total storage, for the "File Storage" section of
+// /admin/settings — see SystemSettingsView.
+type categorySummaryView struct {
+	files.CategorySummary
+	Label       string
+	SizeDisplay string
+}
 
 // This file is the site-wide settings page — /admin/settings — a small,
 // generic list of on/off toggles (see internal/settings) for
@@ -187,6 +198,29 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// File storage summary — see files.StorageSummaryForUnit. Read-only
+	// reporting, so a site admin can see what's using storage without
+	// having to browse /files' full listing themselves.
+	byCategory, totalStorage, err := files.StorageSummaryForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: loading file storage summary: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	categoryLabels := map[string]string{
+		files.CategoryGeneral:    "General documents",
+		files.CategoryEventPhoto: "Event photos",
+	}
+	storageByCategory := make([]categorySummaryView, 0, len(byCategory))
+	for _, c := range byCategory {
+		label := categoryLabels[c.Category]
+		if label == "" {
+			label = c.Category
+		}
+		storageByCategory = append(storageByCategory, categorySummaryView{CategorySummary: c, Label: label, SizeDisplay: displaySize(c.SizeBytes)})
+	}
+	storageTotal := categorySummaryView{CategorySummary: totalStorage, Label: "Total", SizeDisplay: displaySize(totalStorage.SizeBytes)}
+
 	data := struct {
 		baseData
 		Toggles             []toggleView
@@ -198,6 +232,8 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		SocialTextSettings  []unitTextSettingView
 		Fundraisers         []ledger.Fundraiser
 		ActiveStorefrontID  string
+		StorageByCategory   []categorySummaryView
+		StorageTotal        categorySummaryView
 	}{
 		baseData:            h.base(r, "Site Settings"),
 		Toggles:             views,
@@ -209,6 +245,8 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		SocialTextSettings:  socialTextViews,
 		Fundraisers:         fundraisers,
 		ActiveStorefrontID:  activeStorefrontID,
+		StorageByCategory:   storageByCategory,
+		StorageTotal:        storageTotal,
 	}
 	h.render(w, h.systemSettings, data)
 }

@@ -75,6 +75,41 @@ func Create(ctx context.Context, pool *pgxpool.Pool, f File) (File, error) {
 	return f, nil
 }
 
+// CategorySummary is how many files, and how many total bytes, a unit has
+// stored in one category — see StorageSummaryForUnit.
+type CategorySummary struct {
+	Category  string
+	FileCount int
+	SizeBytes int64
+}
+
+// StorageSummaryForUnit reports how much is stored for a unit, broken down
+// by category (see CategorySummary) plus a grand total across all of
+// them — what /admin/settings shows so a site admin can see what's using
+// storage without having to browse the full file list themselves.
+// Categories with zero files are omitted rather than shown as a zero row.
+func StorageSummaryForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (byCategory []CategorySummary, total CategorySummary, err error) {
+	rows, err := pool.Query(ctx, `
+		SELECT category::text, count(*), COALESCE(sum(size_bytes), 0)
+		FROM files WHERE unit_id = $1 GROUP BY category ORDER BY category
+	`, unitID)
+	if err != nil {
+		return nil, CategorySummary{}, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var c CategorySummary
+		if err := rows.Scan(&c.Category, &c.FileCount, &c.SizeBytes); err != nil {
+			return nil, CategorySummary{}, err
+		}
+		byCategory = append(byCategory, c)
+		total.FileCount += c.FileCount
+		total.SizeBytes += c.SizeBytes
+	}
+	return byCategory, total, rows.Err()
+}
+
 // ListForUnit returns every file belonging to a unit, most recent first.
 func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]File, error) {
 	rows, err := pool.Query(ctx, `
@@ -125,6 +160,17 @@ func SetPublic(ctx context.Context, pool *pgxpool.Pool, fileID, unitID string, p
 // DisplayLabel. Scoped to unitID like every other file write here.
 func SetDisplayName(ctx context.Context, pool *pgxpool.Pool, fileID, unitID, displayName string) error {
 	_, err := pool.Exec(ctx, `UPDATE files SET display_name = $1 WHERE id = $2 AND unit_id = $3`, displayName, fileID, unitID)
+	return err
+}
+
+// SetCategory reclassifies a file between the general document library and
+// the event-photo category — chosen once at upload time (see
+// internal/web/files.go's FileUpload), but sometimes wrong in hindsight
+// (a document uploaded as "general" that turns out to be a campout photo,
+// or the other way around) and otherwise stuck that way for good. Scoped
+// to unitID like every other file write here.
+func SetCategory(ctx context.Context, pool *pgxpool.Pool, fileID, unitID, category string) error {
+	_, err := pool.Exec(ctx, `UPDATE files SET category = $1 WHERE id = $2 AND unit_id = $3`, category, fileID, unitID)
 	return err
 }
 

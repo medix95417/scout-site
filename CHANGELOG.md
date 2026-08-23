@@ -20,6 +20,32 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Calendar events can now be edited and deleted, and can repeat.** Any
+leader who can publish an event directly can now also edit or delete it
+afterward from the calendar page — editing never re-triggers the
+SPL/Patrol-Leader approval workflow, and deleting cleans up its RSVPs,
+permission slip, and any pending approval request with it (a linked trip
+fund or fundraiser just loses the link, keeping its own history). The
+"Add an event" form also gained a "Repeats" option — weekly, every two
+weeks, or monthly, for up to 52 occurrences — which creates each
+occurrence as its own fully independent event (own RSVPs, own approval
+routing, individually editable/deletable), tagged only for display as
+"part of a repeating series (N events)."
+
+**Uploading several files at once with a given name now numbers them**
+("Campout 2026 1", "Campout 2026 2", ...) instead of applying that name
+to only one file and leaving the rest with their bare filenames.
+
+**A file's category (General document vs. Event photo) can now be
+changed after upload**, alongside the existing rename/make-public-or-
+private/link-to-events/delete actions on `/files`.
+
+**Added a "File Storage" section to Site Settings**, showing a unit's
+stored files broken down by category — file count and space used per
+category, plus a grand total — so a site admin can see what's using
+storage without digging through the full file list. Read-only; manage
+the files themselves from `/files`.
+
 **Relabeled the existing "My Accounts" self-service toggle** on Settings
 from "Family access to Scout account balances" to "My Accounts (family
 access to Scout account balances)" — same setting, same behavior, just

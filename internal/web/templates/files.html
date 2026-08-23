@@ -17,7 +17,7 @@
       <form method="post" action="/files/upload" enctype="multipart/form-data" class="space-y-3">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="file" name="file" multiple required>
-        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="display_name" placeholder="Friendly name (optional — only used when uploading a single file)">
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="display_name" placeholder="Friendly name (optional — uploading several files at once numbers them 1, 2, 3...)">
         <div class="flex gap-4 text-sm">
           <label class="flex items-center gap-1">
             <input type="radio" name="category" value="general" checked> General document
@@ -93,6 +93,13 @@
                     </button>
                   </form>
                 {{end}}
+                <form method="post" action="/files/{{.ID}}/category">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <select name="category" onchange="this.form.submit()" aria-label="Category" class="rounded-md border border-gray-300 px-1.5 py-1 text-xs">
+                    <option value="general" {{if ne .Category "event_photo"}}selected{{end}}>General document</option>
+                    <option value="event_photo" {{if eq .Category "event_photo"}}selected{{end}}>Event photo</option>
+                  </select>
+                </form>
                 <form method="post" action="/files/{{.ID}}/delete" onsubmit="return confirm('Delete {{.DisplayLabel}}? This can\'t be undone.');">
                   <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                   <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>

@@ -159,17 +159,18 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only applied when uploading exactly one file at a time — a single
-	// display_name field can't unambiguously label several files uploaded
-	// together in one submission, and a bulk upload can still be renamed
-	// afterward via FileSetDisplayName.
-	var displayName string
-	if len(uploaded) == 1 {
-		displayName = strings.TrimSpace(r.FormValue("display_name"))
-	}
+	// A given name is shared by the whole batch. Uploading just one file
+	// gets that name exactly; uploading several gets it with " 1", " 2", ...
+	// appended (in upload order) so a leader dropping in a dozen campout
+	// photos at once gets "Campout 2026 1", "Campout 2026 2", etc. instead
+	// of one name silently overwriting the others or being dropped
+	// entirely. Left blank, every file just keeps its own filename as
+	// before — this only kicks in when a name was actually given.
+	baseName := strings.TrimSpace(r.FormValue("display_name"))
 
 	var created []files.File
 	var skipped []string
+	nextNumber := 1
 	for _, fh := range uploaded {
 		// Skip (rather than abort the whole batch on) one oversized file —
 		// a leader uploading a whole library of photos at once shouldn't
@@ -200,6 +201,12 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal error saving the file", http.StatusInternalServerError)
 			return
 		}
+
+		displayName := baseName
+		if baseName != "" && len(uploaded) > 1 {
+			displayName = baseName + " " + strconv.Itoa(nextNumber)
+		}
+		nextNumber++
 
 		f, err := files.Create(r.Context(), h.Pool, files.File{
 			UnitID:      unit.ID,
@@ -405,6 +412,46 @@ func (h *Handlers) FileSetDisplayName(w http.ResponseWriter, r *http.Request) {
 
 	if err := files.SetDisplayName(r.Context(), h.Pool, fileID, unit.ID, strings.TrimSpace(r.FormValue("display_name"))); err != nil {
 		log.Printf("web: setting file display name: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/files", http.StatusSeeOther)
+}
+
+// FileSetCategory reclassifies a file between "General document" and
+// "Event photo" after the fact — chosen once at upload time, but a leader
+// sometimes only realizes it was categorized wrong later. Same
+// CanEditUnitContent gate as the file library's other management actions.
+func (h *Handlers) FileSetCategory(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	user, loggedIn := auth.UserFromContext(r.Context())
+	if !loggedIn {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
+		http.Error(w, "you don't have permission to manage files", http.StatusForbidden)
+		return
+	}
+
+	fileID := r.PathValue("id")
+	if _, found, err := files.Get(r.Context(), h.Pool, fileID, unit.ID); err != nil {
+		log.Printf("web: loading file: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	} else if !found {
+		http.NotFound(w, r)
+		return
+	}
+
+	category := files.CategoryGeneral
+	if r.FormValue("category") == files.CategoryEventPhoto {
+		category = files.CategoryEventPhoto
+	}
+
+	if err := files.SetCategory(r.Context(), h.Pool, fileID, unit.ID, category); err != nil {
+		log.Printf("web: setting file category: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
