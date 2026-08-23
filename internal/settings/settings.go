@@ -315,8 +315,8 @@ var UnitToggles = []UnitToggle{
 	},
 	{
 		Key:         ScoutAccountSelfService,
-		Label:       "Family access to Scout account balances",
-		Description: "Lets a family (or a Scout's own login) view their own Scout account balance and history under \"My Accounts\". Turn off to keep account balances treasurer-only — the Treasury area is unchanged, this just shuts off the family-facing self-service view.",
+		Label:       "My Accounts (family access to Scout account balances)",
+		Description: "Shows the \"My Accounts\" nav link and page, letting a family (or a Scout's own login) view their own Scout account balance and history. Turn off to keep account balances treasurer-only — the Treasury area is unchanged, this just shuts off the family-facing self-service view.",
 		Default:     true,
 	},
 	{
