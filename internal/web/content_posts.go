@@ -328,21 +328,27 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 	}
 
 	var publicImages []files.PickerImage
+	var eventPhotoGroups []files.EventFileGroup
 	if kind.HasImagePicker {
 		var err error
 		publicImages, err = files.ListPublicImagesForUnit(r.Context(), h.Pool, unit.ID)
 		if err != nil {
 			log.Printf("web: loading public images: %v", err)
 		}
+		eventPhotoGroups, err = files.ListEventPhotoGroupsForUnit(r.Context(), h.Pool, unit.ID)
+		if err != nil {
+			log.Printf("web: loading event photo groups: %v", err)
+		}
 	}
 
 	data := struct {
 		baseData
-		Kind         contentKind
-		IsEdit       bool
-		Post         content.Post
-		PublicImages []files.PickerImage
-	}{baseData: h.base(r, kind.Label), Kind: kind, IsEdit: isEdit, Post: post, PublicImages: publicImages}
+		Kind             contentKind
+		IsEdit           bool
+		Post             content.Post
+		PublicImages     []files.PickerImage
+		EventPhotoGroups []files.EventFileGroup
+	}{baseData: h.base(r, kind.Label), Kind: kind, IsEdit: isEdit, Post: post, PublicImages: publicImages, EventPhotoGroups: eventPhotoGroups}
 	h.render(w, h.adminContentFormTmpl, data)
 }
 
