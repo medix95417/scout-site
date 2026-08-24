@@ -174,99 +174,6 @@ func SetCategory(ctx context.Context, pool *pgxpool.Pool, fileID, unitID, catego
 	return err
 }
 
-// PickerImage is a public image plus the calendar event(s) it's linked to
-// (if any) — what the thumbnail picker (see internal/web/templates'
-// "imagePicker" block) groups/sorts by, so a leader browsing photos to use
-// as a hero banner or homepage photo can recognize "these came from the
-// campout" instead of hunting through an undifferentiated list.
-type PickerImage struct {
-	File
-	EventNames []string // empty means not linked to any event
-}
-
-// PrimaryEventName is the event PickerImage sorts by — the first (soonest-
-// starting) event a photo is linked to, or "" if it isn't linked to any.
-// A photo linked to several events is rare; sorting by just the first one
-// is simpler than a full multi-group display for a niche case.
-func (p PickerImage) PrimaryEventName() string {
-	if len(p.EventNames) == 0 {
-		return ""
-	}
-	return p.EventNames[0]
-}
-
-// ListPublicImagesForUnit lists a unit's public, image-content-type files,
-// each decorated with the event(s) it's linked to — what the "choose from
-// library" picker on /admin/home offers for the hero/program/gallery photo
-// slots. Only ever returns what a leader has already explicitly marked
-// public (SetPublic); never all of ListForUnit. Sorted by linked event
-// (soonest-starting first, unlinked photos last), then by upload recency
-// within each group.
-func ListPublicImagesForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]PickerImage, error) {
-	rows, err := pool.Query(ctx, `
-		SELECT
-			f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at, f.is_public,
-			COALESCE(array_agg(e.title ORDER BY e.starts_at) FILTER (WHERE e.title IS NOT NULL), '{}'),
-			MIN(e.starts_at)
-		FROM files f
-		LEFT JOIN event_files ef ON ef.file_id = f.id
-		LEFT JOIN events e ON e.id = ef.event_id
-		WHERE f.unit_id = $1 AND f.is_public = true AND f.content_type LIKE 'image/%'
-		GROUP BY f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category, f.uploaded_by, f.created_at, f.is_public
-		ORDER BY (MIN(e.starts_at) IS NULL), MIN(e.starts_at), f.created_at DESC
-	`, unitID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []PickerImage
-	for rows.Next() {
-		var p PickerImage
-		var firstEventStart *time.Time
-		if err := rows.Scan(&p.ID, &p.UnitID, &p.Filename, &p.DisplayName, &p.ContentType, &p.SizeBytes, &p.StorageKey, &p.Category, &p.UploadedBy, &p.CreatedAt, &p.Public, &p.EventNames, &firstEventStart); err != nil {
-			return nil, err
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
-}
-
-// ListPublicMediaForUnit is ListPublicImagesForUnit's image-and-video
-// sibling — the same public, event-sorted picker query, but without the
-// image-only filter, since the Gallery editor's "choose from your
-// library" picker (unlike the single-photo hero/banner/leader-photo
-// pickers, which stay image-only) can hold a mix of photos and videos.
-func ListPublicMediaForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]PickerImage, error) {
-	rows, err := pool.Query(ctx, `
-		SELECT
-			f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at, f.is_public,
-			COALESCE(array_agg(e.title ORDER BY e.starts_at) FILTER (WHERE e.title IS NOT NULL), '{}'),
-			MIN(e.starts_at)
-		FROM files f
-		LEFT JOIN event_files ef ON ef.file_id = f.id
-		LEFT JOIN events e ON e.id = ef.event_id
-		WHERE f.unit_id = $1 AND f.is_public = true AND (f.content_type LIKE 'image/%' OR f.content_type LIKE 'video/%')
-		GROUP BY f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category, f.uploaded_by, f.created_at, f.is_public
-		ORDER BY (MIN(e.starts_at) IS NULL), MIN(e.starts_at), f.created_at DESC
-	`, unitID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []PickerImage
-	for rows.Next() {
-		var p PickerImage
-		var firstEventStart *time.Time
-		if err := rows.Scan(&p.ID, &p.UnitID, &p.Filename, &p.DisplayName, &p.ContentType, &p.SizeBytes, &p.StorageKey, &p.Category, &p.UploadedBy, &p.CreatedAt, &p.Public, &p.EventNames, &firstEventStart); err != nil {
-			return nil, err
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
-}
-
 // EventFileGroup is one event's linked files — see
 // ListForUnitGroupedByEvents and ListEventPhotoGroupsForUnit, its
 // media-only sibling.
@@ -326,8 +233,9 @@ func ListForUnitGroupedByEvents(ctx context.Context, pool *pgxpool.Pool, unitID 
 // photos" picker offers, so a leader building a members-only album can
 // pull in a private event's media directly instead of copying each
 // download link by hand. Deliberately not filtered to is_public = true
-// the way ListPublicImagesForUnit is: the leader looking at this picker
-// already has file-library access to every photo/video regardless, and
+// the way ListImageFilesGroupedByEvent/ListMediaFilesGroupedByEvent can
+// be: the leader looking at this picker already has file-library access
+// to every photo/video regardless, and
 // mixing public and private media from the same event is fine — a
 // private one just won't actually render for a logged-out visitor even
 // inside a "Public" album, since FileDownload's own access check still
@@ -389,6 +297,74 @@ func PublicFileIDSet(ctx context.Context, pool *pgxpool.Pool, unitID string, fil
 		out[id] = true
 	}
 	return out, rows.Err()
+}
+
+// ListImageFilesGroupedByEvent groups every one of a unit's image files by
+// the event(s) it's linked to, for the shared lazily-loading accordion
+// picker (see _image-picker.html's "eventAccordionPicker"/
+// "eventAccordionCheckboxGrid" blocks) — a leader browsing hundreds of
+// campout photos gets a per-event accordion, collapsed by default,
+// instead of one giant thumbnail grid that loads every image at once. A
+// file linked to more than one event appears once per group, same as
+// ListForUnitGroupedByEvents; a file with no event link at all comes
+// back in ungrouped instead of being dropped. When publicOnly is true,
+// only files marked public are included — the single-photo pickers on
+// the public homepage/leader profile only ever offer what's already
+// public; a den/patrol page is members-only, so its own pickers pass
+// publicOnly=false to offer every image file regardless.
+func ListImageFilesGroupedByEvent(ctx context.Context, pool *pgxpool.Pool, unitID string, publicOnly bool) (groups []EventFileGroup, ungrouped []File, err error) {
+	return listMediaGroupedByEvent(ctx, pool, unitID, publicOnly, false)
+}
+
+// ListMediaFilesGroupedByEvent is ListImageFilesGroupedByEvent's video-
+// inclusive sibling, for the Gallery editor's "choose from your library"
+// picker (which, like its event-photos picker, can offer a video
+// alongside photos).
+func ListMediaFilesGroupedByEvent(ctx context.Context, pool *pgxpool.Pool, unitID string, publicOnly bool) (groups []EventFileGroup, ungrouped []File, err error) {
+	return listMediaGroupedByEvent(ctx, pool, unitID, publicOnly, true)
+}
+
+func listMediaGroupedByEvent(ctx context.Context, pool *pgxpool.Pool, unitID string, publicOnly, includeVideo bool) ([]EventFileGroup, []File, error) {
+	typeClause := "f.content_type LIKE 'image/%'"
+	if includeVideo {
+		typeClause = "(f.content_type LIKE 'image/%' OR f.content_type LIKE 'video/%')"
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at, f.is_public,
+		       COALESCE(e.id::text, ''), COALESCE(e.title, '')
+		FROM files f
+		LEFT JOIN event_files ef ON ef.file_id = f.id
+		LEFT JOIN events e ON e.id = ef.event_id
+		WHERE f.unit_id = $1 AND `+typeClause+` AND (f.is_public = true OR $2 = false)
+		ORDER BY (e.starts_at IS NULL), e.starts_at DESC, f.created_at DESC
+	`, unitID, publicOnly)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	var groups []EventFileGroup
+	var ungrouped []File
+	index := map[string]int{}
+	for rows.Next() {
+		var f File
+		var eventID, eventTitle string
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public, &eventID, &eventTitle); err != nil {
+			return nil, nil, err
+		}
+		if eventID == "" {
+			ungrouped = append(ungrouped, f)
+			continue
+		}
+		i, ok := index[eventID]
+		if !ok {
+			i = len(groups)
+			index[eventID] = i
+			groups = append(groups, EventFileGroup{EventID: eventID, EventTitle: eventTitle})
+		}
+		groups[i].Files = append(groups[i].Files, f)
+	}
+	return groups, ungrouped, rows.Err()
 }
 
 // Delete removes a file's metadata row, scoped to a unit. The caller is

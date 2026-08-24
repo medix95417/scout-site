@@ -85,17 +85,18 @@ func (h *Handlers) adminLeadersForm(w http.ResponseWriter, r *http.Request, id s
 		}
 	}
 
-	publicImages, err := files.ListPublicImagesForUnit(r.Context(), h.Pool, unit.ID)
+	publicImageGroups, publicImagesUngrouped, err := files.ListImageFilesGroupedByEvent(r.Context(), h.Pool, unit.ID, true)
 	if err != nil {
 		log.Printf("web: loading public images for leader photo picker: %v", err)
 	}
 
 	data := struct {
 		baseData
-		IsEdit       bool
-		Leader       leaders.Leader
-		PublicImages []files.PickerImage
-	}{baseData: h.base(r, "Our Leaders"), IsEdit: isEdit, Leader: leader, PublicImages: publicImages}
+		IsEdit                bool
+		Leader                leaders.Leader
+		PublicImageGroups     []files.EventFileGroup
+		PublicImagesUngrouped []files.File
+	}{baseData: h.base(r, "Our Leaders"), IsEdit: isEdit, Leader: leader, PublicImageGroups: publicImageGroups, PublicImagesUngrouped: publicImagesUngrouped}
 	h.render(w, h.adminLeadersFormTmpl, data)
 }
 

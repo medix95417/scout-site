@@ -109,7 +109,7 @@
     <div class="flex items-start justify-between gap-4">
       <div class="flex items-start gap-3 min-w-0">
         {{if hasPrefix $f.ContentType "image/"}}
-          <img src="/files/{{$f.ID}}/download" alt="" class="h-12 w-12 flex-shrink-0 object-cover rounded-md border border-gray-200">
+          <img src="/files/{{$f.ID}}/download" alt="" loading="lazy" class="h-12 w-12 flex-shrink-0 object-cover rounded-md border border-gray-200">
         {{else if hasPrefix $f.ContentType "video/"}}
           <video src="/files/{{$f.ID}}/download" muted preload="metadata" class="h-12 w-12 flex-shrink-0 object-cover rounded-md border border-gray-200"></video>
         {{end}}

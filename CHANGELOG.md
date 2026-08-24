@@ -20,6 +20,38 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Every "choose a photo from your library" picker is now a per-event
+accordion instead of one giant eagerly-loaded thumbnail grid** — a
+leader on a unit with hundreds of campout photos was hitting a very
+slow page load (the edit den/patrol page especially) because every
+single thumbnail loaded at once, whether needed or not. Photos now
+group by the calendar event they're linked to (plus a "Not linked to an
+event" bucket), each collapsed by default; a collapsed group's images
+never even hit the network — closing a `<details>` removes its content
+from the render tree entirely, and combined with native
+`loading="lazy"` on every thumbnail, a browser never requests them
+until a leader actually opens that event's group. This applies
+everywhere a picker like this shows up: the homepage's hero/program/
+gallery-strip editor, Gallery albums, leader photos, and the den/patrol
+page's Hero and Photos pickers. The den/patrol page's Hero banner also
+changed from a URL-only text field to the same photo picker every other
+hero banner already has — paste a link still works, but clicking a
+library photo no longer requires copying a download link by hand
+first. `/files` and the den/patrol Photos grid also gained
+`loading="lazy"` on their own thumbnails for the same reason. (If a
+single event ends up with a very large photo count of its own, the
+next lever — capping how many thumbnails render per group with a
+"show more" expander — is a reasonable follow-up, not built here.)
+
+**Clicking a photo now opens a full-size lightbox with Back/Forward
+navigation**, replacing the previous "opens in a new tab, no way to see
+the next one" behavior. The photo shows uncropped (no forced aspect
+ratio, so nothing is cut off) with its own prev/next arrows, arrow-key
+support, and Escape/click-outside to close — available everywhere a
+photo carousel renders: Gallery albums, the Photos list, and the
+homepage's recent-activity strip. Videos are unaffected; they already
+play in place with their own controls.
+
 **Clicking a photo now opens it at full size in a new tab**, wherever
 photos render in a carousel (Gallery albums, the Photos list, the
 homepage's recent-activity strip) — previously the inline framing (a

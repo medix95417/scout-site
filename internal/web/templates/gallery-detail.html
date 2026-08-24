@@ -8,6 +8,7 @@
       {{template "photoCarousel" (dict "Photos" .Photos "HeightClass" "h-80")}}
       {{template "photoCarouselThumbnails" .}}
     </div>
+    {{template "lightbox" .}}
     {{template "photoCarouselScript" .}}
   {{else}}
     <p class="text-sm text-gray-500">No photos in this gallery yet.</p>

@@ -40,7 +40,7 @@
               placeholder="https://… or choose from your library below"
               data-image-url-input="{{.Slug}}"
             >
-            {{template "imagePicker" (dict "Slug" .Slug "Images" $.PublicImages "CurrentURL" .Body)}}
+            {{template "eventAccordionPicker" (dict "Slug" .Slug "Groups" $.PublicImageGroups "Ungrouped" $.PublicImagesUngrouped "CurrentURL" .Body)}}
           {{else if eq .Kind "images"}}
             <textarea
               id="gallery-body-{{.Slug}}"
@@ -49,7 +49,7 @@
               class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
               placeholder="{{.Placeholder}}"
             >{{.Body}}</textarea>
-            {{template "imagePicker" (dict "Slug" .Slug "Images" $.PublicImages "Mode" "append" "AppendTarget" (printf "gallery-body-%s" .Slug))}}
+            {{template "eventAccordionPicker" (dict "Slug" .Slug "Groups" $.PublicMediaGroups "Ungrouped" $.PublicMediaUngrouped "Mode" "append" "AppendTarget" (printf "gallery-body-%s" .Slug))}}
           {{else if eq .Kind "url"}}
             <input aria-label="{{.Label}}"
               type="url"
@@ -100,7 +100,7 @@
             placeholder="https://… or choose from your library below"
             data-image-url-input="{{.Slug}}"
           >
-          {{template "imagePicker" (dict "Slug" .Slug "Images" $.PublicImages "CurrentURL" .Body)}}
+          {{template "eventAccordionPicker" (dict "Slug" .Slug "Groups" $.PublicImageGroups "Ungrouped" $.PublicImagesUngrouped "CurrentURL" .Body)}}
           <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
             Save
           </button>

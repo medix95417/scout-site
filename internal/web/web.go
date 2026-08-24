@@ -975,17 +975,37 @@ func (h *Handlers) HomeContentList(w http.ResponseWriter, r *http.Request) {
 		heroRows = append(heroRows, row)
 	}
 
-	publicImages, err := files.ListPublicImagesForUnit(r.Context(), h.Pool, unit.ID)
+	// Two separate lists: the single-photo hero/banner slots only ever
+	// take a plain <img>, so their picker stays image-only; the "images"
+	// kind (gallery-strip sections) renders through the same
+	// content.GalleryPhoto/photoCarousel machinery a Gallery album does,
+	// so it can offer video too.
+	publicImageGroups, publicImagesUngrouped, err := files.ListImageFilesGroupedByEvent(r.Context(), h.Pool, unit.ID, true)
 	if err != nil {
 		log.Printf("web: loading public images: %v", err)
+	}
+	publicMediaGroups, publicMediaUngrouped, err := files.ListMediaFilesGroupedByEvent(r.Context(), h.Pool, unit.ID, true)
+	if err != nil {
+		log.Printf("web: loading public media: %v", err)
 	}
 
 	data := struct {
 		baseData
-		Sections     []homeAdminRow
-		HeroSections []homeAdminRow
-		PublicImages []files.PickerImage
-	}{baseData: h.base(r, "Edit Homepage"), Sections: rows, HeroSections: heroRows, PublicImages: publicImages}
+		Sections              []homeAdminRow
+		HeroSections          []homeAdminRow
+		PublicImageGroups     []files.EventFileGroup
+		PublicImagesUngrouped []files.File
+		PublicMediaGroups     []files.EventFileGroup
+		PublicMediaUngrouped  []files.File
+	}{
+		baseData:              h.base(r, "Edit Homepage"),
+		Sections:              rows,
+		HeroSections:          heroRows,
+		PublicImageGroups:     publicImageGroups,
+		PublicImagesUngrouped: publicImagesUngrouped,
+		PublicMediaGroups:     publicMediaGroups,
+		PublicMediaUngrouped:  publicMediaUngrouped,
+	}
 	h.render(w, h.contentAdmin, data)
 }
 

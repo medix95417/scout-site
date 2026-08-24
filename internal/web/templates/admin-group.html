@@ -12,18 +12,19 @@
         class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
       >{{.Group.Description}}</textarea>
       <div>
-        <label class="block text-sm font-medium mb-1" for="hero_image_url">Hero banner photo URL</label>
+        <label class="block text-sm font-medium mb-1" for="hero_image_url">Hero banner photo</label>
         <p class="text-xs text-gray-500 mb-2">
-          Shows as a banner at the top of {{.Group.Name}}'s page. Paste a link to an image already uploaded to your
-          <a href="/files" class="underline" style="color: var(--unit-color);">file library</a> (open it and copy the
-          download link) or hosted elsewhere. Leave blank for no banner.
+          Shows as a banner at the top of {{.Group.Name}}'s page. Click a photo from your library below, or paste a
+          link to one hosted elsewhere. Leave blank for no banner.
         </p>
         <input
           id="hero_image_url" name="hero_image_url" type="url"
           value="{{.Group.HeroImageURL}}"
-          placeholder="https://…"
+          placeholder="https://… or choose from your library below"
           class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          data-image-url-input="group-hero"
         >
+        {{template "eventAccordionPicker" (dict "Slug" "group-hero" "Groups" .ImageGroups "Ungrouped" .ImagesUngrouped "CurrentURL" .Group.HeroImageURL)}}
       </div>
       <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
         Save
@@ -34,21 +35,13 @@
   <section class="rounded-lg border border-gray-200 bg-white p-4 max-w-2xl">
     <h2 class="text-lg font-semibold mb-3">Photos</h2>
     <p class="text-xs text-gray-500 mb-3">
-      Choose from photos already uploaded to your <a href="/files" class="underline" style="color: var(--unit-color);">file library</a> —
-      no need to mark them "Public" for this, since {{.Group.Name}}'s page is members-only.
+      Choose from photos already uploaded to your <a href="/files" class="underline" style="color: var(--unit-color);">file library</a>,
+      grouped by event below — no need to mark them "Public" for this, since {{.Group.Name}}'s page is members-only.
     </p>
-    {{if .ImageFiles}}
-      <form method="post" action="/admin/groups/{{.Group.ID}}/photos" class="space-y-2">
+    {{if or .ImageGroups .ImagesUngrouped}}
+      <form method="post" action="/admin/groups/{{.Group.ID}}/photos" class="space-y-3">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <div class="grid gap-2 sm:grid-cols-2">
-          {{range .ImageFiles}}
-            <label class="flex items-center gap-2 text-sm">
-              <input type="checkbox" name="file_ids" value="{{.ID}}" {{if index $.LinkedFileID .ID}}checked{{end}}>
-              <img src="/files/{{.ID}}/download" alt="" class="h-8 w-8 flex-shrink-0 object-cover rounded-md border border-gray-200">
-              <span class="truncate">{{.DisplayLabel}}</span>
-            </label>
-          {{end}}
-        </div>
+        {{template "eventAccordionCheckboxGrid" (dict "Groups" .ImageGroups "Ungrouped" .ImagesUngrouped "Name" "file_ids" "LinkedFileID" .LinkedFileID)}}
         <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
           Save Photos
         </button>
@@ -57,4 +50,6 @@
       <p class="text-sm text-gray-500">No image files uploaded yet.</p>
     {{end}}
   </section>
+
+  {{template "imagePickerScript" .}}
 {{end}}
