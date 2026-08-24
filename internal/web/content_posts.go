@@ -13,8 +13,10 @@ package web
 // leader role, not just super_admin.
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,6 +26,67 @@ import (
 	"github.com/47-yonkers/scout-site/internal/files"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
+
+// galleryFileURLPattern matches this app's own file-download links (as
+// opposed to an externally hosted photo URL) so filterViewableGalleryPhotos
+// can look up whether the file behind one is public.
+var galleryFileURLPattern = regexp.MustCompile(`^/files/([^/?#]+)/download$`)
+
+// filterViewableGalleryPhotos drops any gallery photo/video that points at
+// this unit's own file library and isn't marked public, whenever the
+// current viewer isn't logged in — the same access FileDownload itself
+// enforces (see requiresLoginToDownload), just applied before the page
+// renders instead of after a blocked image request leaves a blank/broken
+// tile in its place. A photo hosted elsewhere (not one of our own
+// /files/{id}/download links) is always kept — this app has no access
+// check to apply to it either way. Fails closed: if the visibility lookup
+// itself errors, every one of this unit's own file links is dropped
+// rather than risk showing a private photo.
+func (h *Handlers) filterViewableGalleryPhotos(ctx context.Context, unitID string, photos []content.GalleryPhoto, loggedIn bool) []content.GalleryPhoto {
+	if loggedIn || len(photos) == 0 {
+		return photos
+	}
+
+	ids := galleryFileIDs(photos)
+	if len(ids) == 0 {
+		return photos
+	}
+
+	publicIDs, err := files.PublicFileIDSet(ctx, h.Pool, unitID, ids)
+	if err != nil {
+		log.Printf("web: checking gallery photo visibility: %v", err)
+		publicIDs = map[string]bool{}
+	}
+	return keepViewableGalleryPhotos(photos, publicIDs)
+}
+
+// galleryFileIDs pulls out the file IDs of every photo/video in photos
+// that points at this app's own file library, ignoring externally hosted
+// URLs (which have no such ID to look up).
+func galleryFileIDs(photos []content.GalleryPhoto) []string {
+	var ids []string
+	for _, p := range photos {
+		if m := galleryFileURLPattern.FindStringSubmatch(p.URL); m != nil {
+			ids = append(ids, m[1])
+		}
+	}
+	return ids
+}
+
+// keepViewableGalleryPhotos is filterViewableGalleryPhotos' pure part,
+// pulled out so the actual filtering logic is unit-testable without a
+// real database — the same pattern requiresLoginToDownload (files.go)
+// uses for FileDownload's access check.
+func keepViewableGalleryPhotos(photos []content.GalleryPhoto, publicIDs map[string]bool) []content.GalleryPhoto {
+	visible := make([]content.GalleryPhoto, 0, len(photos))
+	for _, p := range photos {
+		if m := galleryFileURLPattern.FindStringSubmatch(p.URL); m != nil && !publicIDs[m[1]] {
+			continue
+		}
+		visible = append(visible, p)
+	}
+	return visible
+}
 
 // contentKind describes the fixed differences between "post" (news) and
 // "gallery" handling — everything else is shared by the parameterized
@@ -177,9 +240,13 @@ func (h *Handlers) newsDetail(w http.ResponseWriter, r *http.Request, p content.
 }
 
 func (h *Handlers) galleryList(w http.ResponseWriter, r *http.Request, posts []content.Post) {
+	unit, _ := units.UnitFromContext(r.Context())
+	_, loggedIn := auth.UserFromContext(r.Context())
+
 	items := make([]publicPostView, 0, len(posts))
 	for _, p := range posts {
-		items = append(items, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.CreatedAt), Photos: content.ParseGalleryPhotos(p.Body)})
+		photos := h.filterViewableGalleryPhotos(r.Context(), unit.ID, content.ParseGalleryPhotos(p.Body), loggedIn)
+		items = append(items, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.CreatedAt), Photos: photos})
 	}
 	data := struct {
 		baseData
@@ -189,12 +256,16 @@ func (h *Handlers) galleryList(w http.ResponseWriter, r *http.Request, posts []c
 }
 
 func (h *Handlers) galleryDetail(w http.ResponseWriter, r *http.Request, p content.Post) {
+	unit, _ := units.UnitFromContext(r.Context())
+	_, loggedIn := auth.UserFromContext(r.Context())
+
+	photos := h.filterViewableGalleryPhotos(r.Context(), unit.ID, content.ParseGalleryPhotos(p.Body), loggedIn)
 	data := struct {
 		baseData
 		Title    string
 		PostedOn string
 		Photos   []content.GalleryPhoto
-	}{baseData: h.base(r, p.Title), Title: p.Title, PostedOn: postedOn(p.CreatedAt), Photos: content.ParseGalleryPhotos(p.Body)}
+	}{baseData: h.base(r, p.Title), Title: p.Title, PostedOn: postedOn(p.CreatedAt), Photos: photos}
 	h.render(w, h.galleryDetailTmpl, data)
 }
 

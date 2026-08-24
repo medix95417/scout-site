@@ -365,6 +365,32 @@ func ListEventPhotoGroupsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID
 	return groups, rows.Err()
 }
 
+// PublicFileIDSet returns the subset of fileIDs (scoped to unitID) that are
+// marked public — used to filter which of a gallery's embedded file links
+// a logged-out visitor may actually see (see web.filterViewableGalleryPhotos),
+// so a private photo is dropped from the page entirely instead of showing
+// up as a broken/blank tile once its download request gets turned away.
+func PublicFileIDSet(ctx context.Context, pool *pgxpool.Pool, unitID string, fileIDs []string) (map[string]bool, error) {
+	if len(fileIDs) == 0 {
+		return map[string]bool{}, nil
+	}
+	rows, err := pool.Query(ctx, `SELECT id FROM files WHERE unit_id = $1 AND id = ANY($2) AND is_public = true`, unitID, fileIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
 // Delete removes a file's metadata row, scoped to a unit. The caller is
 // responsible for also deleting the underlying object from storage — see
 // internal/web/files.go, which does both under one handler.

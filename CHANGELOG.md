@@ -20,6 +20,17 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed: a private photo/video mixed into a public gallery album showed up
+as a blank/broken tile for a signed-out visitor instead of simply not
+showing at all.** The access check itself was already correct — a private
+file was never actually served to a logged-out request — but the gallery
+page still rendered an `<img>`/`<video>` tile for it, which then failed to
+load. Public gallery pages (the `/gallery` list, a gallery's detail page,
+and the homepage's recent-activity carousel) now drop any private photo or
+video from the page entirely before rendering, for a visitor who isn't
+logged in; a logged-in visitor still sees everything, matching the file
+library's existing access rule.
+
 **Videos are now first-class alongside photos.** A video already uploaded
 fine, but couldn't be marked "Public," never showed up in any photo
 picker, and had no player anywhere it was used — this closes all three
