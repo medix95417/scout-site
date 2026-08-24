@@ -1,13 +1,15 @@
 {{define "content"}}
-  {{/* Structure modeled on pack6crestwood.org: a full-bleed hero banner,
-       a row of quick-link cards, a bulleted "Our Program" section with a
-       photo, meeting/leadership info, a two-photo gallery strip, upcoming
-       public events, and a closing CTA band — adapted to only link to
-       pages this site actually has. Sections use the "break out of the
-       centered <main> column" trick (relative left-1/2 -mx-[50vw] w-screen)
-       to go edge-to-edge even though the rest of the site stays in a
-       centered column; see base.html for the overflow-x-hidden that keeps
-       that trick from causing a stray horizontal scrollbar. */}}
+  {{/* Structure modeled on pack6crestwood.org, adapted to only link to
+       pages this site actually has: a full-bleed hero banner, recent
+       activity photos + upcoming public events right underneath (the
+       page's freshest, most-changing content), a row of quick-link
+       cards, a bulleted "Our Program" section with a photo, meeting/
+       leadership info, and a closing CTA band. Sections use the "break
+       out of the centered <main> column" trick (relative left-1/2
+       -mx-[50vw] w-screen) to go edge-to-edge even though the rest of
+       the site stays in a centered column; see base.html for the
+       overflow-x-hidden that keeps that trick from causing a stray
+       horizontal scrollbar. */}}
 
   <!-- Hero -->
   <section
@@ -31,6 +33,53 @@
       {{end}}
     </div>
   </section>
+
+  <!-- Recent activity photos (left column) + upcoming public events
+       (right column), side by side so a visitor sees both at a glance —
+       placed right under the hero since it's the freshest, most-changing
+       content on the page. Activity photos render as a large square tile
+       (rather than a short wide strip) so a portrait phone photo shows
+       top-to-bottom instead of getting most of its height cropped away. -->
+  <section class="mb-14 grid gap-8 sm:grid-cols-2">
+    <div>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xl font-semibold">Recent Activities</h2>
+        <a href="/gallery" class="text-sm underline whitespace-nowrap" style="color: var(--unit-color);">View all photos &rarr;</a>
+      </div>
+      {{if .Activities}}
+        <div class="space-y-6">
+          {{range .Activities}}
+            <div>
+              <a href="{{.URL}}" class="block font-medium mb-2 hover:underline">{{.Title}}</a>
+              {{template "photoCarousel" (dict "Photos" .Photos "HeightClass" "aspect-square" "AutoRotate" true)}}
+            </div>
+          {{end}}
+        </div>
+      {{else}}
+        <p class="text-sm text-gray-500">No public photos yet — check back soon.</p>
+      {{end}}
+    </div>
+    <div>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xl font-semibold">Upcoming Events</h2>
+        <a href="/calendar" class="text-sm underline whitespace-nowrap" style="color: var(--unit-color);">View full calendar &rarr;</a>
+      </div>
+      {{if .Events}}
+        <ul class="space-y-3">
+          {{range .Events}}
+            <li class="rounded-xl border border-gray-200 bg-white p-4">
+              <div class="font-medium">{{.Title}}</div>
+              <div class="text-sm text-gray-500">{{.DateRangeDisplay}}{{if .Location}} · {{.Location}}{{end}}</div>
+              {{if .Description}}<p class="text-sm mt-1 text-gray-600">{{.Description}}</p>{{end}}
+            </li>
+          {{end}}
+        </ul>
+      {{else}}
+        <p class="text-sm text-gray-500">No public events scheduled right now — check back soon.</p>
+      {{end}}
+    </div>
+  </section>
+  {{template "photoCarouselScript" .}}
 
   {{if .CanEditContent}}
     <div class="mb-6 text-right">
@@ -103,50 +152,6 @@
       <p class="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{{.Leadership}}</p>
     </section>
   </div>
-
-  <!-- Recent activity photos (left column) + upcoming public events
-       (right column), side by side so a visitor sees both at a glance
-       instead of scrolling through one long stack. -->
-  <section class="mb-14 grid gap-8 sm:grid-cols-2">
-    <div>
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-xl font-semibold">Recent Activities</h2>
-        <a href="/gallery" class="text-sm underline whitespace-nowrap" style="color: var(--unit-color);">View all photos &rarr;</a>
-      </div>
-      {{if .Activities}}
-        <div class="space-y-6">
-          {{range .Activities}}
-            <div>
-              <a href="{{.URL}}" class="block font-medium mb-2 hover:underline">{{.Title}}</a>
-              {{template "photoCarousel" (dict "Photos" .Photos "HeightClass" "h-40" "AutoRotate" true)}}
-            </div>
-          {{end}}
-        </div>
-      {{else}}
-        <p class="text-sm text-gray-500">No public photos yet — check back soon.</p>
-      {{end}}
-    </div>
-    <div>
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-xl font-semibold">Upcoming Events</h2>
-        <a href="/calendar" class="text-sm underline whitespace-nowrap" style="color: var(--unit-color);">View full calendar &rarr;</a>
-      </div>
-      {{if .Events}}
-        <ul class="space-y-3">
-          {{range .Events}}
-            <li class="rounded-xl border border-gray-200 bg-white p-4">
-              <div class="font-medium">{{.Title}}</div>
-              <div class="text-sm text-gray-500">{{.DateRangeDisplay}}{{if .Location}} · {{.Location}}{{end}}</div>
-              {{if .Description}}<p class="text-sm mt-1 text-gray-600">{{.Description}}</p>{{end}}
-            </li>
-          {{end}}
-        </ul>
-      {{else}}
-        <p class="text-sm text-gray-500">No public events scheduled right now — check back soon.</p>
-      {{end}}
-    </div>
-  </section>
-  {{template "photoCarouselScript" .}}
 
   <!-- Closing CTA band, echoing the hero, full-bleed -->
   <section class="relative left-1/2 right-1/2 -mx-[50vw] w-screen mb-2 px-4 py-12 text-center text-white" style="background-color: var(--unit-color);">

@@ -20,6 +20,14 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Homepage: Recent Activities and Upcoming Events moved right under the
+hero banner** (previously several sections down, after the quick-link
+cards, "Our Program," and meeting/leadership info) since it's the
+page's freshest, most-changing content. Recent-activity photos now
+render as a large square tile instead of a short wide strip, so a
+portrait phone photo shows top-to-bottom instead of losing most of its
+height to cropping.
+
 **Fixed: a private photo/video mixed into a public gallery album showed up
 as a blank/broken tile for a signed-out visitor instead of simply not
 showing at all.** The access check itself was already correct — a private
