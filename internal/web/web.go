@@ -826,6 +826,7 @@ const maxHomeActivities = 3
 
 func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
+	_, loggedIn := auth.UserFromContext(r.Context())
 	events, err := calendar.ListUpcomingPublicForUnit(r.Context(), h.Pool, unit.ID)
 	if err != nil {
 		log.Printf("web: listing public events: %v", err)
@@ -863,7 +864,7 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		if len(activities) >= maxHomeActivities {
 			break
 		}
-		photos := content.ParseGalleryPhotos(p.Body)
+		photos := h.filterViewableGalleryPhotos(r.Context(), unit.ID, content.ParseGalleryPhotos(p.Body), loggedIn)
 		if len(photos) == 0 {
 			continue
 		}

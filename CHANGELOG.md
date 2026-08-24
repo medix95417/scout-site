@@ -20,6 +20,33 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed: a private photo/video mixed into a public gallery album showed up
+as a blank/broken tile for a signed-out visitor instead of simply not
+showing at all.** The access check itself was already correct — a private
+file was never actually served to a logged-out request — but the gallery
+page still rendered an `<img>`/`<video>` tile for it, which then failed to
+load. Public gallery pages (the `/gallery` list, a gallery's detail page,
+and the homepage's recent-activity carousel) now drop any private photo or
+video from the page entirely before rendering, for a visitor who isn't
+logged in; a logged-in visitor still sees everything, matching the file
+library's existing access rule.
+
+**Videos are now first-class alongside photos.** A video already uploaded
+fine, but couldn't be marked "Public," never showed up in any photo
+picker, and had no player anywhere it was used — this closes all three
+gaps. On `/files`, a video gets its own thumbnail preview, a "Video"
+badge, and the same "Make public"/"Make private" toggle photos have. The
+Gallery editor's "choose from your library" strip and its "add all of an
+event's photos" section now include videos too (with a small play-icon
+badge on their thumbnails), and picking one adds it to the album the same
+way a photo does. Wherever a gallery's photos render — the gallery list
+and detail pages, and the homepage's recent-activity carousel — a video
+entry now plays with a real `<video>` control instead of showing as a
+broken image. The single-photo pickers (homepage hero, page banners,
+leader photos, den/patrol pages) are unchanged and stay photo-only, since
+a full-bleed background video raises its own autoplay/bandwidth questions
+outside this scope.
+
 **Raised file upload limits** — a single file can now be up to 50 MB
 (was 20 MB), and one upload submission (a whole batch of files at once)
 can now total up to 500 MB (was 250 MB), enough headroom for phone
