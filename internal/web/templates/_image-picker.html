@@ -111,7 +111,10 @@
 
      Pure CSS scroll-snap under the hood, so swipe/scroll navigation works
      with zero JS; photoCarouselScript below only adds the prev/next
-     button behavior (and the auto-rotate timer) on top. */}}
+     button behavior (and the auto-rotate timer) on top. A photo (not a
+     video, which already plays in place) opens its original, full-size
+     URL in a new tab when clicked — the CSS sizing here is just how it's
+     framed inline, not a resized copy. */}}
 {{define "photoCarousel"}}
   {{if .Photos}}
     <div class="relative">
@@ -122,7 +125,9 @@
             {{if .IsVideo}}
               <video src="{{.URL}}" controls preload="metadata" class="w-full {{$height}} object-cover"></video>
             {{else}}
-              <img src="{{.URL}}" alt="{{.Caption}}" class="w-full {{$height}} object-cover">
+              <a href="{{.URL}}" target="_blank" rel="noopener">
+                <img src="{{.URL}}" alt="{{.Caption}}" class="w-full {{$height}} object-cover">
+              </a>
             {{end}}
             {{if .Caption}}<figcaption class="p-2 text-xs text-gray-600">{{.Caption}}</figcaption>{{end}}
           </figure>

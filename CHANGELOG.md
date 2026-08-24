@@ -20,6 +20,23 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Clicking a photo now opens it at full size in a new tab**, wherever
+photos render in a carousel (Gallery albums, the Photos list, the
+homepage's recent-activity strip) — previously the inline framing (a
+cropped square/strip) was all there was to see. Videos are unaffected;
+they already play in place. Also added an "Add Photos" button to the
+Manage Photos admin page, linking straight to the file library, so a
+leader doesn't have to know to visit `/files` first before building an
+album.
+
+**Homepage: Recent Activities and Upcoming Events moved right under the
+hero banner** (previously several sections down, after the quick-link
+cards, "Our Program," and meeting/leadership info) since it's the
+page's freshest, most-changing content. Recent-activity photos now
+render as a large square tile instead of a short wide strip, so a
+portrait phone photo shows top-to-bottom instead of losing most of its
+height to cropping.
+
 **Fixed: a private photo/video mixed into a public gallery album showed up
 as a blank/broken tile for a signed-out visitor instead of simply not
 showing at all.** The access check itself was already correct — a private

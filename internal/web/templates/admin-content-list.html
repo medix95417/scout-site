@@ -1,9 +1,16 @@
 {{define "content"}}
-  <div class="flex items-center justify-between mb-2">
+  <div class="flex items-center justify-between mb-2 gap-3">
     <h1 class="text-2xl font-bold">Manage {{.Kind.LabelPlural}} — {{.Unit.Name}}</h1>
-    <a href="{{.Kind.BasePath}}/new" class="rounded-md px-4 py-2 text-sm btn-accent">
-      + New {{.Kind.Label}}
-    </a>
+    <div class="flex items-center gap-2 flex-shrink-0">
+      {{if eq .Kind.PageType "gallery"}}
+        <a href="/files" class="rounded-md border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50">
+          Add Photos
+        </a>
+      {{end}}
+      <a href="{{.Kind.BasePath}}/new" class="rounded-md px-4 py-2 text-sm btn-accent">
+        + New {{.Kind.Label}}
+      </a>
+    </div>
   </div>
   <p class="text-sm text-gray-600 mb-6">
     New {{.Kind.LabelPlural}} start as a draft — nothing families see until you publish it.
