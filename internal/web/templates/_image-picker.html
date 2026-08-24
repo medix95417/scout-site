@@ -20,10 +20,12 @@
      hood, so pasting an external URL instead keeps working exactly the
      same.
 
-     Append mode: clicking a thumbnail appends a new "URL | " line to the
-     target <textarea> (one photo per line is that field's existing
-     convention — see content.ParseGalleryPhotos) rather than replacing a
-     single value, since a gallery holds many photos, not one. */}}
+     Append mode: clicking a thumbnail appends a new "URL | " line (or
+     "URL | | video" for a video, so content.ParseGalleryPhotos knows to
+     render a player instead of an <img> without needing to guess from
+     the URL) to the target <textarea> — one item per line is that
+     field's existing convention — rather than replacing a single value,
+     since a gallery holds many photos/videos, not one. */}}
 {{define "imagePicker"}}
   {{if .Images}}
     <div class="flex gap-2 overflow-x-auto pb-1" data-image-picker="{{.Slug}}"
@@ -31,9 +33,15 @@
       {{$current := .CurrentURL}}
       {{range .Images}}
         {{$url := printf "/files/%s/download" .ID}}
-        <button type="button" class="flex-shrink-0 w-20 text-center" data-image-picker-option="{{$url}}" title="{{.DisplayLabel}}">
-          <img src="{{$url}}" alt="{{.DisplayLabel}}" loading="lazy"
-               class="h-16 w-20 object-cover rounded-md border-2 {{if eq $url $current}}border-blue-500{{else}}border-gray-200 hover:border-gray-400{{end}}">
+        <button type="button" class="flex-shrink-0 w-20 text-center relative" data-image-picker-option="{{$url}}" {{if hasPrefix .ContentType "video/"}}data-image-picker-kind="video"{{end}} title="{{.DisplayLabel}}">
+          {{if hasPrefix .ContentType "video/"}}
+            <video src="{{$url}}" muted preload="metadata"
+                   class="h-16 w-20 object-cover rounded-md border-2 {{if eq $url $current}}border-blue-500{{else}}border-gray-200 hover:border-gray-400{{end}}"></video>
+            <span class="absolute top-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">&#9654;</span>
+          {{else}}
+            <img src="{{$url}}" alt="{{.DisplayLabel}}" loading="lazy"
+                 class="h-16 w-20 object-cover rounded-md border-2 {{if eq $url $current}}border-blue-500{{else}}border-gray-200 hover:border-gray-400{{end}}">
+          {{end}}
           <span class="block text-[10px] text-gray-500 truncate mt-0.5">{{if .PrimaryEventName}}{{.PrimaryEventName}}{{else}}&mdash;{{end}}</span>
         </button>
       {{end}}
@@ -70,9 +78,15 @@
     <div class="flex gap-2 overflow-x-auto pb-1" data-image-picker="{{.Slug}}" data-image-picker-mode="append" data-image-append-target="{{.AppendTarget}}">
       {{range .Files}}
         {{$url := printf "/files/%s/download" .ID}}
-        <button type="button" class="flex-shrink-0 w-20 text-center relative" data-image-picker-option="{{$url}}" title="{{.DisplayLabel}}">
-          <img src="{{$url}}" alt="{{.DisplayLabel}}" loading="lazy" class="h-16 w-20 object-cover rounded-md border-2 border-gray-200 hover:border-gray-400">
+        {{$isVideo := hasPrefix .ContentType "video/"}}
+        <button type="button" class="flex-shrink-0 w-20 text-center relative" data-image-picker-option="{{$url}}" {{if $isVideo}}data-image-picker-kind="video"{{end}} title="{{.DisplayLabel}}">
+          {{if $isVideo}}
+            <video src="{{$url}}" muted preload="metadata" class="h-16 w-20 object-cover rounded-md border-2 border-gray-200 hover:border-gray-400"></video>
+          {{else}}
+            <img src="{{$url}}" alt="{{.DisplayLabel}}" loading="lazy" class="h-16 w-20 object-cover rounded-md border-2 border-gray-200 hover:border-gray-400">
+          {{end}}
           {{if not .Public}}<span class="absolute top-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">Private</span>{{end}}
+          {{if $isVideo}}<span class="absolute bottom-4 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">&#9654;</span>{{end}}
         </button>
       {{end}}
     </div>
@@ -105,7 +119,11 @@
         {{$height := .HeightClass}}
         {{range .Photos}}
           <figure class="snap-start flex-shrink-0 w-full">
-            <img src="{{.URL}}" alt="{{.Caption}}" class="w-full {{$height}} object-cover">
+            {{if .IsVideo}}
+              <video src="{{.URL}}" controls preload="metadata" class="w-full {{$height}} object-cover"></video>
+            {{else}}
+              <img src="{{.URL}}" alt="{{.Caption}}" class="w-full {{$height}} object-cover">
+            {{end}}
             {{if .Caption}}<figcaption class="p-2 text-xs text-gray-600">{{.Caption}}</figcaption>{{end}}
           </figure>
         {{end}}
@@ -174,8 +192,13 @@
   {{if gt (len .Photos) 1}}
     <div class="mt-3 flex gap-2 overflow-x-auto pb-1">
       {{range $i, $p := .Photos}}
-        <button type="button" class="flex-shrink-0 w-20 h-16 rounded-md overflow-hidden border-2 {{if eq $i 0}}border-blue-500{{else}}border-gray-200{{end}}" data-carousel-thumb="{{$i}}" aria-label="{{if $p.Caption}}{{$p.Caption}}{{else}}View photo{{end}}">
-          <img src="{{$p.URL}}" alt="{{$p.Caption}}" class="h-full w-full object-cover">
+        <button type="button" class="flex-shrink-0 w-20 h-16 rounded-md overflow-hidden border-2 relative {{if eq $i 0}}border-blue-500{{else}}border-gray-200{{end}}" data-carousel-thumb="{{$i}}" aria-label="{{if $p.Caption}}{{$p.Caption}}{{else}}View photo{{end}}">
+          {{if $p.IsVideo}}
+            <video src="{{$p.URL}}" muted preload="metadata" class="h-full w-full object-cover"></video>
+            <span class="absolute bottom-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">&#9654;</span>
+          {{else}}
+            <img src="{{$p.URL}}" alt="{{$p.Caption}}" class="h-full w-full object-cover">
+          {{end}}
         </button>
       {{end}}
     </div>
@@ -199,18 +222,20 @@
       picker.querySelectorAll('[data-image-picker-option]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var url = btn.getAttribute('data-image-picker-option');
+          var isVideo = btn.getAttribute('data-image-picker-kind') === 'video';
           if (append) {
             var sep = target.value && !target.value.endsWith('\n') ? '\n' : '';
-            target.value += sep + url + ' | ';
+            target.value += sep + url + ' | ' + (isVideo ? ' | video' : '');
             target.focus();
           } else {
             target.value = url;
-            picker.querySelectorAll('img').forEach(function (img) {
-              img.classList.remove('border-blue-500');
-              img.classList.add('border-gray-200');
+            picker.querySelectorAll('img,video').forEach(function (el) {
+              el.classList.remove('border-blue-500');
+              el.classList.add('border-gray-200');
             });
-            btn.querySelector('img').classList.remove('border-gray-200');
-            btn.querySelector('img').classList.add('border-blue-500');
+            var chosen = btn.querySelector('img,video');
+            chosen.classList.remove('border-gray-200');
+            chosen.classList.add('border-blue-500');
           }
         });
       });

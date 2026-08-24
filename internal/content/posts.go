@@ -49,18 +49,33 @@ type Post struct {
 	UpdatedAt  time.Time
 }
 
-// GalleryPhoto is one photo in a gallery, parsed from a Post's Body.
+// GalleryPhoto is one photo (or video) in a gallery, parsed from a Post's
+// Body. The name predates video support — a gallery may hold a mix of
+// both — but isn't worth renaming everywhere IsVideo already tells a
+// caller which.
 type GalleryPhoto struct {
 	URL     string
 	Caption string // "" if the leader didn't add one
+	IsVideo bool
 }
 
-// ParseGalleryPhotos reads a gallery's Body as one photo per line — the
+// videoExtensions catches a manually pasted video link (one not chosen
+// via a picker, so ParseGalleryPhotos has no content-type to go on) —
+// common direct-file video extensions, checked against the URL's path
+// case-insensitively. Not exhaustive; a link that doesn't match still
+// works as a photo tile with a plain (non-playing) <img>, same as before
+// video support existed.
+var videoExtensions = []string{".mp4", ".webm", ".mov", ".m4v", ".ogv", ".avi", ".mkv"}
+
+// ParseGalleryPhotos reads a gallery's Body as one item per line — the
 // same "one item per line" convention HomepageSections already uses for
-// home-program (see content.go). Each line is either a bare image URL or
-// "URL | Caption" if the leader wants a caption under that photo. Blank
-// lines are skipped so a stray empty line in the textarea doesn't
-// produce an empty tile.
+// home-program (see content.go). Each line is a bare URL, "URL |
+// Caption", or "URL | Caption | video" if the third field marks it as a
+// video (the picker in _image-picker.html appends that marker
+// automatically for a video it already knows the content type of;
+// ParseGalleryPhotos falls back to sniffing the URL's file extension for
+// a manually pasted link). Blank lines are skipped so a stray empty line
+// in the textarea doesn't produce an empty tile.
 func ParseGalleryPhotos(body string) []GalleryPhoto {
 	var photos []GalleryPhoto
 	for _, line := range strings.Split(body, "\n") {
@@ -68,8 +83,23 @@ func ParseGalleryPhotos(body string) []GalleryPhoto {
 		if line == "" {
 			continue
 		}
-		url, caption, _ := strings.Cut(line, "|")
-		photos = append(photos, GalleryPhoto{URL: strings.TrimSpace(url), Caption: strings.TrimSpace(caption)})
+		parts := strings.SplitN(line, "|", 3)
+		url := strings.TrimSpace(parts[0])
+		var caption string
+		if len(parts) > 1 {
+			caption = strings.TrimSpace(parts[1])
+		}
+		isVideo := len(parts) > 2 && strings.EqualFold(strings.TrimSpace(parts[2]), "video")
+		if !isVideo {
+			lower := strings.ToLower(url)
+			for _, ext := range videoExtensions {
+				if strings.HasSuffix(lower, ext) {
+					isVideo = true
+					break
+				}
+			}
+		}
+		photos = append(photos, GalleryPhoto{URL: url, Caption: caption, IsVideo: isVideo})
 	}
 	return photos
 }

@@ -331,7 +331,7 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 	var eventPhotoGroups []files.EventFileGroup
 	if kind.HasImagePicker {
 		var err error
-		publicImages, err = files.ListPublicImagesForUnit(r.Context(), h.Pool, unit.ID)
+		publicImages, err = files.ListPublicMediaForUnit(r.Context(), h.Pool, unit.ID)
 		if err != nil {
 			log.Printf("web: loading public images: %v", err)
 		}

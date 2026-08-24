@@ -23,7 +23,7 @@
             <input type="radio" name="category" value="general" checked> General document
           </label>
           <label class="flex items-center gap-1">
-            <input type="radio" name="category" value="event_photo"> Event photo
+            <input type="radio" name="category" value="event_photo"> Event photo/video
           </label>
         </div>
         {{if .Events}}
@@ -110,6 +110,8 @@
       <div class="flex items-start gap-3 min-w-0">
         {{if hasPrefix $f.ContentType "image/"}}
           <img src="/files/{{$f.ID}}/download" alt="" class="h-12 w-12 flex-shrink-0 object-cover rounded-md border border-gray-200">
+        {{else if hasPrefix $f.ContentType "video/"}}
+          <video src="/files/{{$f.ID}}/download" muted preload="metadata" class="h-12 w-12 flex-shrink-0 object-cover rounded-md border border-gray-200"></video>
         {{end}}
         <div class="min-w-0">
           <a href="/files/{{$f.ID}}/download" target="_blank" class="font-medium hover:underline truncate block" style="color: var(--unit-color);">
@@ -118,9 +120,12 @@
           {{if $f.DisplayName}}<p class="text-xs text-gray-400 truncate">{{$f.Filename}}</p>{{end}}
           <div class="text-xs text-gray-400 mt-0.5">
             {{if eq $f.Category "event_photo"}}
-              <span class="rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 font-medium">Event photo</span>
+              <span class="rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 font-medium">Event photo/video</span>
             {{else}}
               <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 font-medium">Document</span>
+            {{end}}
+            {{if hasPrefix $f.ContentType "video/"}}
+              <span class="rounded-full bg-purple-100 text-purple-800 px-2 py-0.5 font-medium">Video</span>
             {{end}}
             {{if $f.Public}}
               <span class="rounded-full bg-green-100 text-green-800 px-2 py-0.5 font-medium">Public</span>
@@ -140,7 +145,7 @@
               <button type="submit" class="rounded-md px-2 py-1 text-xs whitespace-nowrap btn-accent">Save</button>
             </form>
           </details>
-          {{if hasPrefix $f.ContentType "image/"}}
+          {{if or (hasPrefix $f.ContentType "image/") (hasPrefix $f.ContentType "video/")}}
             <form method="post" action="/files/{{$f.ID}}/public">
               <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
               <button type="submit" class="text-xs hover:underline" style="color: var(--unit-color);">
@@ -152,7 +157,7 @@
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <select name="category" onchange="this.form.submit()" aria-label="Category" class="rounded-md border border-gray-300 px-1.5 py-1 text-xs">
               <option value="general" {{if ne $f.Category "event_photo"}}selected{{end}}>General document</option>
-              <option value="event_photo" {{if eq $f.Category "event_photo"}}selected{{end}}>Event photo</option>
+              <option value="event_photo" {{if eq $f.Category "event_photo"}}selected{{end}}>Event photo/video</option>
             </select>
           </form>
           <form method="post" action="/files/{{$f.ID}}/delete" onsubmit="return confirm('Delete {{$f.DisplayLabel}}? This can\'t be undone.');">
