@@ -1,19 +1,40 @@
-{{/* imagePicker is the shared "choose from your library" widget — a
-     horizontally-scrollable strip of photo thumbnails, sorted by linked
-     calendar event (see files.ListPublicImagesForUnit), so a leader
-     recognizes "these came from the campout" instead of hunting through
-     an undifferentiated list. Included in every page template (see
+{{/* eventAccordionPicker is the shared "choose from your library" widget —
+     a per-event accordion of photo/video thumbnail strips (plus a "Not
+     linked to an event" bucket) instead of one giant eagerly-loaded grid.
+     Every <details> starts closed; combined with loading="lazy" on each
+     <img> (and preload="metadata" on each <video>), a browser never even
+     requests a collapsed group's media — an element with no rendered box
+     is never "near the viewport" for lazy-loading purposes, and a closed
+     <details>'s non-summary content isn't rendered at all. That's the
+     actual performance fix for a unit with hundreds of campout photos;
+     no extra JS is needed for it. Included in every page template (see
      web.go's parse helper) so it's reusable across content-admin.html
-     (homepage sections, page hero banners) and admin-content-form.html
-     (Gallery), all without duplicating this markup.
+     (homepage sections, page hero banners), admin-content-form.html
+     (Gallery), admin-leaders-form.html (leader photo), and admin-group.html
+     (den/patrol hero banner), all without duplicating this markup.
 
      Takes a dict with (see web.go's templateDict):
-       Slug         field id, ties the picker to its target element
-       Images       []files.PickerImage
-       CurrentURL   (single mode only) the field's current value, to
-                    highlight the active thumbnail
-       Mode         "" (default, single mode) or "append" (Gallery mode)
-       AppendTarget (append mode only) id of the <textarea> to append to
+       Slug             field id, ties every group's picker to the SAME
+                        shared target element — every group must use this
+                        one slug so they all write to the one field (see
+                        imagePickerScript, which wires each accordion
+                        group's picker div independently but resolves
+                        them all to the same target by slug)
+       Groups           []files.EventFileGroup
+       Ungrouped        []files.File — files with no event link; leave
+                        nil when every item is already event-scoped (e.g.
+                        a single event's own picker has nothing to put
+                        here)
+       Mode             "" (default, single mode) or "append" (Gallery/
+                        gallery-strip mode)
+       AppendTarget     (append mode only) id of the <textarea>
+       CurrentURL       (single mode only) highlights the active thumbnail
+       ShowPrivateBadge if true, badges a non-public file "Private" — only
+                        meaningful where public/private actually matters
+                        (a public Gallery album mixing in a private
+                        event's photos); leave unset for an already-
+                        members-only page or an already-public-only list,
+                        where the badge would just be confusing noise
 
      Single mode: clicking a thumbnail fills in the paired URL <input>
      (data-image-url-input, matched by Slug) — still a plain URL under the
@@ -26,24 +47,24 @@
      the URL) to the target <textarea> — one item per line is that
      field's existing convention — rather than replacing a single value,
      since a gallery holds many photos/videos, not one. */}}
-{{define "imagePicker"}}
-  {{if .Images}}
-    <div class="flex gap-2 overflow-x-auto pb-1" data-image-picker="{{.Slug}}"
-         {{if eq .Mode "append"}}data-image-picker-mode="append" data-image-append-target="{{.AppendTarget}}"{{end}}>
-      {{$current := .CurrentURL}}
-      {{range .Images}}
-        {{$url := printf "/files/%s/download" .ID}}
-        <button type="button" class="flex-shrink-0 w-20 text-center relative" data-image-picker-option="{{$url}}" {{if hasPrefix .ContentType "video/"}}data-image-picker-kind="video"{{end}} title="{{.DisplayLabel}}">
-          {{if hasPrefix .ContentType "video/"}}
-            <video src="{{$url}}" muted preload="metadata"
-                   class="h-16 w-20 object-cover rounded-md border-2 {{if eq $url $current}}border-blue-500{{else}}border-gray-200 hover:border-gray-400{{end}}"></video>
-            <span class="absolute top-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">&#9654;</span>
-          {{else}}
-            <img src="{{$url}}" alt="{{.DisplayLabel}}" loading="lazy"
-                 class="h-16 w-20 object-cover rounded-md border-2 {{if eq $url $current}}border-blue-500{{else}}border-gray-200 hover:border-gray-400{{end}}">
-          {{end}}
-          <span class="block text-[10px] text-gray-500 truncate mt-0.5">{{if .PrimaryEventName}}{{.PrimaryEventName}}{{else}}&mdash;{{end}}</span>
-        </button>
+{{define "eventAccordionPicker"}}
+  {{if or .Groups .Ungrouped}}
+    <div class="space-y-2">
+      {{range .Groups}}
+        <details class="rounded-md border border-gray-200">
+          <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-gray-50">{{.EventTitle}}</summary>
+          <div class="p-2">
+            {{template "eventAccordionPickerStrip" (dict "Slug" $.Slug "Files" .Files "Mode" $.Mode "AppendTarget" $.AppendTarget "CurrentURL" $.CurrentURL "ShowPrivateBadge" $.ShowPrivateBadge)}}
+          </div>
+        </details>
+      {{end}}
+      {{if .Ungrouped}}
+        <details class="rounded-md border border-gray-200">
+          <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-gray-50">Not linked to an event</summary>
+          <div class="p-2">
+            {{template "eventAccordionPickerStrip" (dict "Slug" .Slug "Files" .Ungrouped "Mode" .Mode "AppendTarget" .AppendTarget "CurrentURL" .CurrentURL "ShowPrivateBadge" .ShowPrivateBadge)}}
+          </div>
+        </details>
       {{end}}
     </div>
   {{else}}
@@ -54,28 +75,16 @@
   {{end}}
 {{end}}
 
-{{/* eventPhotoPicker is imagePicker's "one specific event, any photo
-     regardless of public/private" sibling — the Gallery editor's "add an
-     event's photos" section (admin-content-form.html) renders one of
-     these per event that has linked images, via files.EventFileGroup.
-     Always append mode (a gallery holds many photos), and always shows a
-     "Private" badge on anything not marked public — mixing public and
-     private photos from the same event into one album draft is fine
-     (the leader here already has full file-library access either way);
-     the badge just makes clear which ones won't actually render for a
-     logged-out visitor if the album ends up "Public", since
-     FileDownload's own access check still applies to wherever the photo's
-     URL is embedded, independent of the album's own visibility setting.
-
-     Takes a dict with:
-       Slug         field id, ties the picker to its target element —
-                    must be unique per picker on the page (e.g. the
-                    event's ID), unlike imagePicker's single shared slug
-       Files        []files.File
-       AppendTarget id of the <textarea> to append to */}}
-{{define "eventPhotoPicker"}}
+{{/* eventAccordionPickerStrip renders one group's horizontally-scrollable
+     thumbnail strip — the shared innards of both eventAccordionPicker (one
+     per event, plus "Not linked to an event") and eventAccordionCheckboxGrid
+     below. Not meant to be called directly from a page template. */}}
+{{define "eventAccordionPickerStrip"}}
   {{if .Files}}
-    <div class="flex gap-2 overflow-x-auto pb-1" data-image-picker="{{.Slug}}" data-image-picker-mode="append" data-image-append-target="{{.AppendTarget}}">
+    <div class="flex gap-2 overflow-x-auto pb-1" data-image-picker="{{.Slug}}"
+         {{if eq .Mode "append"}}data-image-picker-mode="append" data-image-append-target="{{.AppendTarget}}"{{end}}>
+      {{$current := .CurrentURL}}
+      {{$showPrivate := .ShowPrivateBadge}}
       {{range .Files}}
         {{$url := printf "/files/%s/download" .ID}}
         {{$isVideo := hasPrefix .ContentType "video/"}}
@@ -83,14 +92,68 @@
           {{if $isVideo}}
             <video src="{{$url}}" muted preload="metadata" class="h-16 w-20 object-cover rounded-md border-2 border-gray-200 hover:border-gray-400"></video>
           {{else}}
-            <img src="{{$url}}" alt="{{.DisplayLabel}}" loading="lazy" class="h-16 w-20 object-cover rounded-md border-2 border-gray-200 hover:border-gray-400">
+            <img src="{{$url}}" alt="{{.DisplayLabel}}" loading="lazy"
+                 class="h-16 w-20 object-cover rounded-md border-2 {{if eq $url $current}}border-blue-500{{else}}border-gray-200 hover:border-gray-400{{end}}">
           {{end}}
-          {{if not .Public}}<span class="absolute top-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">Private</span>{{end}}
+          {{if and $showPrivate (not .Public)}}<span class="absolute top-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">Private</span>{{end}}
           {{if $isVideo}}<span class="absolute bottom-4 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">&#9654;</span>{{end}}
         </button>
       {{end}}
     </div>
   {{end}}
+{{end}}
+
+{{/* eventAccordionCheckboxGrid is eventAccordionPicker's multi-select
+     sibling — a per-event accordion of checkbox+thumbnail rows (instead
+     of click-to-fill-a-field buttons), for choosing several files to
+     associate with something via a normal form submission (see
+     admin-group.html's den/patrol Photos section). Same lazy-loading
+     behavior and reasoning as eventAccordionPicker.
+
+     Takes a dict with:
+       Groups       []files.EventFileGroup
+       Ungrouped    []files.File
+       Name         the checkbox <input>'s shared "name" attribute (e.g.
+                    "file_ids") — every checkbox across every group uses
+                    this same name, so they all submit together as one
+                    multi-value form field
+       LinkedFileID map[string]bool — which file IDs start checked */}}
+{{define "eventAccordionCheckboxGrid"}}
+  {{if or .Groups .Ungrouped}}
+    <div class="space-y-2">
+      {{range .Groups}}
+        <details class="rounded-md border border-gray-200">
+          <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-gray-50">{{.EventTitle}}</summary>
+          <div class="p-2">
+            {{template "eventAccordionCheckboxGridRow" (dict "Files" .Files "Name" $.Name "LinkedFileID" $.LinkedFileID)}}
+          </div>
+        </details>
+      {{end}}
+      {{if .Ungrouped}}
+        <details class="rounded-md border border-gray-200">
+          <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-gray-50">Not linked to an event</summary>
+          <div class="p-2">
+            {{template "eventAccordionCheckboxGridRow" (dict "Files" .Ungrouped "Name" .Name "LinkedFileID" .LinkedFileID)}}
+          </div>
+        </details>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="text-sm text-gray-500">No image files uploaded yet.</p>
+  {{end}}
+{{end}}
+
+{{define "eventAccordionCheckboxGridRow"}}
+  {{$linked := .LinkedFileID}}
+  <div class="grid gap-2 sm:grid-cols-2">
+    {{range .Files}}
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="{{$.Name}}" value="{{.ID}}" {{if index $linked .ID}}checked{{end}}>
+        <img src="/files/{{.ID}}/download" alt="" loading="lazy" class="h-8 w-8 flex-shrink-0 object-cover rounded-md border border-gray-200">
+        <span class="truncate">{{.DisplayLabel}}</span>
+      </label>
+    {{end}}
+  </div>
 {{end}}
 
 {{/* photoCarousel renders a scrollable, snap-to-photo carousel — the
@@ -303,7 +366,10 @@
 {{/* imagePickerScript wires up every [data-image-picker] on the page —
      included once per page alongside the picker itself. Safe to include
      even on a page with zero pickers (querySelectorAll just finds
-     nothing). */}}
+     nothing). A single-select picker's thumbnails are now split across
+     several accordion groups sharing one slug (see eventAccordionPicker),
+     so the "active" highlight is cleared/set across every group with
+     that slug, not just the one the click happened in. */}}
 {{define "imagePickerScript"}}
   <script>
     document.querySelectorAll('[data-image-picker]').forEach(function (picker) {
@@ -324,7 +390,7 @@
             target.focus();
           } else {
             target.value = url;
-            picker.querySelectorAll('img,video').forEach(function (el) {
+            document.querySelectorAll('[data-image-picker="' + slug + '"] img, [data-image-picker="' + slug + '"] video').forEach(function (el) {
               el.classList.remove('border-blue-500');
               el.classList.add('border-gray-200');
             });

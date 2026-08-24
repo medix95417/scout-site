@@ -50,7 +50,7 @@
         class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
         data-image-url-input="leader-photo"
       >
-      {{template "imagePicker" (dict "Slug" "leader-photo" "Images" .PublicImages "CurrentURL" .Leader.PhotoURL)}}
+      {{template "eventAccordionPicker" (dict "Slug" "leader-photo" "Groups" .PublicImageGroups "Ungrouped" .PublicImagesUngrouped "CurrentURL" .Leader.PhotoURL)}}
     </div>
 
     <div>

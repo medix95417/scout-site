@@ -175,15 +175,12 @@ func (h *Handlers) AdminGroupEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allFiles, err := files.ListForUnit(r.Context(), h.Pool, unit.ID)
+	// A den/patrol page is members-only, so both its hero banner and its
+	// Photos section can offer any image file regardless of the "Public"
+	// flag (publicOnly=false) — no logged-out visitor ever sees either.
+	imageGroups, imagesUngrouped, err := files.ListImageFilesGroupedByEvent(r.Context(), h.Pool, unit.ID, false)
 	if err != nil {
-		log.Printf("web: listing files: %v", err)
-	}
-	var imageFiles []files.File
-	for _, f := range allFiles {
-		if strings.HasPrefix(f.ContentType, "image/") {
-			imageFiles = append(imageFiles, f)
-		}
+		log.Printf("web: listing image files: %v", err)
 	}
 
 	linked, err := files.ListForSubGroup(r.Context(), h.Pool, subGroupID)
@@ -197,16 +194,18 @@ func (h *Handlers) AdminGroupEdit(w http.ResponseWriter, r *http.Request) {
 
 	data := struct {
 		baseData
-		SubGroupNoun string
-		Group        roster.SubGroup
-		ImageFiles   []files.File
-		LinkedFileID map[string]bool
+		SubGroupNoun    string
+		Group           roster.SubGroup
+		ImageGroups     []files.EventFileGroup
+		ImagesUngrouped []files.File
+		LinkedFileID    map[string]bool
 	}{
-		baseData:     h.base(r, "Edit "+group.Name),
-		SubGroupNoun: subGroupNoun(unit.UnitType),
-		Group:        group,
-		ImageFiles:   imageFiles,
-		LinkedFileID: linkedFileID,
+		baseData:        h.base(r, "Edit "+group.Name),
+		SubGroupNoun:    subGroupNoun(unit.UnitType),
+		Group:           group,
+		ImageGroups:     imageGroups,
+		ImagesUngrouped: imagesUngrouped,
+		LinkedFileID:    linkedFileID,
 	}
 	h.render(w, h.groupAdmin, data)
 }

@@ -105,7 +105,7 @@
       <div class="grid gap-3 sm:grid-cols-3">
         {{range .Photos}}
           <a href="/files/{{.ID}}/download" target="_blank" class="block h-32 rounded-md overflow-hidden border border-gray-200 bg-gray-100">
-            <img src="/files/{{.ID}}/download" alt="{{.Filename}}" class="w-full h-full object-cover">
+            <img src="/files/{{.ID}}/download" alt="{{.Filename}}" loading="lazy" class="w-full h-full object-cover">
           </a>
         {{end}}
       </div>

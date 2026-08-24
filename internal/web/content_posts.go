@@ -398,13 +398,14 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 		post.Visibility = "members" // same default as calendar events — see events table's DEFAULT 'members'
 	}
 
-	var publicImages []files.PickerImage
+	var publicMediaGroups []files.EventFileGroup
+	var publicMediaUngrouped []files.File
 	var eventPhotoGroups []files.EventFileGroup
 	if kind.HasImagePicker {
 		var err error
-		publicImages, err = files.ListPublicMediaForUnit(r.Context(), h.Pool, unit.ID)
+		publicMediaGroups, publicMediaUngrouped, err = files.ListMediaFilesGroupedByEvent(r.Context(), h.Pool, unit.ID, true)
 		if err != nil {
-			log.Printf("web: loading public images: %v", err)
+			log.Printf("web: loading public media: %v", err)
 		}
 		eventPhotoGroups, err = files.ListEventPhotoGroupsForUnit(r.Context(), h.Pool, unit.ID)
 		if err != nil {
@@ -414,12 +415,13 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 
 	data := struct {
 		baseData
-		Kind             contentKind
-		IsEdit           bool
-		Post             content.Post
-		PublicImages     []files.PickerImage
-		EventPhotoGroups []files.EventFileGroup
-	}{baseData: h.base(r, kind.Label), Kind: kind, IsEdit: isEdit, Post: post, PublicImages: publicImages, EventPhotoGroups: eventPhotoGroups}
+		Kind                 contentKind
+		IsEdit               bool
+		Post                 content.Post
+		PublicMediaGroups    []files.EventFileGroup
+		PublicMediaUngrouped []files.File
+		EventPhotoGroups     []files.EventFileGroup
+	}{baseData: h.base(r, kind.Label), Kind: kind, IsEdit: isEdit, Post: post, PublicMediaGroups: publicMediaGroups, PublicMediaUngrouped: publicMediaUngrouped, EventPhotoGroups: eventPhotoGroups}
 	h.render(w, h.adminContentFormTmpl, data)
 }
 
