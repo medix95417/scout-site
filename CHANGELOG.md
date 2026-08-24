@@ -20,6 +20,15 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Clicking a photo now opens it at full size in a new tab**, wherever
+photos render in a carousel (Gallery albums, the Photos list, the
+homepage's recent-activity strip) — previously the inline framing (a
+cropped square/strip) was all there was to see. Videos are unaffected;
+they already play in place. Also added an "Add Photos" button to the
+Manage Photos admin page, linking straight to the file library, so a
+leader doesn't have to know to visit `/files` first before building an
+album.
+
 **Homepage: Recent Activities and Upcoming Events moved right under the
 hero banner** (previously several sections down, after the quick-link
 cards, "Our Program," and meeting/leadership info) since it's the
