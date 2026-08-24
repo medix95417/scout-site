@@ -111,10 +111,12 @@
 
      Pure CSS scroll-snap under the hood, so swipe/scroll navigation works
      with zero JS; photoCarouselScript below only adds the prev/next
-     button behavior (and the auto-rotate timer) on top. A photo (not a
-     video, which already plays in place) opens its original, full-size
-     URL in a new tab when clicked — the CSS sizing here is just how it's
-     framed inline, not a resized copy. */}}
+     button behavior (and the auto-rotate timer) on top. Clicking a photo
+     (not a video, which already plays in place) opens the lightbox — see
+     the "lightbox" block below — showing it uncropped, full-size, with
+     its own prev/next to step through every photo in this same
+     carousel; the href is kept so a visitor can still right-click/
+     ctrl-click straight to the original file. */}}
 {{define "photoCarousel"}}
   {{if .Photos}}
     <div class="relative">
@@ -125,7 +127,7 @@
             {{if .IsVideo}}
               <video src="{{.URL}}" controls preload="metadata" class="w-full {{$height}} object-cover"></video>
             {{else}}
-              <a href="{{.URL}}" target="_blank" rel="noopener">
+              <a href="{{.URL}}" data-lightbox-open>
                 <img src="{{.URL}}" alt="{{.Caption}}" class="w-full {{$height}} object-cover">
               </a>
             {{end}}
@@ -139,6 +141,26 @@
       {{end}}
     </div>
   {{end}}
+{{end}}
+
+{{/* lightbox is the full-screen photo viewer photoCarouselScript opens
+     when a photoCarousel photo is clicked — one instance per page, kept
+     hidden until opened. Shows the photo uncropped (object-contain, no
+     forced aspect ratio) at up to full viewport size, with its own
+     prev/next to step through every photo in whichever carousel was
+     clicked, plus a close button, a click-outside-to-close backdrop, and
+     Escape/Left/Right keyboard support. Include this once per page
+     alongside photoCarouselScript wherever photoCarousel is used. */}}
+{{define "lightbox"}}
+  <div class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90 p-4 sm:p-8" data-lightbox role="dialog" aria-modal="true" aria-label="Photo viewer">
+    <button type="button" class="absolute top-4 right-4 text-white text-3xl leading-none hover:opacity-75" data-lightbox-close aria-label="Close">&times;</button>
+    <button type="button" class="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 text-white p-3" data-lightbox-prev aria-label="Previous photo">&larr;</button>
+    <figure class="max-w-full max-h-full flex flex-col items-center">
+      <img data-lightbox-image src="" alt="" class="max-w-full max-h-[85vh] object-contain">
+      <figcaption data-lightbox-caption class="mt-2 text-sm text-white/80 text-center"></figcaption>
+    </figure>
+    <button type="button" class="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 text-white p-3" data-lightbox-next aria-label="Next photo">&rarr;</button>
+  </div>
 {{end}}
 
 {{define "photoCarouselScript"}}
@@ -183,6 +205,74 @@
       });
       setActive(0);
     });
+
+    // Lightbox: clicking a photo in any [data-carousel] (see the
+    // "lightbox" template block) opens it full-size with its own
+    // prev/next stepping through every photo in that same carousel —
+    // videos are skipped since they already have their own controls.
+    // No-ops entirely if a page includes photoCarouselScript but not the
+    // lightbox markup.
+    (function () {
+      var overlay = document.querySelector('[data-lightbox]');
+      if (!overlay) return;
+      var imageEl = overlay.querySelector('[data-lightbox-image]');
+      var captionEl = overlay.querySelector('[data-lightbox-caption]');
+      var prevBtn = overlay.querySelector('[data-lightbox-prev]');
+      var nextBtn = overlay.querySelector('[data-lightbox-next]');
+      var items = [];
+      var index = 0;
+
+      function show(i) {
+        index = (i + items.length) % items.length;
+        imageEl.src = items[index].src;
+        imageEl.alt = items[index].caption;
+        captionEl.textContent = items[index].caption;
+        var multi = items.length > 1;
+        prevBtn.style.display = multi ? '' : 'none';
+        nextBtn.style.display = multi ? '' : 'none';
+      }
+
+      function open(carouselItems, startIndex) {
+        if (!carouselItems.length) return;
+        items = carouselItems;
+        show(startIndex);
+        overlay.classList.remove('hidden');
+        overlay.classList.add('flex');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function close() {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+        document.body.style.overflow = '';
+      }
+
+      overlay.querySelector('[data-lightbox-close]').addEventListener('click', close);
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+      prevBtn.addEventListener('click', function () { show(index - 1); });
+      nextBtn.addEventListener('click', function () { show(index + 1); });
+      document.addEventListener('keydown', function (e) {
+        if (overlay.classList.contains('hidden')) return;
+        if (e.key === 'Escape') close();
+        else if (e.key === 'ArrowLeft') show(index - 1);
+        else if (e.key === 'ArrowRight') show(index + 1);
+      });
+
+      document.querySelectorAll('[data-carousel]').forEach(function (car) {
+        var links = Array.prototype.slice.call(car.querySelectorAll(':scope > figure > [data-lightbox-open]'));
+        var carouselItems = links.map(function (link) {
+          var img = link.querySelector('img');
+          var caption = link.closest('figure').querySelector('figcaption');
+          return { src: img.getAttribute('src'), caption: caption ? caption.textContent : '' };
+        });
+        links.forEach(function (link, i) {
+          link.addEventListener('click', function (e) {
+            e.preventDefault();
+            open(carouselItems, i);
+          });
+        });
+      });
+    })();
   </script>
 {{end}}
 

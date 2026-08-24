@@ -20,6 +20,15 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Clicking a photo now opens a full-size lightbox with Back/Forward
+navigation**, replacing the previous "opens in a new tab, no way to see
+the next one" behavior. The photo shows uncropped (no forced aspect
+ratio, so nothing is cut off) with its own prev/next arrows, arrow-key
+support, and Escape/click-outside to close — available everywhere a
+photo carousel renders: Gallery albums, the Photos list, and the
+homepage's recent-activity strip. Videos are unaffected; they already
+play in place with their own controls.
+
 **Clicking a photo now opens it at full size in a new tab**, wherever
 photos render in a carousel (Gallery albums, the Photos list, the
 homepage's recent-activity strip) — previously the inline framing (a
