@@ -25,6 +25,7 @@
           data-image-url-input="group-hero"
         >
         {{template "eventAccordionPicker" (dict "Slug" "group-hero" "Groups" .ImageGroups "Ungrouped" .ImagesUngrouped "CurrentURL" .Group.HeroImageURL)}}
+        {{template "heroSizeSelect" (dict "Name" "hero_size" "Selected" .Group.HeroSize)}}
       </div>
       <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
         Save

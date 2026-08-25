@@ -1,0 +1,13 @@
+-- 0034_sub_group_hero_size.sql
+--
+-- A size preset (short/medium/tall — see content.HeroSize* in Go) for a
+-- den/patrol's own hero banner (migration 0031), so a Den/Patrol Leader
+-- can pick a display height that suits their actual photo instead of
+-- every hero being forced into one fixed size. Homepage/page hero
+-- banners store this same preset as a sibling content_pages row (see
+-- content.HeroSizeSlug) since they're already content_pages-based; a
+-- sub_group's hero has no such row to piggyback on, so it gets its own
+-- plain column here, same reasoning migration 0031 used for
+-- hero_image_url itself. Defaults to 'medium' — today's original fixed
+-- size — so every existing den/patrol hero renders unchanged.
+ALTER TABLE sub_groups ADD COLUMN hero_size text NOT NULL DEFAULT 'medium';

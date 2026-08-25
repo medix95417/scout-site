@@ -16,7 +16,7 @@
     class="relative left-1/2 right-1/2 -mx-[50vw] w-screen -mt-8 mb-12 bg-cover bg-center text-white"
     style="{{if .HeroImageURL}}background-image: linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.5)), url('{{.HeroImageURL}}');{{else}}background-color: var(--unit-color);{{end}}"
   >
-    <div class="relative max-w-3xl mx-auto px-4 py-28 sm:py-36 text-center">
+    <div class="relative max-w-3xl mx-auto px-4 {{homeHeroSizeClass .HeroSize}} text-center">
       {{if .SocialURL}}
         <a href="{{.SocialURL}}" target="_blank" rel="noopener"
            class="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/30 px-3 py-1 text-xs hover:bg-black/50">
@@ -39,7 +39,13 @@
        placed right under the hero since it's the freshest, most-changing
        content on the page. Activity photos render as a large square tile
        (rather than a short wide strip) so a portrait phone photo shows
-       top-to-bottom instead of getting most of its height cropped away. -->
+       top-to-bottom instead of getting most of its height cropped away.
+       Recent Activities is itself a grid so several galleries show side
+       by side: 2 columns × 2 rows on desktop (up to 4 total — the extra
+       room comes from home.html's own wider <main>, see baseData.
+       MainWidthClass), 1 column on mobile, where only the first 2 rows'
+       worth (index 0-1) show — the 3rd/4th are hidden rather than fetched
+       differently per viewport, so mobile still gets exactly 2 "layers". -->
   <section class="mb-14 grid gap-8 sm:grid-cols-2">
     <div>
       <div class="flex items-center justify-between mb-3">
@@ -47,11 +53,11 @@
         <a href="/gallery" class="text-sm underline whitespace-nowrap" style="color: var(--unit-color);">View all photos &rarr;</a>
       </div>
       {{if .Activities}}
-        <div class="space-y-6">
-          {{range .Activities}}
-            <div>
-              <a href="{{.URL}}" class="block font-medium mb-2 hover:underline">{{.Title}}</a>
-              {{template "photoCarousel" (dict "Photos" .Photos "HeightClass" "aspect-square" "AutoRotate" true)}}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {{range $i, $activity := .Activities}}
+            <div{{if ge $i 2}} class="hidden sm:block"{{end}}>
+              <a href="{{$activity.URL}}" class="block font-medium mb-2 hover:underline">{{$activity.Title}}</a>
+              {{template "photoCarousel" (dict "Photos" $activity.Photos "HeightClass" "aspect-square" "AutoRotate" true)}}
             </div>
           {{end}}
         </div>

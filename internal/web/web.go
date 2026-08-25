@@ -132,10 +132,61 @@ type Handlers struct {
 // cent amounts as "$12.34"/"-$12.34" and Go templates have no arithmetic
 // or number-formatting of their own.
 var templateFuncs = template.FuncMap{
-	"formatCents":   formatCents,
-	"hasPrefix":     strings.HasPrefix,
-	"dict":          templateDict,
-	"galleryPhotos": templateGalleryPhotos,
+	"formatCents":       formatCents,
+	"hasPrefix":         strings.HasPrefix,
+	"dict":              templateDict,
+	"galleryPhotos":     templateGalleryPhotos,
+	"chunkFiles":        chunkFiles,
+	"heroSizeClass":     heroSizeClass,
+	"homeHeroSizeClass": homeHeroSizeClass,
+}
+
+// heroSizeClass maps a content.HeroSize preset to the Tailwind height
+// classes for a plain background-image hero banner — base.html's
+// per-page hero and group-view.html's den/patrol hero. Falls back to the
+// original fixed size (content.HeroSizeMedium) for anything unrecognized,
+// same as content.NormalizeHeroSize.
+func heroSizeClass(size string) string {
+	switch size {
+	case content.HeroSizeShort:
+		return "h-24 sm:h-32"
+	case content.HeroSizeTall:
+		return "h-64 sm:h-80"
+	default:
+		return "h-40 sm:h-56"
+	}
+}
+
+// homeHeroSizeClass is heroSizeClass's sibling for the homepage's own
+// hero (home.html) — a text+CTA overlay sized by vertical padding around
+// its content rather than a fixed element height, since its content's
+// own height needs to stay part of the layout.
+func homeHeroSizeClass(size string) string {
+	switch size {
+	case content.HeroSizeShort:
+		return "py-12 sm:py-16"
+	case content.HeroSizeTall:
+		return "py-40 sm:py-56"
+	default:
+		return "py-28 sm:py-36"
+	}
+}
+
+// chunkFiles splits fs into pages of at most size files each — the "show
+// 25 at a time" pagination behind eventAccordionPickerStrip and
+// eventAccordionCheckboxGridRow (see _image-picker.html): an event with
+// hundreds of photos only ever renders one page's worth of thumbnails
+// until a leader clicks "Show more" for the next, keeping a single very
+// full event from undoing the accordion's own lazy-loading benefit.
+func chunkFiles(fs []files.File, size int) [][]files.File {
+	if size <= 0 || len(fs) == 0 {
+		return nil
+	}
+	var chunks [][]files.File
+	for size < len(fs) {
+		fs, chunks = fs[size:], append(chunks, fs[:size:size])
+	}
+	return append(chunks, fs)
 }
 
 // templateGalleryPhotos parses a Kind:"images" section's saved body (or,
@@ -527,6 +578,8 @@ type baseData struct {
 	NeedsTwoFactorSetup      bool              // this login holds a treasury role, or the require-two-factor-for-all setting is on, and hasn't confirmed TOTP enrollment yet — drives a persistent nudge banner, see base.html
 	NavSubGroups             []roster.SubGroup // every patrol/den in this unit, for the hamburger nav's Patrols/Dens submenu (see base.html) — named distinctly from any page's own "Groups" field (e.g. internal/web/groups.go's GroupsList) so embedding baseData never shadows a page's own data
 	PageHeroImageURL         string            // this request's page hero banner image, if the current path is one of content.HeroPages and a leader has set one — see heroKeyForPath and base.html. Named distinctly from the Home handler's own "HeroImageURL" field (for the homepage's separate, richer hero mechanism) so embedding baseData never lets one shadow the other
+	PageHeroSize             string            // content.HeroSize{Short,Medium,Tall} for PageHeroImageURL, already normalized — see base.html's heroSizeClass
+	MainWidthClass           string            // overrides <main>'s default max-w-4xl (see base.html) for pages that need extra width — currently just the homepage, whose Recent Activities gallery grid needs the room; empty means "use the default" for every other page
 	FooterFacebookURL        string            // site-wide footer's social icons — see h.socialLinks. Named distinctly from the Home handler's own FacebookURL/InstagramURL/TikTokURL fields so embedding baseData never lets one shadow the other
 	FooterInstagramURL       string
 	FooterTikTokURL          string
@@ -705,6 +758,11 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 		} else {
 			data.PageHeroImageURL = heroURL
 		}
+		if heroSize, err := content.HeroSizeForPage(r.Context(), h.Pool, unit.ID, heroKey); err != nil {
+			log.Printf("web: loading page hero banner size: %v", err)
+		} else {
+			data.PageHeroSize = heroSize
+		}
 	}
 
 	if enabled, err := settings.Get(r.Context(), h.Pool, settings.PasswordResetEnabled); err != nil {
@@ -820,9 +878,13 @@ type homeActivity struct {
 
 // maxHomeActivities caps how many recent Photo Album posts the homepage
 // previews — ListPublishedPublicForUnit returns every one, newest first,
-// but the homepage only has room for a handful before it should send
-// visitors to the full /gallery listing instead.
-const maxHomeActivities = 3
+// but the homepage only has room for a couple rows before it should send
+// visitors to the full /gallery listing instead. Set to fill exactly two
+// rows of the Recent Activities grid (see home.html): 2 columns on
+// desktop (sm: and up) × 2 rows = 4, 1 column on mobile × 2 rows shown = 2
+// (mobile hides the 3rd/4th via home.html's own responsive classes,
+// rather than fetching a different count per viewport).
+const maxHomeActivities = 4
 
 func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
@@ -885,12 +947,23 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	heroSize, err := content.HeroSizeForSlug(r.Context(), h.Pool, unit.ID, "home-hero-image")
+	if err != nil {
+		log.Printf("web: loading homepage hero size: %v", err)
+	}
+
+	// Wider than every other page's default max-w-4xl: Recent Activities'
+	// grid (up to 4 gallery previews, 2 per row) needs the extra room.
+	bd := h.base(r, "")
+	bd.MainWidthClass = "max-w-6xl"
+
 	data := struct {
 		baseData
 		Events              []calendar.Event
 		Activities          []homeActivity
 		Hero                string
 		HeroImageURL        string
+		HeroSize            string
 		ProgramItems        []string
 		ProgramImageURL     string
 		Meeting             string
@@ -900,11 +973,12 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		StorefrontName      string
 		StorefrontButtonURL string
 	}{
-		baseData:            h.base(r, ""),
+		baseData:            bd,
 		Events:              events,
 		Activities:          activities,
 		Hero:                text["home-hero"],
 		HeroImageURL:        text["home-hero-image"],
+		HeroSize:            heroSize,
 		ProgramItems:        programItems,
 		ProgramImageURL:     text["home-program-image"],
 		Meeting:             text["home-meeting"],
@@ -928,7 +1002,9 @@ type homeAdminRow struct {
 	Help        string
 	Kind        string // "" = textarea, "url" = single-line link input
 	Body        string
-	Saved       bool // false if a leader hasn't ever saved this section — the placeholder is what's showing live
+	Saved       bool   // false if a leader hasn't ever saved this section — the placeholder is what's showing live
+	IsHeroImage bool   // true for the homepage hero photo and every page hero banner — these get a Size selector alongside the URL field (see content.HeroSizeSlug); "Our Program"'s photo is "image"-kind too but isn't a hero, so stays plain
+	Size        string // content.HeroSize{Short,Medium,Tall}, already normalized; only meaningful when IsHeroImage
 }
 
 func (h *Handlers) HomeContentList(w http.ResponseWriter, r *http.Request) {
@@ -957,6 +1033,14 @@ func (h *Handlers) HomeContentList(w http.ResponseWriter, r *http.Request) {
 			row.Body = s.Body
 			row.Saved = true
 		}
+		if def.Slug == "home-hero-image" {
+			row.IsHeroImage = true
+			if size, err := content.HeroSizeForSlug(r.Context(), h.Pool, unit.ID, def.Slug); err != nil {
+				log.Printf("web: loading homepage hero size: %v", err)
+			} else {
+				row.Size = size
+			}
+		}
 		rows = append(rows, row)
 	}
 
@@ -967,10 +1051,15 @@ func (h *Handlers) HomeContentList(w http.ResponseWriter, r *http.Request) {
 	heroDefs := content.HeroSections()
 	heroRows := make([]homeAdminRow, 0, len(heroDefs))
 	for _, def := range heroDefs {
-		row := homeAdminRow{Slug: def.Slug, Label: def.Label, Placeholder: def.Placeholder, Help: def.Help, Kind: def.Kind}
+		row := homeAdminRow{Slug: def.Slug, Label: def.Label, Placeholder: def.Placeholder, Help: def.Help, Kind: def.Kind, IsHeroImage: true}
 		if s, ok := savedHero[def.Slug]; ok {
 			row.Body = s.Body
 			row.Saved = true
+		}
+		if size, err := content.HeroSizeForSlug(r.Context(), h.Pool, unit.ID, def.Slug); err != nil {
+			log.Printf("web: loading page hero banner size for %s: %v", def.Slug, err)
+		} else {
+			row.Size = size
 		}
 		heroRows = append(heroRows, row)
 	}
@@ -1024,11 +1113,13 @@ func (h *Handlers) HomeContentSave(w http.ResponseWriter, r *http.Request) {
 
 	slug := r.PathValue("slug")
 	var label string
+	var isHeroImage bool
 	valid := false
 	for _, def := range content.HomepageSections(unit.UnitType) {
 		if def.Slug == slug {
 			valid = true
 			label = def.Label
+			isHeroImage = slug == "home-hero-image"
 			break
 		}
 	}
@@ -1037,6 +1128,7 @@ func (h *Handlers) HomeContentSave(w http.ResponseWriter, r *http.Request) {
 			if def.Slug == slug {
 				valid = true
 				label = def.Label
+				isHeroImage = true
 				break
 			}
 		}
@@ -1061,6 +1153,17 @@ func (h *Handlers) HomeContentSave(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: saving homepage section: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+
+	// A hero image's size preset saves alongside its URL, as a sibling
+	// content_pages row — see content.HeroSizeSlug.
+	if isHeroImage {
+		size := content.NormalizeHeroSize(r.FormValue("size"))
+		if _, err := content.UpsertSection(r.Context(), h.Pool, unit.ID, content.HeroSizeSlug(slug), label+" size", size, actor.ID); err != nil {
+			log.Printf("web: saving hero size for %s: %v", slug, err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	http.Redirect(w, r, "/admin/home", http.StatusSeeOther)

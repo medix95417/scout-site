@@ -81,11 +81,30 @@
      below. Not meant to be called directly from a page template. */}}
 {{define "eventAccordionPickerStrip"}}
   {{if .Files}}
+    {{template "eventAccordionPickerPage" (dict "Slug" .Slug "Mode" .Mode "AppendTarget" .AppendTarget "CurrentURL" .CurrentURL "ShowPrivateBadge" .ShowPrivateBadge "Pages" (chunkFiles .Files 25))}}
+  {{end}}
+{{end}}
+
+{{/* eventAccordionPickerPage renders one 25-file page of thumbnails, then
+     — if more pages remain — a nested, closed-by-default "Show more"
+     <details> containing the next page, and so on recursively. A single
+     event with hundreds of photos still only ever renders (and, via
+     loading="lazy" plus the same closed-<details> deferral used for
+     event grouping itself, only ever loads) 25 thumbnails at a time,
+     rather than undoing the accordion's own lazy-loading benefit the
+     moment one event has a lot of photos.
+
+     Takes a dict with: Slug, Mode, AppendTarget, CurrentURL,
+     ShowPrivateBadge (all as eventAccordionPickerStrip), Pages
+     ([][]files.File — every remaining page, this one included). */}}
+{{define "eventAccordionPickerPage"}}
+  {{if .Pages}}
+    {{$pages := .Pages}}
     <div class="flex gap-2 overflow-x-auto pb-1" data-image-picker="{{.Slug}}"
          {{if eq .Mode "append"}}data-image-picker-mode="append" data-image-append-target="{{.AppendTarget}}"{{end}}>
       {{$current := .CurrentURL}}
       {{$showPrivate := .ShowPrivateBadge}}
-      {{range .Files}}
+      {{range index $pages 0}}
         {{$url := printf "/files/%s/download" .ID}}
         {{$isVideo := hasPrefix .ContentType "video/"}}
         <button type="button" class="flex-shrink-0 w-20 text-center relative" data-image-picker-option="{{$url}}" {{if $isVideo}}data-image-picker-kind="video"{{end}} title="{{.DisplayLabel}}">
@@ -100,6 +119,14 @@
         </button>
       {{end}}
     </div>
+    {{if gt (len $pages) 1}}
+      <details class="mt-1">
+        <summary class="cursor-pointer select-none text-xs" style="color: var(--unit-color);">Show more</summary>
+        <div class="mt-1">
+          {{template "eventAccordionPickerPage" (dict "Slug" .Slug "Mode" .Mode "AppendTarget" .AppendTarget "CurrentURL" .CurrentURL "ShowPrivateBadge" .ShowPrivateBadge "Pages" (slice $pages 1))}}
+        </div>
+      </details>
+    {{end}}
   {{end}}
 {{end}}
 
@@ -144,15 +171,59 @@
 {{end}}
 
 {{define "eventAccordionCheckboxGridRow"}}
-  {{$linked := .LinkedFileID}}
-  <div class="grid gap-2 sm:grid-cols-2">
-    {{range .Files}}
-      <label class="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="{{$.Name}}" value="{{.ID}}" {{if index $linked .ID}}checked{{end}}>
-        <img src="/files/{{.ID}}/download" alt="" loading="lazy" class="h-8 w-8 flex-shrink-0 object-cover rounded-md border border-gray-200">
-        <span class="truncate">{{.DisplayLabel}}</span>
-      </label>
+  {{if .Files}}
+    {{template "eventAccordionCheckboxGridPage" (dict "Name" .Name "LinkedFileID" .LinkedFileID "Pages" (chunkFiles .Files 25))}}
+  {{end}}
+{{end}}
+
+{{/* eventAccordionCheckboxGridPage is eventAccordionPickerPage's checkbox-
+     grid sibling — same "25 at a time, nested Show more" pagination,
+     checkbox rows instead of picker buttons.
+
+     Takes a dict with: Name, LinkedFileID (as eventAccordionCheckboxGrid),
+     Pages ([][]files.File — every remaining page, this one included). */}}
+{{define "eventAccordionCheckboxGridPage"}}
+  {{if .Pages}}
+    {{$pages := .Pages}}
+    {{$linked := .LinkedFileID}}
+    <div class="grid gap-2 sm:grid-cols-2">
+      {{range index $pages 0}}
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="{{$.Name}}" value="{{.ID}}" {{if index $linked .ID}}checked{{end}}>
+          <img src="/files/{{.ID}}/download" alt="" loading="lazy" class="h-8 w-8 flex-shrink-0 object-cover rounded-md border border-gray-200">
+          <span class="truncate">{{.DisplayLabel}}</span>
+        </label>
+      {{end}}
+    </div>
+    {{if gt (len $pages) 1}}
+      <details class="mt-1">
+        <summary class="cursor-pointer select-none text-xs" style="color: var(--unit-color);">Show more</summary>
+        <div class="mt-1">
+          {{template "eventAccordionCheckboxGridPage" (dict "Name" .Name "LinkedFileID" .LinkedFileID "Pages" (slice $pages 1))}}
+        </div>
+      </details>
     {{end}}
+  {{end}}
+{{end}}
+
+{{/* heroSizeSelect renders the Short/Medium/Tall banner-height dropdown
+     for a hero image (homepage hero, page hero banners, den/patrol hero)
+     — see content.HeroSize* and web.go's heroSizeClass/homeHeroSizeClass,
+     which turn the saved choice into the actual CSS. Submits alongside
+     the image URL field in the same form, so picking a photo and picking
+     its size save together in one click.
+
+     Takes a dict with:
+       Name     the <select>'s name attribute (e.g. "size", "hero_size")
+       Selected the currently saved value, already normalized */}}
+{{define "heroSizeSelect"}}
+  <div class="mt-2">
+    <label class="block text-xs font-medium text-gray-600 mb-1">Banner size</label>
+    <select name="{{.Name}}" class="rounded-md border border-gray-300 px-2 py-1 text-sm">
+      <option value="short" {{if eq .Selected "short"}}selected{{end}}>Short</option>
+      <option value="medium" {{if eq .Selected "medium"}}selected{{end}}>Medium (default)</option>
+      <option value="tall" {{if eq .Selected "tall"}}selected{{end}}>Tall</option>
+    </select>
   </div>
 {{end}}
 
