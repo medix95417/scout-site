@@ -20,6 +20,21 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Homepage: Recent Activities now shows up to 4 galleries side by side**
+(2 columns × 2 rows on desktop, 1 column × 2 rows — so 2 total — on
+mobile) instead of one stacked column, with the homepage's own content
+column widened to give the wider grid room; Upcoming Events keeps
+sitting beside it, just also a bit wider. Verified with a
+headless-browser check at both a mobile and a desktop viewport width
+that exactly 2 vs. 4 galleries are visible.
+
+**Hero banners (homepage hero, per-page hero banners, and den/patrol
+hero) now have a Short/Medium/Tall size selector** next to each image
+field, so a leader can pick a banner height that suits the actual photo
+instead of every hero being forced into the same fixed crop. Medium
+matches the original size, so nothing changes until a leader picks
+something else.
+
 **Photo pickers now page a busy event's photos 25 at a time.** The
 per-event accordion picker (below) already stopped loading every
 event's photos at once — this closes the remaining gap where a single

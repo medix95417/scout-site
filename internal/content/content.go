@@ -152,6 +152,64 @@ func HeroURLForPage(ctx context.Context, pool *pgxpool.Pool, unitID, pageKey str
 	return s.Body, nil
 }
 
+// Hero banner size presets — how tall an "image"-kind hero section
+// renders, so a leader can pick a size that suits the actual photo
+// they're using (a short wide banner photo vs. a tall one) instead of
+// every hero being forced into one fixed height. See internal/web's
+// heroSizeClass/homeHeroSizeClass for the Tailwind classes each maps to.
+const (
+	HeroSizeShort  = "short"
+	HeroSizeMedium = "medium" // default — today's original fixed size
+	HeroSizeTall   = "tall"
+)
+
+// heroSizeSlugSuffix is appended to an "image"-kind hero section's own
+// slug to get the slug its size preset is stored under — a sibling
+// content_pages row via the same generic Section CRUD, rather than a new
+// column, since it's just one more small leader-set value alongside the
+// image URL itself.
+const heroSizeSlugSuffix = "-size"
+
+// HeroSizeSlug is the sibling slug an "image"-kind hero section's size
+// preset is stored under (see heroSizeSlugSuffix).
+func HeroSizeSlug(imageSlug string) string {
+	return imageSlug + heroSizeSlugSuffix
+}
+
+// NormalizeHeroSize maps anything other than a recognized preset — most
+// commonly "" for a hero that predates this feature, or never explicitly
+// set — back to HeroSizeMedium, so a blank/bad value can't produce a
+// broken CSS class lookup.
+func NormalizeHeroSize(size string) string {
+	switch size {
+	case HeroSizeShort, HeroSizeTall:
+		return size
+	default:
+		return HeroSizeMedium
+	}
+}
+
+// HeroSizeForSlug returns the size preset for an "image"-kind hero
+// section, keyed by that section's own slug (e.g. "home-hero-image", or
+// heroSlugPrefix+pageKey for a per-page banner) — already normalized, so
+// a caller never has to handle "not set yet" itself.
+func HeroSizeForSlug(ctx context.Context, pool *pgxpool.Pool, unitID, imageSlug string) (string, error) {
+	s, found, err := GetSection(ctx, pool, unitID, HeroSizeSlug(imageSlug))
+	if err != nil {
+		return HeroSizeMedium, err
+	}
+	if !found {
+		return HeroSizeMedium, nil
+	}
+	return NormalizeHeroSize(s.Body), nil
+}
+
+// HeroSizeForPage returns the size preset for one page's hero banner
+// (see HeroPage.Key) — the size sibling of HeroURLForPage.
+func HeroSizeForPage(ctx context.Context, pool *pgxpool.Pool, unitID, pageKey string) (string, error) {
+	return HeroSizeForSlug(ctx, pool, unitID, heroSlugPrefix+pageKey)
+}
+
 // GetSection fetches one homepage section for a unit. Returns
 // (Section{}, false, nil) if it hasn't been created yet — callers should
 // fall back to the SectionDef placeholder, not treat this as an error.

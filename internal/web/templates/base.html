@@ -194,10 +194,10 @@
          a distinct field name from the homepage's own "HeroImageURL" (see
          web.go's baseData.PageHeroImageURL comment) so the two hero
          mechanisms never shadow one another. -->
-    <section class="w-full h-40 sm:h-56 bg-gray-200 bg-cover bg-center" style="background-image: url('{{.PageHeroImageURL}}');"></section>
+    <section class="w-full {{heroSizeClass .PageHeroSize}} bg-gray-200 bg-cover bg-center" style="background-image: url('{{.PageHeroImageURL}}');"></section>
   {{end}}
 
-  <main id="main-content" class="max-w-4xl mx-auto px-4 py-8">
+  <main id="main-content" class="{{if .MainWidthClass}}{{.MainWidthClass}}{{else}}max-w-4xl{{end}} mx-auto px-4 py-8">
     {{if .NeedsTwoFactorSetup}}
       <div class="mb-4 rounded-md bg-red-50 border border-red-300 px-4 py-2 text-red-900 text-sm flex items-center justify-between gap-3">
         <span>Your login can access unit funds — set up two-factor authentication to keep it secure.</span>

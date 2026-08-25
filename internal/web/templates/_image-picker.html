@@ -206,6 +206,27 @@
   {{end}}
 {{end}}
 
+{{/* heroSizeSelect renders the Short/Medium/Tall banner-height dropdown
+     for a hero image (homepage hero, page hero banners, den/patrol hero)
+     — see content.HeroSize* and web.go's heroSizeClass/homeHeroSizeClass,
+     which turn the saved choice into the actual CSS. Submits alongside
+     the image URL field in the same form, so picking a photo and picking
+     its size save together in one click.
+
+     Takes a dict with:
+       Name     the <select>'s name attribute (e.g. "size", "hero_size")
+       Selected the currently saved value, already normalized */}}
+{{define "heroSizeSelect"}}
+  <div class="mt-2">
+    <label class="block text-xs font-medium text-gray-600 mb-1">Banner size</label>
+    <select name="{{.Name}}" class="rounded-md border border-gray-300 px-2 py-1 text-sm">
+      <option value="short" {{if eq .Selected "short"}}selected{{end}}>Short</option>
+      <option value="medium" {{if eq .Selected "medium"}}selected{{end}}>Medium (default)</option>
+      <option value="tall" {{if eq .Selected "tall"}}selected{{end}}>Tall</option>
+    </select>
+  </div>
+{{end}}
+
 {{/* photoCarousel renders a scrollable, snap-to-photo carousel — the
      public-facing counterpart to the multi-select pickers above. Used
      wherever more than one photo can be chosen for one spot (a Gallery

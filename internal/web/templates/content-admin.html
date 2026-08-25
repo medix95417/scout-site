@@ -41,6 +41,7 @@
               data-image-url-input="{{.Slug}}"
             >
             {{template "eventAccordionPicker" (dict "Slug" .Slug "Groups" $.PublicImageGroups "Ungrouped" $.PublicImagesUngrouped "CurrentURL" .Body)}}
+            {{if .IsHeroImage}}{{template "heroSizeSelect" (dict "Name" "size" "Selected" .Size)}}{{end}}
           {{else if eq .Kind "images"}}
             <textarea
               id="gallery-body-{{.Slug}}"
@@ -101,6 +102,7 @@
             data-image-url-input="{{.Slug}}"
           >
           {{template "eventAccordionPicker" (dict "Slug" .Slug "Groups" $.PublicImageGroups "Ungrouped" $.PublicImagesUngrouped "CurrentURL" .Body)}}
+          {{template "heroSizeSelect" (dict "Name" "size" "Selected" .Size)}}
           <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
             Save
           </button>

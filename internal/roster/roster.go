@@ -151,6 +151,7 @@ type SubGroup struct {
 	Type         string // "den" | "patrol"
 	Description  string // shown on the sub-group's own members-only page — see migration 0017
 	HeroImageURL string // this den's/patrol's own hero banner, distinct from content.HeroPages' unit-wide per-page banners — see migration 0031
+	HeroSize     string // content.HeroSize{Short,Medium,Tall} — see migration 0034; raw/unnormalized, same as content.Section.Body for a homepage/page hero's size — callers should run it through content.NormalizeHeroSize
 }
 
 // SubGroupsForUnit lists every den/patrol in a unit, for populating
@@ -159,7 +160,7 @@ type SubGroup struct {
 // the actual write-time restriction happens in Scope.CanManageSubGroup.
 func SubGroupsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]SubGroup, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, unit_id, name, sub_group_type::text, COALESCE(description, ''), COALESCE(hero_image_url, '')
+		SELECT id, unit_id, name, sub_group_type::text, COALESCE(description, ''), COALESCE(hero_image_url, ''), hero_size
 		FROM sub_groups
 		WHERE unit_id = $1
 		ORDER BY name
@@ -172,7 +173,7 @@ func SubGroupsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([
 	var groups []SubGroup
 	for rows.Next() {
 		var g SubGroup
-		if err := rows.Scan(&g.ID, &g.UnitID, &g.Name, &g.Type, &g.Description, &g.HeroImageURL); err != nil {
+		if err := rows.Scan(&g.ID, &g.UnitID, &g.Name, &g.Type, &g.Description, &g.HeroImageURL, &g.HeroSize); err != nil {
 			return nil, err
 		}
 		groups = append(groups, g)
@@ -185,20 +186,20 @@ func SubGroupsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([
 func GetSubGroup(ctx context.Context, pool *pgxpool.Pool, subGroupID, unitID string) (SubGroup, bool, error) {
 	var g SubGroup
 	err := pool.QueryRow(ctx, `
-		SELECT id, unit_id, name, sub_group_type::text, COALESCE(description, ''), COALESCE(hero_image_url, '')
+		SELECT id, unit_id, name, sub_group_type::text, COALESCE(description, ''), COALESCE(hero_image_url, ''), hero_size
 		FROM sub_groups WHERE id = $1 AND unit_id = $2
-	`, subGroupID, unitID).Scan(&g.ID, &g.UnitID, &g.Name, &g.Type, &g.Description, &g.HeroImageURL)
+	`, subGroupID, unitID).Scan(&g.ID, &g.UnitID, &g.Name, &g.Type, &g.Description, &g.HeroImageURL, &g.HeroSize)
 	if err != nil {
 		return SubGroup{}, false, nil //nolint:nilerr // "no such sub-group in this unit" is a normal, expected outcome
 	}
 	return g, true, nil
 }
 
-// UpdateSubGroupPage sets a patrol's/den's own-page blurb and hero banner
-// image together — one form, one save. Callers are responsible for
-// checking Scope.CanManageSubGroup first — a Den Leader may edit their
-// own den's page, not another den's.
-func UpdateSubGroupPage(ctx context.Context, pool *pgxpool.Pool, subGroupID, unitID, description, heroImageURL, actorID string) error {
+// UpdateSubGroupPage sets a patrol's/den's own-page blurb, hero banner
+// image, and hero size together — one form, one save. Callers are
+// responsible for checking Scope.CanManageSubGroup first — a Den Leader
+// may edit their own den's page, not another den's.
+func UpdateSubGroupPage(ctx context.Context, pool *pgxpool.Pool, subGroupID, unitID, description, heroImageURL, heroSize, actorID string) error {
 	before, found, err := GetSubGroup(ctx, pool, subGroupID, unitID)
 	if err != nil {
 		return err
@@ -208,14 +209,15 @@ func UpdateSubGroupPage(ctx context.Context, pool *pgxpool.Pool, subGroupID, uni
 	}
 
 	if _, err := pool.Exec(ctx, `
-		UPDATE sub_groups SET description = $1, hero_image_url = NULLIF($2, '') WHERE id = $3 AND unit_id = $4
-	`, description, heroImageURL, subGroupID, unitID); err != nil {
+		UPDATE sub_groups SET description = $1, hero_image_url = NULLIF($2, ''), hero_size = $3 WHERE id = $4 AND unit_id = $5
+	`, description, heroImageURL, heroSize, subGroupID, unitID); err != nil {
 		return err
 	}
 
 	after := before
 	after.Description = description
 	after.HeroImageURL = heroImageURL
+	after.HeroSize = heroSize
 	audit.Log(ctx, pool, audit.Entry{
 		EntityType: "sub_group",
 		EntityID:   subGroupID,
