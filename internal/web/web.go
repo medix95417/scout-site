@@ -886,12 +886,21 @@ type homeActivity struct {
 // rather than fetching a different count per viewport).
 const maxHomeActivities = 4
 
+// maxHomeEvents caps how many upcoming events the homepage's "Upcoming
+// Events" list shows — ListUpcomingPublicForUnit returns every one from
+// today forward, but the homepage is a preview, not the full calendar;
+// send visitors to /calendar itself for anything beyond the next few.
+const maxHomeEvents = 5
+
 func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
 	_, loggedIn := auth.UserFromContext(r.Context())
 	events, err := calendar.ListUpcomingPublicForUnit(r.Context(), h.Pool, unit.ID)
 	if err != nil {
 		log.Printf("web: listing public events: %v", err)
+	}
+	if len(events) > maxHomeEvents {
+		events = events[:maxHomeEvents]
 	}
 
 	saved, err := content.SectionsForUnit(r.Context(), h.Pool, unit.ID)

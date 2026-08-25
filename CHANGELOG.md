@@ -20,6 +20,11 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Homepage: Upcoming Events now caps at the next 5** instead of showing
+every upcoming public event — the homepage is a preview, not the full
+calendar; "View full calendar" already links to `/calendar` for anyone
+who wants to see further out.
+
 **Homepage: Recent Activities now shows up to 4 galleries side by side**
 (2 columns × 2 rows on desktop, 1 column × 2 rows — so 2 total — on
 mobile) instead of one stacked column, with the homepage's own content
