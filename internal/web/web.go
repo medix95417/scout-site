@@ -136,6 +136,24 @@ var templateFuncs = template.FuncMap{
 	"hasPrefix":     strings.HasPrefix,
 	"dict":          templateDict,
 	"galleryPhotos": templateGalleryPhotos,
+	"chunkFiles":    chunkFiles,
+}
+
+// chunkFiles splits fs into pages of at most size files each — the "show
+// 25 at a time" pagination behind eventAccordionPickerStrip and
+// eventAccordionCheckboxGridRow (see _image-picker.html): an event with
+// hundreds of photos only ever renders one page's worth of thumbnails
+// until a leader clicks "Show more" for the next, keeping a single very
+// full event from undoing the accordion's own lazy-loading benefit.
+func chunkFiles(fs []files.File, size int) [][]files.File {
+	if size <= 0 || len(fs) == 0 {
+		return nil
+	}
+	var chunks [][]files.File
+	for size < len(fs) {
+		fs, chunks = fs[size:], append(chunks, fs[:size:size])
+	}
+	return append(chunks, fs)
 }
 
 // templateGalleryPhotos parses a Kind:"images" section's saved body (or,
