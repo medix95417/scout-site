@@ -2,6 +2,8 @@ package web
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -9,9 +11,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/calendar"
 	"github.com/47-yonkers/scout-site/internal/files"
+	"github.com/47-yonkers/scout-site/internal/storage"
 	"github.com/47-yonkers/scout-site/internal/thumbnail"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
@@ -86,13 +91,17 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 		return row
 	}
 
-	// Filtering to one or more events switches the page from its ordinary
-	// flat, most-recent-first list to grouping by event instead — so
-	// files from the same campout read together rather than scattered
-	// through upload order. No filter selected (the common case) keeps
-	// the flat list exactly as it's always been.
+	// Every file is grouped by event, accordion-style, whether or not a
+	// leader has narrowed things down with the filter below — a flat,
+	// unpaginated list of every file in the unit got hard to use once
+	// there were more than a handful, the same problem the photo pickers
+	// solved with eventAccordionPicker (see _image-picker.html). Checking
+	// specific events in the filter just narrows which groups show, via
+	// ListForUnitGroupedByEvents instead of the auto-grouped
+	// ListForUnitGroupedByEventAuto — files with no event link have
+	// nowhere to go in that filtered view, so there's no "ungrouped"
+	// group there the way there is by default.
 	selectedEventIDs := r.URL.Query()["event_id"]
-	var rows []fileRow
 	var groups []eventFileGroupView
 	if len(selectedEventIDs) > 0 {
 		fileGroups, err := files.ListForUnitGroupedByEvents(r.Context(), h.Pool, unit.ID, selectedEventIDs)
@@ -110,15 +119,26 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 			groups = append(groups, eventFileGroupView{EventID: g.EventID, EventTitle: g.EventTitle, Files: groupRows})
 		}
 	} else {
-		all, err := files.ListForUnit(r.Context(), h.Pool, unit.ID)
+		fileGroups, ungrouped, err := files.ListForUnitGroupedByEventAuto(r.Context(), h.Pool, unit.ID)
 		if err != nil {
-			log.Printf("web: listing files: %v", err)
+			log.Printf("web: listing files grouped by event: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		rows = make([]fileRow, 0, len(all))
-		for _, f := range all {
-			rows = append(rows, decorate(f))
+		groups = make([]eventFileGroupView, 0, len(fileGroups)+1)
+		for _, g := range fileGroups {
+			groupRows := make([]fileRow, 0, len(g.Files))
+			for _, f := range g.Files {
+				groupRows = append(groupRows, decorate(f))
+			}
+			groups = append(groups, eventFileGroupView{EventID: g.EventID, EventTitle: g.EventTitle, Files: groupRows})
+		}
+		if len(ungrouped) > 0 {
+			ungroupedRows := make([]fileRow, 0, len(ungrouped))
+			for _, f := range ungrouped {
+				ungroupedRows = append(ungroupedRows, decorate(f))
+			}
+			groups = append(groups, eventFileGroupView{EventTitle: "Not linked to an event", Files: ungroupedRows})
 		}
 	}
 
@@ -129,7 +149,6 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 
 	data := struct {
 		baseData
-		Files             []fileRow
 		EventGroups       []eventFileGroupView
 		GroupedByEvent    bool
 		Events            []calendar.Event
@@ -138,7 +157,6 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 		StorageConfigured bool
 	}{
 		baseData:          h.base(r, "Files"),
-		Files:             rows,
 		EventGroups:       groups,
 		GroupedByEvent:    len(selectedEventIDs) > 0,
 		Events:            events,
@@ -237,18 +255,44 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
+		// Read fully into memory (capped at maxUploadFileSize, so bounded)
+		// rather than streaming straight from src to storage — an image
+		// needs its bytes a second time right below, to generate its
+		// thumbnail eagerly, and re-reading from storage right after
+		// writing to it would be a wasted round trip for no reason.
+		data, err := io.ReadAll(src)
+		src.Close()
+		if err != nil {
+			log.Printf("web: reading uploaded file: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 
 		contentType := fh.Header.Get("Content-Type")
 		if contentType == "" {
 			contentType = "application/octet-stream"
 		}
 		key := files.NewStorageKey(unit.ID, fh.Filename)
-		err = h.Storage.Put(r.Context(), key, src, fh.Size, contentType)
-		src.Close()
-		if err != nil {
+		if err := h.Storage.Put(r.Context(), key, bytes.NewReader(data), int64(len(data)), contentType); err != nil {
 			log.Printf("web: uploading file to storage: %v", err)
 			http.Error(w, "internal error saving the file", http.StatusInternalServerError)
 			return
+		}
+
+		// Generated now, while the leader is already waiting on the
+		// upload to finish, rather than the first time anyone views this
+		// photo's thumbnail — see FileThumbnail's doc comment for why
+		// that used to mean a visitor's page load could trigger a
+		// real-time image resize. Not fatal on its own: a failure here
+		// just leaves FileThumbnail's on-demand fallback to cover it
+		// later, the same as it does for every photo uploaded before
+		// this existed.
+		if strings.HasPrefix(contentType, "image/") {
+			if thumb, err := thumbnail.Generate(data); err != nil {
+				log.Printf("web: generating thumbnail for uploaded file %q: %v", fh.Filename, err)
+			} else if err := h.Storage.Put(r.Context(), key+thumbStorageSuffix, bytes.NewReader(thumb), int64(len(thumb)), "image/jpeg"); err != nil {
+				log.Printf("web: caching thumbnail for uploaded file %q: %v", fh.Filename, err)
+			}
 		}
 
 		displayName := baseName
@@ -414,40 +458,103 @@ func (h *Handlers) FileThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orig, err := h.Storage.Get(r.Context(), f.StorageKey)
+	// A cache miss here means this photo predates eager generation at
+	// upload time (see FileUpload) — an older upload, or one from before
+	// this feature existed at all. Falls back to serving the original
+	// bytes for anything thumbnail.Generate can't decode, so the request
+	// still returns something usable instead of a broken image.
+	thumb, src, err := fetchAndCacheThumbnail(r.Context(), h.Storage, f.StorageKey)
 	if err != nil {
-		log.Printf("web: fetching file from storage for thumbnail: %v", err)
+		if errors.Is(err, thumbnail.ErrNotAnImage) {
+			w.Header().Set("Content-Type", f.ContentType)
+			w.Write(src)
+			return
+		}
+		log.Printf("web: generating thumbnail on demand for %s: %v", f.ID, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
-	}
-	src, err := io.ReadAll(orig)
-	orig.Close()
-	if err != nil {
-		log.Printf("web: reading file for thumbnail: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
-	thumb, err := thumbnail.Generate(src)
-	if err != nil {
-		// Not a resizable image (or a decode error) — serve the original
-		// bytes so the request still returns something usable instead of
-		// a broken image.
-		w.Header().Set("Content-Type", f.ContentType)
-		w.Write(src)
-		return
-	}
-
-	if err := h.Storage.Put(r.Context(), thumbKey, bytes.NewReader(thumb), int64(len(thumb)), "image/jpeg"); err != nil {
-		// The visitor shouldn't pay for a storage hiccup — still serve
-		// what was just generated even though caching it failed; the
-		// next request will just regenerate it again.
-		log.Printf("web: caching generated thumbnail: %v", err)
 	}
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "private, max-age=604800")
 	w.Write(thumb)
+}
+
+// fetchAndCacheThumbnail fetches storageKey's bytes from store,
+// generates its thumbnail, and caches the result under its derived key
+// (thumbStorageSuffix) — the shared "no local copy of the bytes already
+// in hand" path used by both FileThumbnail's on-demand fallback and
+// BackfillThumbnails' explicit one-time catch-up run (FileUpload's own
+// eager generation skips this entirely, since it already has the
+// uploaded bytes in memory and would otherwise be paying for a pointless
+// round trip back to storage for what it just wrote).
+//
+// On a thumbnail.ErrNotAnImage decode failure, src is still returned
+// (the original bytes, already fetched) so a caller like FileThumbnail
+// can fall back to serving them without a second fetch; on any other
+// error src is nil, since fetching or caching failed outright.
+func fetchAndCacheThumbnail(ctx context.Context, store *storage.Store, storageKey string) (thumb, src []byte, err error) {
+	orig, err := store.Get(ctx, storageKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	src, err = io.ReadAll(orig)
+	orig.Close()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	thumb, err = thumbnail.Generate(src)
+	if err != nil {
+		return nil, src, err
+	}
+
+	if err := store.Put(ctx, storageKey+thumbStorageSuffix, bytes.NewReader(thumb), int64(len(thumb)), "image/jpeg"); err != nil {
+		return nil, src, err
+	}
+	return thumb, src, nil
+}
+
+// BackfillResult tallies what BackfillThumbnails did across every image
+// file it looked at.
+type BackfillResult struct {
+	Generated int // no cached thumbnail existed yet — generated and cached one now
+	Skipped   int // already had a cached thumbnail — left untouched
+	Failed    int // couldn't fetch, decode, or cache — logged and moved on
+}
+
+// BackfillThumbnails walks every image file across every unit and
+// generates its cached thumbnail if one doesn't already exist — the
+// one-time, explicitly-run counterpart to FileThumbnail's on-demand
+// fallback, for an operator who wants every already-uploaded photo's
+// thumbnail ready ahead of time rather than leaving each one to be
+// generated whenever it's first viewed. Run via
+// `server -backfill-thumbnails` (see cmd/server/main.go); safe to
+// re-run, since an already-cached thumbnail is left untouched. A single
+// file's failure (a missing/corrupt original, a storage hiccup) is
+// logged and counted, not fatal to the rest of the run.
+func BackfillThumbnails(ctx context.Context, pool *pgxpool.Pool, store *storage.Store) (BackfillResult, error) {
+	var result BackfillResult
+
+	all, err := files.ListAllImageFiles(ctx, pool)
+	if err != nil {
+		return result, err
+	}
+
+	for _, f := range all {
+		if cached, err := store.Get(ctx, f.StorageKey+thumbStorageSuffix); err == nil {
+			cached.Close()
+			result.Skipped++
+			continue
+		}
+		if _, _, err := fetchAndCacheThumbnail(ctx, store, f.StorageKey); err != nil {
+			log.Printf("web: backfill: %s (%s): %v", f.ID, f.Filename, err)
+			result.Failed++
+			continue
+		}
+		result.Generated++
+	}
+	return result, nil
 }
 
 func (h *Handlers) FileDelete(w http.ResponseWriter, r *http.Request) {

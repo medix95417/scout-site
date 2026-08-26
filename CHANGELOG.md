@@ -20,6 +20,30 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**The Files page now groups by event in a paginated accordion, same as
+the photo pickers.** It used to render every file in the library flat
+and all at once (or, with an event filter checked, grouped but still
+unpaginated) — slow to open once a unit had built up a large library.
+Now it's always grouped by event (files with no event link land in
+their own "Not linked to an event" group), each group collapsed by
+default and showing at most 25 files at a time with a "Show 25 more" to
+reveal the next batch, mirroring the accordion picker's own lazy-loading
+behavior. Checking specific events in the existing filter still narrows
+which groups show.
+
+**Thumbnails are now generated at upload time, not on first view.**
+Previously a photo's thumbnail was generated the first time anyone
+requested it — usually fine, but it meant the very first page load to
+show a freshly-uploaded batch of photos (or the Files page immediately
+after enabling this feature) could trigger a burst of real-time image
+resizing all at once. Uploading an image now generates and caches its
+thumbnail immediately, while the leader is already waiting on the
+upload to finish, so viewing it later never has to. A new
+`-backfill-thumbnails` command (safe to re-run, skips anything already
+cached) generates thumbnails for photos uploaded before this existed —
+see DEPLOY.md's "Ongoing operations." The on-demand fallback still
+exists as a safety net for anything the backfill hasn't gotten to yet.
+
 **Leader photos can now have their crop position adjusted.** The Our
 Leaders page fills a fixed-size card with each photo (`object-cover`),
 cropping whatever doesn't fit — a portrait headshot in a wide card could

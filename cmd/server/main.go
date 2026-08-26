@@ -9,6 +9,7 @@
 //	server -seed-demo            insert a full set of test logins/activity data (one per role), then exit — see DEMO_DATA.md
 //	server -send-event-reminders email RSVP'd members of soon-starting events, then exit (run via cron)
 //	server -grant-role           grant an existing user a role in a unit, then exit (see DEPLOY.md "Adding a unit later")
+//	server -backfill-thumbnails  generate a cached thumbnail for every image file that doesn't already have one, then exit (safe to re-run)
 package main
 
 import (
@@ -43,6 +44,7 @@ func main() {
 	bootstrapAdmin := flag.Bool("bootstrap-admin", false, "create the first super-admin login from ADMIN_EMAIL/ADMIN_PASSWORD/ADMIN_FIRST_NAME/ADMIN_LAST_NAME env vars, then exit")
 	sendEventReminders := flag.Bool("send-event-reminders", false, "email everyone RSVP'd yes/maybe to an event starting within REMINDER_WINDOW_HOURS (default 24), then exit — meant to be run periodically via cron, see DEPLOY.md")
 	grantRole := flag.Bool("grant-role", false, "grant an existing user (GRANT_EMAIL) a role (GRANT_ROLE) in a unit (GRANT_UNIT_SLUG) and exit — for giving an already-existing account a foothold in a unit -bootstrap-admin didn't reach, e.g. one added after -bootstrap-admin first ran")
+	backfillThumbnails := flag.Bool("backfill-thumbnails", false, "generate a cached thumbnail for every image file that doesn't already have one, then exit — new uploads get one automatically, so this only needs to run once for files uploaded before that existed (safe to re-run)")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -168,6 +170,18 @@ func main() {
 		store = nil
 	} else if store == nil {
 		log.Println("file storage is not configured (no S3_ENDPOINT environment variable) — the file library and event photos will report a clear error instead of failing to start")
+	}
+
+	if *backfillThumbnails {
+		if store == nil {
+			log.Fatal("backfill-thumbnails: file storage isn't configured (see S3_ENDPOINT above) — nothing to back fill")
+		}
+		result, err := web.BackfillThumbnails(ctx, pool, store)
+		if err != nil {
+			log.Fatalf("backfill-thumbnails: %v", err)
+		}
+		log.Printf("backfill-thumbnails: generated %d, skipped %d (already cached), failed %d", result.Generated, result.Skipped, result.Failed)
+		return
 	}
 
 	handlers, err := web.New(pool, cfg.CookieDomain, secureCookie, mail, store)

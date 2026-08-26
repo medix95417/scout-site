@@ -285,6 +285,19 @@ instance, your cloud provider's own backup/versioning tools, etc.), so
 there's no one command to give here. Same rule applies regardless: don't
 rely on a single copy with no offsite backup.
 
+**Thumbnail backfill** — every new upload generates its own small resized
+thumbnail automatically, so this is a one-time, optional step: run
+`-backfill-thumbnails` once to pre-generate thumbnails for photos
+uploaded before that existed, so the first visitor to view one of them
+isn't the one paying for the resize. Safe to re-run (an already-cached
+thumbnail is left alone) and safe to skip entirely — anything it hasn't
+gotten to yet still gets a thumbnail the first time it's actually
+viewed, same as before this flag existed.
+
+```bash
+docker compose run --rm app -backfill-thumbnails
+```
+
 **Event reminder emails** — if you've configured `SMTP_HOST` (step 5),
 reminder emails don't send themselves; something needs to run the
 `-send-event-reminders` command periodically. It's safe to run as often

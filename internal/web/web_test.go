@@ -75,3 +75,26 @@ func sizes(pages [][]files.File) []int {
 	}
 	return out
 }
+
+func TestChunkFileRows(t *testing.T) {
+	mk := func(n int) []fileRow {
+		out := make([]fileRow, n)
+		for i := range out {
+			out[i] = fileRow{File: files.File{ID: string(rune('a' + i))}}
+		}
+		return out
+	}
+
+	t.Run("empty", func(t *testing.T) {
+		if got := chunkFileRows(nil, 25); got != nil {
+			t.Fatalf("got %v, want nil", got)
+		}
+	})
+
+	t.Run("remainder page", func(t *testing.T) {
+		got := chunkFileRows(mk(60), 25)
+		if len(got) != 3 || len(got[0]) != 25 || len(got[1]) != 25 || len(got[2]) != 10 {
+			t.Fatalf("got %d pages, want 25/25/10", len(got))
+		}
+	})
+}

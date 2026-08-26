@@ -140,6 +140,7 @@ var templateFuncs = template.FuncMap{
 	"dict":              templateDict,
 	"galleryPhotos":     templateGalleryPhotos,
 	"chunkFiles":        chunkFiles,
+	"chunkFileRows":     chunkFileRows,
 	"heroSizeClass":     heroSizeClass,
 	"homeHeroSizeClass": homeHeroSizeClass,
 	"thumbURL":          thumbURL,
@@ -226,6 +227,23 @@ func chunkFiles(fs []files.File, size int) [][]files.File {
 		return nil
 	}
 	var chunks [][]files.File
+	for size < len(fs) {
+		fs, chunks = fs[size:], append(chunks, fs[:size:size])
+	}
+	return append(chunks, fs)
+}
+
+// chunkFileRows is chunkFiles' sibling for []fileRow — the file
+// library's own "show 25 at a time" pagination within each of its
+// event-grouped accordions (see files.html's fileLibraryGroup), since a
+// fileRow (a decorated files.File, with its own management controls) is
+// a different type from the bare files.File the photo pickers page
+// through.
+func chunkFileRows(fs []fileRow, size int) [][]fileRow {
+	if size <= 0 || len(fs) == 0 {
+		return nil
+	}
+	var chunks [][]fileRow
 	for size < len(fs) {
 		fs, chunks = fs[size:], append(chunks, fs[:size:size])
 	}

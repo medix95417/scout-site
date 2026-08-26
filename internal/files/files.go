@@ -132,6 +132,32 @@ func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]File
 	return out, rows.Err()
 }
 
+// ListAllImageFiles returns every image file across every unit — the
+// only listing function in this package deliberately NOT scoped to one
+// unit, since it exists solely for `server -backfill-thumbnails` (see
+// cmd/server/main.go and web.BackfillThumbnails), a one-time
+// operator-run maintenance pass, not anything reachable over HTTP.
+func ListAllImageFiles(ctx context.Context, pool *pgxpool.Pool) ([]File, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, unit_id, filename, display_name, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
+		FROM files WHERE content_type LIKE 'image/%' ORDER BY created_at
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []File
+	for rows.Next() {
+		var f File
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
 // Get looks up a single file, scoped to a unit — same "scope every lookup
 // to the requester's unit" guard as calendar.GetEvent, so a file ID
 // guessed/leaked from one unit can't be fetched or deleted through the
@@ -271,6 +297,54 @@ func ListEventPhotoGroupsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID
 		groups[i].Files = append(groups[i].Files, f)
 	}
 	return groups, rows.Err()
+}
+
+// ListForUnitGroupedByEventAuto groups every one of a unit's files — any
+// content type, general documents alongside photos and videos — by the
+// event(s) it's linked to, the same automatic-grouping shape as
+// ListImageFilesGroupedByEvent/ListMediaFilesGroupedByEvent: what
+// /files shows by default now instead of one flat, ungrouped list, so
+// files from the same campout read together even without a leader
+// manually filtering to that event first. A file linked to more than
+// one event appears once per group; a file with no event link at all
+// comes back in ungrouped instead of being dropped. Not filtered by
+// is_public — the file library is a members-only management view that
+// already shows every file regardless.
+func ListForUnitGroupedByEventAuto(ctx context.Context, pool *pgxpool.Pool, unitID string) (groups []EventFileGroup, ungrouped []File, err error) {
+	rows, err := pool.Query(ctx, `
+		SELECT f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at, f.is_public,
+		       COALESCE(e.id::text, ''), COALESCE(e.title, '')
+		FROM files f
+		LEFT JOIN event_files ef ON ef.file_id = f.id
+		LEFT JOIN events e ON e.id = ef.event_id
+		WHERE f.unit_id = $1
+		ORDER BY (e.starts_at IS NULL), e.starts_at DESC, f.created_at DESC
+	`, unitID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	index := map[string]int{}
+	for rows.Next() {
+		var f File
+		var eventID, eventTitle string
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public, &eventID, &eventTitle); err != nil {
+			return nil, nil, err
+		}
+		if eventID == "" {
+			ungrouped = append(ungrouped, f)
+			continue
+		}
+		i, ok := index[eventID]
+		if !ok {
+			i = len(groups)
+			index[eventID] = i
+			groups = append(groups, EventFileGroup{EventID: eventID, EventTitle: eventTitle})
+		}
+		groups[i].Files = append(groups[i].Files, f)
+	}
+	return groups, ungrouped, rows.Err()
 }
 
 // PublicFileIDSet returns the subset of fileIDs (scoped to unitID) that are
