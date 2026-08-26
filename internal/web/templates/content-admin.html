@@ -23,7 +23,7 @@
           {{end}}
         {{end}}
         {{if and (eq .Kind "image") (or .Body .Placeholder)}}
-          <img src="{{if .Body}}{{.Body}}{{else}}{{.Placeholder}}{{end}}" alt=""
+          <img src="{{if .Body}}{{thumbURL .Body}}{{else}}{{.Placeholder}}{{end}}" alt=""
                class="mb-2 h-28 w-full max-w-xs rounded-md border border-gray-200 object-cover">
         {{end}}
         {{if eq .Kind "images"}}
@@ -88,7 +88,7 @@
         <h2 class="text-lg font-semibold mb-1">{{.Label}}</h2>
         {{if .Help}}<p class="text-xs text-gray-500 mb-2">{{.Help}}</p>{{end}}
         {{if .Body}}
-          <img src="{{.Body}}" alt=""
+          <img src="{{thumbURL .Body}}" alt=""
                class="mb-2 h-28 w-full max-w-xs rounded-md border border-gray-200 object-cover">
         {{end}}
         <form method="post" action="/admin/home/{{.Slug}}" class="space-y-2">

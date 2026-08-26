@@ -6,7 +6,7 @@
       {{range .Leaders}}
         <div class="rounded-lg border border-gray-200 bg-white overflow-hidden">
           {{if .PhotoURL}}
-            <img src="{{.PhotoURL}}" alt="{{.Name}}" class="h-48 w-full object-cover">
+            <img src="{{thumbURL .PhotoURL}}" alt="{{.Name}}" class="h-48 w-full object-cover">
           {{else}}
             <div class="h-48 w-full bg-gray-100"></div>
           {{end}}

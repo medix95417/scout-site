@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"io"
 	"log"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/calendar"
 	"github.com/47-yonkers/scout-site/internal/files"
+	"github.com/47-yonkers/scout-site/internal/thumbnail"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
 
@@ -350,6 +352,94 @@ func (h *Handlers) FileDownload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// thumbStorageSuffix is appended to a file's own storage key to derive
+// the key its generated thumbnail is cached under (see FileThumbnail) —
+// derived rather than stored in its own DB column so every existing
+// file, uploaded before this feature existed, gets a thumbnail the
+// first time one is requested with no backfill step needed.
+const thumbStorageSuffix = ".thumb.jpg"
+
+// FileThumbnail serves a small, resized JPEG preview of an image file —
+// generated once on first request and cached back into storage under a
+// derived key so replaying the same photo (a homepage carousel cycling
+// through it again, another visitor) doesn't pay the resize cost twice.
+// Falls back to streaming the original bytes unchanged for anything
+// thumbnail.Generate can't decode (a non-image file that ended up
+// pointed at this URL, or an image format it doesn't handle) — a
+// full-size fallback beats a broken image.
+//
+// Same access check as FileDownload (public flag / login) since this is
+// the same underlying file's content, just resized.
+func (h *Handlers) FileThumbnail(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	if h.Storage == nil {
+		http.Error(w, storageUnavailableMsg, http.StatusServiceUnavailable)
+		return
+	}
+
+	f, found, err := files.Get(r.Context(), h.Pool, r.PathValue("id"), unit.ID)
+	if err != nil {
+		log.Printf("web: loading file for thumbnail: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+	_, loggedIn := auth.UserFromContext(r.Context())
+	if requiresLoginToDownload(f, loggedIn) {
+		http.Redirect(w, r, "/login?next=/files", http.StatusSeeOther)
+		return
+	}
+
+	thumbKey := f.StorageKey + thumbStorageSuffix
+	if cached, err := h.Storage.Get(r.Context(), thumbKey); err == nil {
+		defer cached.Close()
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Cache-Control", "private, max-age=604800")
+		if _, err := io.Copy(w, cached); err != nil {
+			log.Printf("web: streaming cached thumbnail: %v", err)
+		}
+		return
+	}
+
+	orig, err := h.Storage.Get(r.Context(), f.StorageKey)
+	if err != nil {
+		log.Printf("web: fetching file from storage for thumbnail: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	src, err := io.ReadAll(orig)
+	orig.Close()
+	if err != nil {
+		log.Printf("web: reading file for thumbnail: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	thumb, err := thumbnail.Generate(src)
+	if err != nil {
+		// Not a resizable image (or a decode error) — serve the original
+		// bytes so the request still returns something usable instead of
+		// a broken image.
+		w.Header().Set("Content-Type", f.ContentType)
+		w.Write(src)
+		return
+	}
+
+	if err := h.Storage.Put(r.Context(), thumbKey, bytes.NewReader(thumb), int64(len(thumb)), "image/jpeg"); err != nil {
+		// The visitor shouldn't pay for a storage hiccup — still serve
+		// what was just generated even though caching it failed; the
+		// next request will just regenerate it again.
+		log.Printf("web: caching generated thumbnail: %v", err)
+	}
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "private, max-age=604800")
+	w.Write(thumb)
+}
+
 func (h *Handlers) FileDelete(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
@@ -388,6 +478,12 @@ func (h *Handlers) FileDelete(w http.ResponseWriter, r *http.Request) {
 			// rather than surfaced as a failure the leader can't do
 			// anything about.
 			log.Printf("web: deleting file object from storage: %v", err)
+		}
+		// Best-effort: only exists if a thumbnail was ever generated for
+		// this file (see FileThumbnail) — Delete on a missing key is a
+		// no-op, not an error (see storage.Store.Delete).
+		if err := h.Storage.Delete(r.Context(), f.StorageKey+thumbStorageSuffix); err != nil {
+			log.Printf("web: deleting cached thumbnail: %v", err)
 		}
 	}
 

@@ -141,6 +141,28 @@ var templateFuncs = template.FuncMap{
 	"chunkFiles":        chunkFiles,
 	"heroSizeClass":     heroSizeClass,
 	"homeHeroSizeClass": homeHeroSizeClass,
+	"thumbURL":          thumbURL,
+}
+
+// thumbURL rewrites one of this app's own /files/{id}/download URLs to
+// its small, resized preview counterpart (see Handlers.FileThumbnail) —
+// used everywhere a photo displays at thumbnail/carousel size rather
+// than full size, so a page with many photos doesn't make a visitor
+// download every one at full camera resolution just to show it a few
+// hundred pixels wide. A URL that isn't shaped like our own file
+// download link (an external URL a leader pasted in directly — see
+// "Image picker: allow web URL or own store everywhere") passes through
+// unchanged, since there's nothing here to resize.
+func thumbURL(url string) string {
+	const prefix, suffix = "/files/", "/download"
+	if !strings.HasPrefix(url, prefix) || !strings.HasSuffix(url, suffix) {
+		return url
+	}
+	id := strings.TrimSuffix(strings.TrimPrefix(url, prefix), suffix)
+	if id == "" || strings.ContainsRune(id, '/') {
+		return url
+	}
+	return prefix + id + "/thumb"
 }
 
 // heroSizeClass maps a content.HeroSize preset to the Tailwind height
@@ -529,6 +551,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /files", h.FileLibrary)
 	mux.HandleFunc("POST /files/upload", h.FileUpload)
 	mux.HandleFunc("GET /files/{id}/download", h.FileDownload)
+	mux.HandleFunc("GET /files/{id}/thumb", h.FileThumbnail)
 	mux.HandleFunc("POST /files/{id}/delete", h.FileDelete)
 	mux.HandleFunc("POST /files/{id}/link", h.FileSetEventLinks)
 	mux.HandleFunc("POST /files/{id}/public", h.FileSetPublic)

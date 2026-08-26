@@ -111,7 +111,7 @@
           {{if $isVideo}}
             <video src="{{$url}}" muted preload="metadata" class="h-16 w-20 object-cover rounded-md border-2 border-gray-200 hover:border-gray-400"></video>
           {{else}}
-            <img src="{{$url}}" alt="{{.DisplayLabel}}" loading="lazy"
+            <img src="{{thumbURL $url}}" alt="{{.DisplayLabel}}" loading="lazy"
                  class="h-16 w-20 object-cover rounded-md border-2 {{if eq $url $current}}border-blue-500{{else}}border-gray-200 hover:border-gray-400{{end}}">
           {{end}}
           {{if and $showPrivate (not .Public)}}<span class="absolute top-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">Private</span>{{end}}
@@ -190,7 +190,7 @@
       {{range index $pages 0}}
         <label class="flex items-center gap-2 text-sm">
           <input type="checkbox" name="{{$.Name}}" value="{{.ID}}" {{if index $linked .ID}}checked{{end}}>
-          <img src="/files/{{.ID}}/download" alt="" loading="lazy" class="h-8 w-8 flex-shrink-0 object-cover rounded-md border border-gray-200">
+          <img src="/files/{{.ID}}/thumb" alt="" loading="lazy" class="h-8 w-8 flex-shrink-0 object-cover rounded-md border border-gray-200">
           <span class="truncate">{{.DisplayLabel}}</span>
         </label>
       {{end}}
@@ -262,7 +262,7 @@
               <video src="{{.URL}}" controls preload="metadata" class="w-full {{$height}} object-cover"></video>
             {{else}}
               <a href="{{.URL}}" data-lightbox-open>
-                <img src="{{.URL}}" alt="{{.Caption}}" class="w-full {{$height}} object-cover">
+                <img src="{{thumbURL .URL}}" alt="{{.Caption}}" class="w-full {{$height}} object-cover">
               </a>
             {{end}}
             {{if .Caption}}<figcaption class="p-2 text-xs text-gray-600">{{.Caption}}</figcaption>{{end}}
@@ -286,11 +286,19 @@
      Escape/Left/Right keyboard support. Include this once per page
      alongside photoCarouselScript wherever photoCarousel is used. */}}
 {{define "lightbox"}}
-  <div class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90 p-4 sm:p-8" data-lightbox role="dialog" aria-modal="true" aria-label="Photo viewer">
+  <div class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-black/90 p-4 sm:p-8" data-lightbox role="dialog" aria-modal="true" aria-label="Photo viewer">
     <button type="button" class="absolute top-4 right-4 text-white text-3xl leading-none hover:opacity-75" data-lightbox-close aria-label="Close">&times;</button>
     <button type="button" class="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 text-white p-3" data-lightbox-prev aria-label="Previous photo">&larr;</button>
-    <figure class="max-w-full max-h-full flex flex-col items-center">
-      <img data-lightbox-image src="" alt="" class="max-w-full max-h-[85vh] object-contain">
+    <figure class="max-w-full max-h-full flex flex-col items-center my-auto">
+      {{/* max-height is set twice on purpose: 85vh is a fallback for
+           browsers that don't understand svh, then 85svh (the SMALL
+           viewport height — the size guaranteed visible even while a
+           mobile browser's address bar is on screen) overrides it where
+           supported. Plain 85vh alone is sized against the viewport with
+           the address bar hidden, which is taller than what's actually
+           visible on load, so the top or bottom of the photo was
+           getting cut off behind the browser chrome on phones. */}}
+      <img data-lightbox-image src="" alt="" class="max-w-full object-contain" style="max-height: 85vh; max-height: 85svh;">
       <figcaption data-lightbox-caption class="mt-2 text-sm text-white/80 text-center"></figcaption>
     </figure>
     <button type="button" class="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 text-white p-3" data-lightbox-next aria-label="Next photo">&rarr;</button>
@@ -395,9 +403,11 @@
       document.querySelectorAll('[data-carousel]').forEach(function (car) {
         var links = Array.prototype.slice.call(car.querySelectorAll(':scope > figure > [data-lightbox-open]'));
         var carouselItems = links.map(function (link) {
-          var img = link.querySelector('img');
+          // The full-size original — not the img's own src, which is now
+          // the small resized thumbnail (see thumbURL) so the carousel
+          // itself loads fast; the lightbox still needs the real photo.
           var caption = link.closest('figure').querySelector('figcaption');
-          return { src: img.getAttribute('src'), caption: caption ? caption.textContent : '' };
+          return { src: link.getAttribute('href'), caption: caption ? caption.textContent : '' };
         });
         links.forEach(function (link, i) {
           link.addEventListener('click', function (e) {
@@ -426,7 +436,7 @@
             <video src="{{$p.URL}}" muted preload="metadata" class="h-full w-full object-cover"></video>
             <span class="absolute bottom-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">&#9654;</span>
           {{else}}
-            <img src="{{$p.URL}}" alt="{{$p.Caption}}" class="h-full w-full object-cover">
+            <img src="{{thumbURL $p.URL}}" alt="{{$p.Caption}}" class="h-full w-full object-cover">
           {{end}}
         </button>
       {{end}}

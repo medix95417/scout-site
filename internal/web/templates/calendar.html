@@ -230,7 +230,7 @@
               {{range .Files}}
                 {{if eq .Category "event_photo"}}
                   <a href="/files/{{.ID}}/download" target="_blank" title="{{.Filename}}">
-                    <img src="/files/{{.ID}}/download" alt="{{.Filename}}" class="h-16 w-16 object-cover rounded-md border border-gray-200">
+                    <img src="/files/{{.ID}}/thumb" alt="{{.Filename}}" class="h-16 w-16 object-cover rounded-md border border-gray-200">
                   </a>
                 {{else}}
                   <a href="/files/{{.ID}}/download" target="_blank" class="text-xs underline rounded-full border px-2 py-1" style="color: var(--unit-color);">
