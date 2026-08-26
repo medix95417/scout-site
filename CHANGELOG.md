@@ -38,11 +38,16 @@ show a freshly-uploaded batch of photos (or the Files page immediately
 after enabling this feature) could trigger a burst of real-time image
 resizing all at once. Uploading an image now generates and caches its
 thumbnail immediately, while the leader is already waiting on the
-upload to finish, so viewing it later never has to. A new
-`-backfill-thumbnails` command (safe to re-run, skips anything already
-cached) generates thumbnails for photos uploaded before this existed —
-see DEPLOY.md's "Ongoing operations." The on-demand fallback still
-exists as a safety net for anything the backfill hasn't gotten to yet.
+upload to finish, so viewing it later never has to. Photos already
+uploaded before this existed get theirs generated automatically too —
+the server runs a backfill pass in the background on every normal
+startup (safe to leave running forever; an already-cached thumbnail is
+left alone), so deploying this update is the only step needed, no
+manual command to remember. A `-backfill-thumbnails` flag runs the same
+pass on demand if you'd rather see the result immediately instead of
+checking logs — see DEPLOY.md's "Ongoing operations." The on-demand
+per-photo fallback in FileThumbnail still exists as a safety net for
+anything a backfill pass hasn't gotten to yet.
 
 **Leader photos can now have their crop position adjusted.** The Our
 Leaders page fills a fixed-size card with each photo (`object-cover`),
