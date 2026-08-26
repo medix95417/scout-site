@@ -286,11 +286,19 @@
      Escape/Left/Right keyboard support. Include this once per page
      alongside photoCarouselScript wherever photoCarousel is used. */}}
 {{define "lightbox"}}
-  <div class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90 p-4 sm:p-8" data-lightbox role="dialog" aria-modal="true" aria-label="Photo viewer">
+  <div class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-black/90 p-4 sm:p-8" data-lightbox role="dialog" aria-modal="true" aria-label="Photo viewer">
     <button type="button" class="absolute top-4 right-4 text-white text-3xl leading-none hover:opacity-75" data-lightbox-close aria-label="Close">&times;</button>
     <button type="button" class="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 text-white p-3" data-lightbox-prev aria-label="Previous photo">&larr;</button>
-    <figure class="max-w-full max-h-full flex flex-col items-center">
-      <img data-lightbox-image src="" alt="" class="max-w-full max-h-[85vh] object-contain">
+    <figure class="max-w-full max-h-full flex flex-col items-center my-auto">
+      {{/* max-height is set twice on purpose: 85vh is a fallback for
+           browsers that don't understand svh, then 85svh (the SMALL
+           viewport height — the size guaranteed visible even while a
+           mobile browser's address bar is on screen) overrides it where
+           supported. Plain 85vh alone is sized against the viewport with
+           the address bar hidden, which is taller than what's actually
+           visible on load, so the top or bottom of the photo was
+           getting cut off behind the browser chrome on phones. */}}
+      <img data-lightbox-image src="" alt="" class="max-w-full object-contain" style="max-height: 85vh; max-height: 85svh;">
       <figcaption data-lightbox-caption class="mt-2 text-sm text-white/80 text-center"></figcaption>
     </figure>
     <button type="button" class="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 hover:bg-white/20 text-white p-3" data-lightbox-next aria-label="Next photo">&rarr;</button>

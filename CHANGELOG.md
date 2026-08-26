@@ -20,6 +20,18 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed: the full-size photo viewer (lightbox) could clip the top or
+bottom of a photo on mobile.** It capped the image's height at `85vh`,
+which browsers compute against the viewport with the address bar
+hidden — taller than what's actually on screen while the address bar is
+showing, so part of the photo could render behind it. Now it caps
+against `85svh` (the guaranteed-visible "small viewport height") where
+supported, with the old `85vh` kept only as a fallback for browsers that
+don't understand `svh`, and the viewer can scroll as a safety net for
+any photo that still doesn't fit. Applies everywhere the lightbox is
+used — Photos, an individual gallery, and the homepage's Recent
+Activities.
+
 **Homepage: Recent Activities picks a random rotation once there are more
 galleries than fit.** Previously it always showed the newest 4 (2 on
 mobile); a unit with a deep gallery history would feature the same
