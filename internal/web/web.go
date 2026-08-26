@@ -12,7 +12,9 @@ import (
 	"html/template"
 	"io/fs"
 	"log"
+	"math/rand/v2"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -876,15 +878,39 @@ type homeActivity struct {
 	Photos []content.GalleryPhoto
 }
 
-// maxHomeActivities caps how many recent Photo Album posts the homepage
-// previews — ListPublishedPublicForUnit returns every one, newest first,
-// but the homepage only has room for a couple rows before it should send
-// visitors to the full /gallery listing instead. Set to fill exactly two
-// rows of the Recent Activities grid (see home.html): 2 columns on
-// desktop (sm: and up) × 2 rows = 4, 1 column on mobile × 2 rows shown = 2
-// (mobile hides the 3rd/4th via home.html's own responsive classes,
-// rather than fetching a different count per viewport).
+// maxHomeActivities caps how many Photo Album posts the homepage
+// previews at once — ListPublishedPublicForUnit returns every published
+// public one, but the homepage only has room for a couple rows before it
+// should send visitors to the full /gallery listing instead. Set to fill
+// exactly two rows of the Recent Activities grid (see home.html): 2
+// columns on desktop (sm: and up) × 2 rows = 4, 1 column on mobile × 2
+// rows shown = 2 (mobile hides the 3rd/4th via home.html's own
+// responsive classes, rather than fetching a different count per
+// viewport). When there are more eligible galleries than this, which
+// ones show is picked at random on every page load (see
+// randomHomeActivities) instead of freezing on whichever are newest, so
+// a unit with a deep gallery history isn't stuck always featuring the
+// same handful.
 const maxHomeActivities = 4
+
+// randomHomeActivities picks up to max activities at random out of all —
+// see maxHomeActivities — so a visitor sees a different rotation on each
+// page load once a unit has published more galleries than fit on the
+// homepage. Selected activities keep their original (newest-first)
+// relative order; if there are max or fewer already, all of them are
+// returned unchanged (no randomization to do).
+func randomHomeActivities(all []homeActivity, max int) []homeActivity {
+	if len(all) <= max {
+		return all
+	}
+	indices := rand.Perm(len(all))[:max]
+	sort.Ints(indices)
+	picked := make([]homeActivity, len(indices))
+	for i, idx := range indices {
+		picked[i] = all[idx]
+	}
+	return picked
+}
 
 // maxHomeEvents caps how many upcoming events the homepage's "Upcoming
 // Events" list shows — ListUpcomingPublicForUnit returns every one from
@@ -932,15 +958,13 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 	}
 	var activities []homeActivity
 	for _, p := range galleryPosts {
-		if len(activities) >= maxHomeActivities {
-			break
-		}
 		photos := h.filterViewableGalleryPhotos(r.Context(), unit.ID, content.ParseGalleryPhotos(p.Body), loggedIn)
 		if len(photos) == 0 {
 			continue
 		}
 		activities = append(activities, homeActivity{Title: p.Title, URL: "/gallery/" + p.ID, Photos: photos})
 	}
+	activities = randomHomeActivities(activities, maxHomeActivities)
 
 	// The storefront button never shows while Treasury itself is off for
 	// this unit — see settings.TreasuryEnabled — since it exists to feed

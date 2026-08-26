@@ -20,6 +20,15 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Homepage: Recent Activities picks a random rotation once there are more
+galleries than fit.** Previously it always showed the newest 4 (2 on
+mobile); a unit with a deep gallery history would feature the same
+handful forever. Now, whenever there are more eligible galleries than
+the homepage has room for, which ones show is chosen at random on every
+page load — for every visitor, logged in or not — so older galleries get
+a turn too instead of scrolling off into obscurity. Within whichever set
+gets picked, they still display newest-first.
+
 **Homepage: Upcoming Events now caps at the next 5** instead of showing
 every upcoming public event — the homepage is a preview, not the full
 calendar; "View full calendar" already links to `/calendar` for anyone
