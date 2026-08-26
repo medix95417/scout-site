@@ -4,7 +4,26 @@ import (
 	"testing"
 
 	"github.com/47-yonkers/scout-site/internal/files"
+	"github.com/47-yonkers/scout-site/internal/leaders"
 )
+
+func TestPhotoFocusClass(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{leaders.PhotoFocusTop, "object-top"},
+		{leaders.PhotoFocusBottom, "object-bottom"},
+		{leaders.PhotoFocusCenter, "object-center"},
+		{"", "object-center"},
+		{"garbage", "object-center"},
+	}
+	for _, c := range cases {
+		if got := photoFocusClass(c.in); got != c.want {
+			t.Errorf("photoFocusClass(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
 
 func TestChunkFiles(t *testing.T) {
 	mk := func(n int) []files.File {
@@ -55,4 +74,27 @@ func sizes(pages [][]files.File) []int {
 		out[i] = len(p)
 	}
 	return out
+}
+
+func TestChunkFileRows(t *testing.T) {
+	mk := func(n int) []fileRow {
+		out := make([]fileRow, n)
+		for i := range out {
+			out[i] = fileRow{File: files.File{ID: string(rune('a' + i))}}
+		}
+		return out
+	}
+
+	t.Run("empty", func(t *testing.T) {
+		if got := chunkFileRows(nil, 25); got != nil {
+			t.Fatalf("got %v, want nil", got)
+		}
+	})
+
+	t.Run("remainder page", func(t *testing.T) {
+		got := chunkFileRows(mk(60), 25)
+		if len(got) != 3 || len(got[0]) != 25 || len(got[1]) != 25 || len(got[2]) != 10 {
+			t.Fatalf("got %d pages, want 25/25/10", len(got))
+		}
+	})
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/csrf"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/files"
+	"github.com/47-yonkers/scout-site/internal/leaders"
 	"github.com/47-yonkers/scout-site/internal/ledger"
 	"github.com/47-yonkers/scout-site/internal/mailer"
 	"github.com/47-yonkers/scout-site/internal/permission"
@@ -139,9 +140,11 @@ var templateFuncs = template.FuncMap{
 	"dict":              templateDict,
 	"galleryPhotos":     templateGalleryPhotos,
 	"chunkFiles":        chunkFiles,
+	"chunkFileRows":     chunkFileRows,
 	"heroSizeClass":     heroSizeClass,
 	"homeHeroSizeClass": homeHeroSizeClass,
 	"thumbURL":          thumbURL,
+	"photoFocusClass":   photoFocusClass,
 }
 
 // thumbURL rewrites one of this app's own /files/{id}/download URLs to
@@ -196,6 +199,23 @@ func homeHeroSizeClass(size string) string {
 	}
 }
 
+// photoFocusClass maps a leaders.PhotoFocus preset to the Tailwind
+// object-position class an object-cover leader photo uses to pick which
+// part survives the crop when the photo's aspect ratio doesn't match
+// its fixed-height card (see leaders.html/admin-leaders-list.html).
+// Falls back to the original centered crop (leaders.PhotoFocusCenter)
+// for anything unrecognized, same as leaders.NormalizePhotoFocus.
+func photoFocusClass(focus string) string {
+	switch focus {
+	case leaders.PhotoFocusTop:
+		return "object-top"
+	case leaders.PhotoFocusBottom:
+		return "object-bottom"
+	default:
+		return "object-center"
+	}
+}
+
 // chunkFiles splits fs into pages of at most size files each — the "show
 // 25 at a time" pagination behind eventAccordionPickerStrip and
 // eventAccordionCheckboxGridRow (see _image-picker.html): an event with
@@ -207,6 +227,23 @@ func chunkFiles(fs []files.File, size int) [][]files.File {
 		return nil
 	}
 	var chunks [][]files.File
+	for size < len(fs) {
+		fs, chunks = fs[size:], append(chunks, fs[:size:size])
+	}
+	return append(chunks, fs)
+}
+
+// chunkFileRows is chunkFiles' sibling for []fileRow — the file
+// library's own "show 25 at a time" pagination within each of its
+// event-grouped accordions (see files.html's fileLibraryGroup), since a
+// fileRow (a decorated files.File, with its own management controls) is
+// a different type from the bare files.File the photo pickers page
+// through.
+func chunkFileRows(fs []fileRow, size int) [][]fileRow {
+	if size <= 0 || len(fs) == 0 {
+		return nil
+	}
+	var chunks [][]fileRow
 	for size < len(fs) {
 		fs, chunks = fs[size:], append(chunks, fs[:size:size])
 	}

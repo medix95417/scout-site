@@ -68,25 +68,54 @@
     </details>
   {{end}}
 
-  {{if .GroupedByEvent}}
-    {{if .EventGroups}}
+  <h2 class="text-lg font-semibold mb-3">{{if .GroupedByEvent}}Selected events{{else}}All files{{end}}</h2>
+  {{if .EventGroups}}
+    <div class="space-y-3">
       {{range .EventGroups}}
-        <h2 class="text-lg font-semibold mb-3">{{.EventTitle}}</h2>
-        <div class="space-y-3 mb-8">
-          {{range .Files}}{{template "fileRow" (dict "File" . "CanManage" $.CanManage "Events" $.Events "CSRFToken" $.CSRFToken)}}{{end}}
-        </div>
+        <details class="rounded-lg border border-gray-200 bg-white">
+          <summary class="cursor-pointer select-none px-4 py-3 text-sm font-semibold hover:bg-gray-50">
+            {{.EventTitle}} <span class="text-gray-400 font-normal">({{len .Files}})</span>
+          </summary>
+          <div class="px-4 pb-4">
+            {{template "fileLibraryGroupPage" (dict "Pages" (chunkFileRows .Files 25) "CanManage" $.CanManage "Events" $.Events "CSRFToken" $.CSRFToken)}}
+          </div>
+        </details>
       {{end}}
-    {{else}}
-      <p class="text-sm text-gray-500">No files are linked to the selected event(s) yet.</p>
-    {{end}}
+    </div>
+  {{else if .GroupedByEvent}}
+    <p class="text-sm text-gray-500">No files are linked to the selected event(s) yet.</p>
   {{else}}
-    <h2 class="text-lg font-semibold mb-3">All files</h2>
-    {{if .Files}}
-      <div class="space-y-3">
-        {{range .Files}}{{template "fileRow" (dict "File" . "CanManage" $.CanManage "Events" $.Events "CSRFToken" $.CSRFToken)}}{{end}}
-      </div>
-    {{else}}
-      <p class="text-sm text-gray-500">No files uploaded yet.</p>
+    <p class="text-sm text-gray-500">No files uploaded yet.</p>
+  {{end}}
+{{end}}
+
+{{/* fileLibraryGroupPage renders one event-group's files 25 at a time,
+     with a nested "Show more" to reveal the next 25 — same recursive
+     "consume the first page, recurse on the rest" pagination as
+     eventAccordionPickerPage/eventAccordionCheckboxGridPage in
+     _image-picker.html, just rendering full fileRow management cards
+     instead of bare thumbnails.
+
+     Takes a dict with:
+       Pages      [][]fileRow — every remaining page, this one included
+       CanManage  bool
+       Events     []calendar.Event
+       CSRFToken  string */}}
+{{define "fileLibraryGroupPage"}}
+  {{if .Pages}}
+    {{$pages := .Pages}}
+    <div class="space-y-3">
+      {{range index $pages 0}}
+        {{template "fileRow" (dict "File" . "CanManage" $.CanManage "Events" $.Events "CSRFToken" $.CSRFToken)}}
+      {{end}}
+    </div>
+    {{if gt (len $pages) 1}}
+      <details class="mt-2">
+        <summary class="cursor-pointer select-none text-xs" style="color: var(--unit-color);">Show 25 more</summary>
+        <div class="mt-2">
+          {{template "fileLibraryGroupPage" (dict "Pages" (slice $pages 1) "CanManage" .CanManage "Events" .Events "CSRFToken" .CSRFToken)}}
+        </div>
+      </details>
     {{end}}
   {{end}}
 {{end}}

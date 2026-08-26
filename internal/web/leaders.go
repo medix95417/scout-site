@@ -111,13 +111,14 @@ func (h *Handlers) AdminLeadersEdit(w http.ResponseWriter, r *http.Request) {
 // leaderFormFields pulls and validates the fields shared by create and
 // update — same title-required, trim-whitespace posture as
 // adminContentCreate/adminContentUpdate.
-func leaderFormFields(r *http.Request) (name, roleTitle, bio, photoURL string, sortOrder int, ok bool) {
+func leaderFormFields(r *http.Request) (name, roleTitle, bio, photoURL, photoFocus string, sortOrder int, ok bool) {
 	name = strings.TrimSpace(r.PostFormValue("name"))
 	roleTitle = strings.TrimSpace(r.PostFormValue("role_title"))
 	bio = r.PostFormValue("bio")
 	photoURL = strings.TrimSpace(r.PostFormValue("photo_url"))
+	photoFocus = leaders.NormalizePhotoFocus(r.PostFormValue("photo_focus"))
 	sortOrder, _ = strconv.Atoi(r.PostFormValue("sort_order")) // blank/invalid just falls back to 0 — not worth rejecting the whole save over
-	return name, roleTitle, bio, photoURL, sortOrder, name != ""
+	return name, roleTitle, bio, photoURL, photoFocus, sortOrder, name != ""
 }
 
 func (h *Handlers) AdminLeadersCreate(w http.ResponseWriter, r *http.Request) {
@@ -130,13 +131,13 @@ func (h *Handlers) AdminLeadersCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name, roleTitle, bio, photoURL, _, valid := leaderFormFields(r)
+	name, roleTitle, bio, photoURL, photoFocus, _, valid := leaderFormFields(r)
 	if !valid {
 		http.Error(w, "name is required", http.StatusBadRequest)
 		return
 	}
 
-	l, err := leaders.Create(r.Context(), h.Pool, unit.ID, name, roleTitle, bio, photoURL, actor.ID)
+	l, err := leaders.Create(r.Context(), h.Pool, unit.ID, name, roleTitle, bio, photoURL, photoFocus, actor.ID)
 	if err != nil {
 		log.Printf("web: creating leader: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -165,13 +166,13 @@ func (h *Handlers) AdminLeadersUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name, roleTitle, bio, photoURL, sortOrder, valid := leaderFormFields(r)
+	name, roleTitle, bio, photoURL, photoFocus, sortOrder, valid := leaderFormFields(r)
 	if !valid {
 		http.Error(w, "name is required", http.StatusBadRequest)
 		return
 	}
 
-	if _, err := leaders.Update(r.Context(), h.Pool, id, unit.ID, name, roleTitle, bio, photoURL, sortOrder, actor.ID); err != nil {
+	if _, err := leaders.Update(r.Context(), h.Pool, id, unit.ID, name, roleTitle, bio, photoURL, photoFocus, sortOrder, actor.ID); err != nil {
 		log.Printf("web: updating leader %s: %v", id, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

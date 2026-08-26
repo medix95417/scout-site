@@ -20,6 +20,55 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**The Files page now groups by event in a paginated accordion, same as
+the photo pickers.** It used to render every file in the library flat
+and all at once (or, with an event filter checked, grouped but still
+unpaginated) — slow to open once a unit had built up a large library.
+Now it's always grouped by event (files with no event link land in
+their own "Not linked to an event" group), each group collapsed by
+default and showing at most 25 files at a time with a "Show 25 more" to
+reveal the next batch, mirroring the accordion picker's own lazy-loading
+behavior. Checking specific events in the existing filter still narrows
+which groups show.
+
+**Thumbnails are now generated at upload time, not on first view.**
+Previously a photo's thumbnail was generated the first time anyone
+requested it — usually fine, but it meant the very first page load to
+show a freshly-uploaded batch of photos (or the Files page immediately
+after enabling this feature) could trigger a burst of real-time image
+resizing all at once. Uploading an image now generates and caches its
+thumbnail immediately, while the leader is already waiting on the
+upload to finish, so viewing it later never has to. Photos already
+uploaded before this existed get theirs generated automatically too —
+the server runs a backfill pass in the background on every normal
+startup (safe to leave running forever; an already-cached thumbnail is
+left alone), so deploying this update is the only step needed, no
+manual command to remember. A `-backfill-thumbnails` flag runs the same
+pass on demand if you'd rather see the result immediately instead of
+checking logs — see DEPLOY.md's "Ongoing operations." The on-demand
+per-photo fallback in FileThumbnail still exists as a safety net for
+anything a backfill pass hasn't gotten to yet.
+
+**Leader photos can now have their crop position adjusted.** The Our
+Leaders page fills a fixed-size card with each photo (`object-cover`),
+cropping whatever doesn't fit — a portrait headshot in a wide card could
+lose the top of someone's head or their chin to the default center crop
+with no way to fix it. The leader edit form now has a Top/Center/Bottom
+"Photo position" control with a live preview (updates instantly as you
+change the setting or pick a different photo), and the public page and
+admin list both honor the chosen position. Existing leader profiles keep
+today's centered crop unchanged.
+
+**Fixed: generated photo thumbnails could show sideways.** Go's image
+decoder ignores EXIF orientation — the tag a phone camera uses to record
+"held rotated, display upright" separately from the stored pixel grid —
+so a thumbnail built from a photo taken sideways came out sideways too,
+even though every browser had always shown the original file itself
+correctly. Thumbnail generation now reads that tag and rotates/flips
+the image to match before resizing. Any thumbnail already cached with
+the bug is automatically bypassed (not served) the next time it's
+requested, so no manual fix-up is needed for photos already uploaded.
+
 **Photos now load a resized preview instead of the full original —
 much faster over a slow connection.** Every thumbnail-sized photo on the
 site (a gallery carousel, the homepage's Recent Activities, the file

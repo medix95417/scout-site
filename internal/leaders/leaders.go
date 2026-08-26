@@ -17,36 +17,62 @@ import (
 
 // Leader is one entry on the "Our Leaders" page.
 type Leader struct {
-	ID        string
-	UnitID    string
-	Name      string
-	RoleTitle string
-	Bio       string
-	PhotoURL  string
-	SortOrder int
-	Status    string // "draft" or "published"
-	CreatedBy *string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID         string
+	UnitID     string
+	Name       string
+	RoleTitle  string
+	Bio        string
+	PhotoURL   string
+	PhotoFocus string // PhotoFocusTop/Center/Bottom — see NormalizePhotoFocus
+	SortOrder  int
+	Status     string // "draft" or "published"
+	CreatedBy  *string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
-const selectColumns = `id, unit_id, name, role_title, bio, photo_url, sort_order, status::text, created_by, created_at, updated_at`
+// PhotoFocus presets control which part of a leader's photo stays
+// visible when its aspect ratio doesn't match the fixed-height card it
+// displays in (see leaders.html) — object-cover crops whatever
+// overflows, and a portrait headshot in a wide card can lose the top of
+// someone's head or their chin to the default center crop with no way
+// to fix it otherwise.
+const (
+	PhotoFocusTop    = "top"
+	PhotoFocusCenter = "center" // default — today's original behavior
+	PhotoFocusBottom = "bottom"
+)
+
+// NormalizePhotoFocus maps anything other than a recognized preset —
+// most commonly "", since older leader rows predate this column being
+// set — back to PhotoFocusCenter, so a blank/bad value can't produce a
+// broken CSS class in a template.
+func NormalizePhotoFocus(focus string) string {
+	switch focus {
+	case PhotoFocusTop, PhotoFocusBottom:
+		return focus
+	default:
+		return PhotoFocusCenter
+	}
+}
+
+const selectColumns = `id, unit_id, name, role_title, bio, photo_url, photo_focus, sort_order, status::text, created_by, created_at, updated_at`
 
 func scanLeader(row interface{ Scan(...any) error }) (Leader, error) {
 	var l Leader
-	err := row.Scan(&l.ID, &l.UnitID, &l.Name, &l.RoleTitle, &l.Bio, &l.PhotoURL, &l.SortOrder, &l.Status, &l.CreatedBy, &l.CreatedAt, &l.UpdatedAt)
+	err := row.Scan(&l.ID, &l.UnitID, &l.Name, &l.RoleTitle, &l.Bio, &l.PhotoURL, &l.PhotoFocus, &l.SortOrder, &l.Status, &l.CreatedBy, &l.CreatedAt, &l.UpdatedAt)
 	return l, err
 }
 
 // Create adds a new leader profile as a draft — an admin publishes it
 // explicitly via SetPublished once it's ready, so a half-written profile
 // is never visible on the public page in between.
-func Create(ctx context.Context, pool *pgxpool.Pool, unitID, name, roleTitle, bio, photoURL, actorID string) (Leader, error) {
+func Create(ctx context.Context, pool *pgxpool.Pool, unitID, name, roleTitle, bio, photoURL, photoFocus, actorID string) (Leader, error) {
 	l, err := scanLeader(pool.QueryRow(ctx, `
-		INSERT INTO leaders (unit_id, name, role_title, bio, photo_url, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO leaders (unit_id, name, role_title, bio, photo_url, photo_focus, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING `+selectColumns,
-		unitID, name, roleTitle, bio, photoURL, actorID))
+		unitID, name, roleTitle, bio, photoURL, NormalizePhotoFocus(photoFocus), actorID))
 	if err != nil {
 		return Leader{}, err
 	}
@@ -55,19 +81,20 @@ func Create(ctx context.Context, pool *pgxpool.Pool, unitID, name, roleTitle, bi
 	return l, nil
 }
 
-// Update edits a leader's name, role title, bio, photo, and sort order.
-// Status (draft/published) is untouched — see SetPublished for that.
-func Update(ctx context.Context, pool *pgxpool.Pool, id, unitID, name, roleTitle, bio, photoURL string, sortOrder int, actorID string) (Leader, error) {
+// Update edits a leader's name, role title, bio, photo, photo focus, and
+// sort order. Status (draft/published) is untouched — see SetPublished
+// for that.
+func Update(ctx context.Context, pool *pgxpool.Pool, id, unitID, name, roleTitle, bio, photoURL, photoFocus string, sortOrder int, actorID string) (Leader, error) {
 	before, _, err := Get(ctx, pool, id, unitID)
 	if err != nil {
 		return Leader{}, err
 	}
 
 	l, err := scanLeader(pool.QueryRow(ctx, `
-		UPDATE leaders SET name = $1, role_title = $2, bio = $3, photo_url = $4, sort_order = $5, updated_at = now()
-		WHERE id = $6 AND unit_id = $7
+		UPDATE leaders SET name = $1, role_title = $2, bio = $3, photo_url = $4, photo_focus = $5, sort_order = $6, updated_at = now()
+		WHERE id = $7 AND unit_id = $8
 		RETURNING `+selectColumns,
-		name, roleTitle, bio, photoURL, sortOrder, id, unitID))
+		name, roleTitle, bio, photoURL, NormalizePhotoFocus(photoFocus), sortOrder, id, unitID))
 	if err != nil {
 		return Leader{}, err
 	}
