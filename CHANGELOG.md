@@ -20,6 +20,16 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed: generated photo thumbnails could show sideways.** Go's image
+decoder ignores EXIF orientation — the tag a phone camera uses to record
+"held rotated, display upright" separately from the stored pixel grid —
+so a thumbnail built from a photo taken sideways came out sideways too,
+even though every browser had always shown the original file itself
+correctly. Thumbnail generation now reads that tag and rotates/flips
+the image to match before resizing. Any thumbnail already cached with
+the bug is automatically bypassed (not served) the next time it's
+requested, so no manual fix-up is needed for photos already uploaded.
+
 **Photos now load a resized preview instead of the full original —
 much faster over a slow connection.** Every thumbnail-sized photo on the
 site (a gallery carousel, the homepage's Recent Activities, the file

@@ -51,6 +51,11 @@ func Generate(src []byte) ([]byte, error) {
 	if err != nil {
 		return nil, ErrNotAnImage
 	}
+	// Go's decoder ignores EXIF orientation entirely (decodes the raw
+	// pixel grid as stored), unlike every browser rendering the
+	// original file directly — apply it ourselves so a photo taken with
+	// the phone held sideways still comes out upright.
+	img = applyOrientation(img, exifOrientation(src))
 
 	bounds := img.Bounds()
 	w, h := bounds.Dx(), bounds.Dy()

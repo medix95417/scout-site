@@ -357,7 +357,17 @@ func (h *Handlers) FileDownload(w http.ResponseWriter, r *http.Request) {
 // derived rather than stored in its own DB column so every existing
 // file, uploaded before this feature existed, gets a thumbnail the
 // first time one is requested with no backfill step needed.
-const thumbStorageSuffix = ".thumb.jpg"
+//
+// The ".v2" marks the fix for thumbnails generated before
+// thumbnail.Generate corrected for EXIF orientation — those came out
+// sideways for any photo taken with the phone held rotated, since only
+// the pixel grid was resized, not the rotation a phone camera records
+// separately. Bumping this suffix makes every already-cached (sideways)
+// thumbnail simply orphaned rather than served: the next request for
+// it finds nothing at the new key and regenerates correctly. The old
+// objects are never explicitly cleaned up — same tradeoff as the
+// orphaned original in Handlers.FileDelete below.
+const thumbStorageSuffix = ".thumb.v2.jpg"
 
 // FileThumbnail serves a small, resized JPEG preview of an image file —
 // generated once on first request and cached back into storage under a
