@@ -111,7 +111,7 @@
           {{if $isVideo}}
             <video src="{{$url}}" muted preload="metadata" class="h-16 w-20 object-cover rounded-md border-2 border-gray-200 hover:border-gray-400"></video>
           {{else}}
-            <img src="{{$url}}" alt="{{.DisplayLabel}}" loading="lazy"
+            <img src="{{thumbURL $url}}" alt="{{.DisplayLabel}}" loading="lazy"
                  class="h-16 w-20 object-cover rounded-md border-2 {{if eq $url $current}}border-blue-500{{else}}border-gray-200 hover:border-gray-400{{end}}">
           {{end}}
           {{if and $showPrivate (not .Public)}}<span class="absolute top-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">Private</span>{{end}}
@@ -190,7 +190,7 @@
       {{range index $pages 0}}
         <label class="flex items-center gap-2 text-sm">
           <input type="checkbox" name="{{$.Name}}" value="{{.ID}}" {{if index $linked .ID}}checked{{end}}>
-          <img src="/files/{{.ID}}/download" alt="" loading="lazy" class="h-8 w-8 flex-shrink-0 object-cover rounded-md border border-gray-200">
+          <img src="/files/{{.ID}}/thumb" alt="" loading="lazy" class="h-8 w-8 flex-shrink-0 object-cover rounded-md border border-gray-200">
           <span class="truncate">{{.DisplayLabel}}</span>
         </label>
       {{end}}
@@ -262,7 +262,7 @@
               <video src="{{.URL}}" controls preload="metadata" class="w-full {{$height}} object-cover"></video>
             {{else}}
               <a href="{{.URL}}" data-lightbox-open>
-                <img src="{{.URL}}" alt="{{.Caption}}" class="w-full {{$height}} object-cover">
+                <img src="{{thumbURL .URL}}" alt="{{.Caption}}" class="w-full {{$height}} object-cover">
               </a>
             {{end}}
             {{if .Caption}}<figcaption class="p-2 text-xs text-gray-600">{{.Caption}}</figcaption>{{end}}
@@ -403,9 +403,11 @@
       document.querySelectorAll('[data-carousel]').forEach(function (car) {
         var links = Array.prototype.slice.call(car.querySelectorAll(':scope > figure > [data-lightbox-open]'));
         var carouselItems = links.map(function (link) {
-          var img = link.querySelector('img');
+          // The full-size original — not the img's own src, which is now
+          // the small resized thumbnail (see thumbURL) so the carousel
+          // itself loads fast; the lightbox still needs the real photo.
           var caption = link.closest('figure').querySelector('figcaption');
-          return { src: img.getAttribute('src'), caption: caption ? caption.textContent : '' };
+          return { src: link.getAttribute('href'), caption: caption ? caption.textContent : '' };
         });
         links.forEach(function (link, i) {
           link.addEventListener('click', function (e) {
@@ -434,7 +436,7 @@
             <video src="{{$p.URL}}" muted preload="metadata" class="h-full w-full object-cover"></video>
             <span class="absolute bottom-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">&#9654;</span>
           {{else}}
-            <img src="{{$p.URL}}" alt="{{$p.Caption}}" class="h-full w-full object-cover">
+            <img src="{{thumbURL $p.URL}}" alt="{{$p.Caption}}" class="h-full w-full object-cover">
           {{end}}
         </button>
       {{end}}

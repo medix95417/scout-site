@@ -20,6 +20,22 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Photos now load a resized preview instead of the full original —
+much faster over a slow connection.** Every thumbnail-sized photo on the
+site (a gallery carousel, the homepage's Recent Activities, the file
+library, event photo attachments, den/patrol pages, the leaders page,
+and every admin photo picker) was serving the visitor's full original
+camera photo — often several megabytes — just to shrink it down with
+CSS. That's what made the homepage's auto-advancing carousel visibly
+outrun a slow connection: it moves to the next photo on a fixed timer
+regardless of whether the current one finished downloading, and a
+multi-megabyte photo often couldn't. A new `/files/{id}/thumb` endpoint
+generates a resized JPEG (longest side capped at 640px) the first time
+a photo's thumbnail is requested and caches it in storage for every
+later request, so existing photos pick one up automatically with no
+migration step. Clicking through to the full-size lightbox view still
+serves the original, unresized photo.
+
 **Fixed: the full-size photo viewer (lightbox) could clip the top or
 bottom of a photo on mobile.** It capped the image's height at `85vh`,
 which browsers compute against the viewport with the address bar
