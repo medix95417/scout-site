@@ -4,7 +4,26 @@ import (
 	"testing"
 
 	"github.com/47-yonkers/scout-site/internal/files"
+	"github.com/47-yonkers/scout-site/internal/leaders"
 )
+
+func TestPhotoFocusClass(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{leaders.PhotoFocusTop, "object-top"},
+		{leaders.PhotoFocusBottom, "object-bottom"},
+		{leaders.PhotoFocusCenter, "object-center"},
+		{"", "object-center"},
+		{"garbage", "object-center"},
+	}
+	for _, c := range cases {
+		if got := photoFocusClass(c.in); got != c.want {
+			t.Errorf("photoFocusClass(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
 
 func TestChunkFiles(t *testing.T) {
 	mk := func(n int) []files.File {

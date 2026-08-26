@@ -479,6 +479,11 @@
             chosen.classList.remove('border-gray-200');
             chosen.classList.add('border-blue-500');
           }
+          // Setting .value directly doesn't fire a native input event —
+          // dispatch one so a page-specific script (e.g. a live preview)
+          // can react to a picker selection the same way it would to the
+          // visitor typing a URL by hand.
+          target.dispatchEvent(new Event('input', { bubbles: true }));
         });
       });
     });

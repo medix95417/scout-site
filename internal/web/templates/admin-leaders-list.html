@@ -17,7 +17,7 @@
           <summary class="list-none cursor-pointer select-none flex items-center justify-between gap-4 p-4 hover:bg-gray-50">
             <div class="min-w-0 flex items-center gap-3">
               {{if .PhotoURL}}
-                <img src="{{thumbURL .PhotoURL}}" alt="" class="h-12 w-12 rounded-full object-cover flex-shrink-0">
+                <img src="{{thumbURL .PhotoURL}}" alt="" class="h-12 w-12 rounded-full object-cover flex-shrink-0 {{photoFocusClass .PhotoFocus}}">
               {{end}}
               <div class="min-w-0">
                 <div class="flex items-center gap-2">

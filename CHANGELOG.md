@@ -20,6 +20,16 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Leader photos can now have their crop position adjusted.** The Our
+Leaders page fills a fixed-size card with each photo (`object-cover`),
+cropping whatever doesn't fit — a portrait headshot in a wide card could
+lose the top of someone's head or their chin to the default center crop
+with no way to fix it. The leader edit form now has a Top/Center/Bottom
+"Photo position" control with a live preview (updates instantly as you
+change the setting or pick a different photo), and the public page and
+admin list both honor the chosen position. Existing leader profiles keep
+today's centered crop unchanged.
+
 **Fixed: generated photo thumbnails could show sideways.** Go's image
 decoder ignores EXIF orientation — the tag a phone camera uses to record
 "held rotated, display upright" separately from the stored pixel grid —

@@ -54,6 +54,26 @@
     </div>
 
     <div>
+      <label class="block text-sm font-medium mb-1" for="photo_focus">Photo position</label>
+      <p class="text-xs text-gray-500 mb-2">
+        The Our Leaders page crops this photo to fill a fixed-size card. If the crop cuts off the top of their head or their chin, choose which part to keep visible instead.
+      </p>
+      <select id="photo_focus" name="photo_focus" class="rounded-md border border-gray-300 px-3 py-2 text-sm" data-leader-photo-focus>
+        <option value="top" {{if eq .Leader.PhotoFocus "top"}}selected{{end}}>Top</option>
+        <option value="center" {{if and (ne .Leader.PhotoFocus "top") (ne .Leader.PhotoFocus "bottom")}}selected{{end}}>Center</option>
+        <option value="bottom" {{if eq .Leader.PhotoFocus "bottom"}}selected{{end}}>Bottom</option>
+      </select>
+      <div class="mt-3 h-48 w-64 rounded-md border border-gray-200 bg-gray-100 overflow-hidden">
+        <img
+          src="{{if .Leader.PhotoURL}}{{thumbURL .Leader.PhotoURL}}{{end}}"
+          alt="Photo position preview"
+          class="h-full w-full object-cover {{photoFocusClass .Leader.PhotoFocus}} {{if not .Leader.PhotoURL}}hidden{{end}}"
+          data-leader-photo-preview
+        >
+      </div>
+    </div>
+
+    <div>
       <label class="block text-sm font-medium mb-1" for="sort_order">Sort order</label>
       <p class="text-xs text-gray-500 mb-2">Leaders are listed lowest-number-first, then alphabetically — use this to put your Scoutmaster/Cubmaster ahead of the rest.</p>
       <input
@@ -70,4 +90,30 @@
   </form>
 
   {{template "imagePickerScript" .}}
+  <script>
+    // Keeps the "Photo position" preview box in sync with both the
+    // focus select and whichever photo is currently chosen — including
+    // a pick made just now via the accordion picker above (see
+    // imagePickerScript's dispatched input event), not just the photo
+    // already saved when the page loaded.
+    (function () {
+      var urlInput = document.getElementById('photo_url');
+      var focusSelect = document.getElementById('photo_focus');
+      var preview = document.querySelector('[data-leader-photo-preview]');
+      if (!urlInput || !focusSelect || !preview) return;
+
+      var focusClasses = { top: 'object-top', center: 'object-center', bottom: 'object-bottom' };
+      function applyFocusClass() {
+        preview.classList.remove('object-top', 'object-center', 'object-bottom');
+        preview.classList.add(focusClasses[focusSelect.value] || 'object-center');
+      }
+      function syncPhoto() {
+        var url = urlInput.value.trim();
+        preview.src = url;
+        preview.classList.toggle('hidden', !url);
+      }
+      focusSelect.addEventListener('change', applyFocusClass);
+      urlInput.addEventListener('input', syncPhoto);
+    })();
+  </script>
 {{end}}

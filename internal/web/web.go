@@ -29,6 +29,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/csrf"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/files"
+	"github.com/47-yonkers/scout-site/internal/leaders"
 	"github.com/47-yonkers/scout-site/internal/ledger"
 	"github.com/47-yonkers/scout-site/internal/mailer"
 	"github.com/47-yonkers/scout-site/internal/permission"
@@ -142,6 +143,7 @@ var templateFuncs = template.FuncMap{
 	"heroSizeClass":     heroSizeClass,
 	"homeHeroSizeClass": homeHeroSizeClass,
 	"thumbURL":          thumbURL,
+	"photoFocusClass":   photoFocusClass,
 }
 
 // thumbURL rewrites one of this app's own /files/{id}/download URLs to
@@ -193,6 +195,23 @@ func homeHeroSizeClass(size string) string {
 		return "py-40 sm:py-56"
 	default:
 		return "py-28 sm:py-36"
+	}
+}
+
+// photoFocusClass maps a leaders.PhotoFocus preset to the Tailwind
+// object-position class an object-cover leader photo uses to pick which
+// part survives the crop when the photo's aspect ratio doesn't match
+// its fixed-height card (see leaders.html/admin-leaders-list.html).
+// Falls back to the original centered crop (leaders.PhotoFocusCenter)
+// for anything unrecognized, same as leaders.NormalizePhotoFocus.
+func photoFocusClass(focus string) string {
+	switch focus {
+	case leaders.PhotoFocusTop:
+		return "object-top"
+	case leaders.PhotoFocusBottom:
+		return "object-bottom"
+	default:
+		return "object-center"
 	}
 }
 
