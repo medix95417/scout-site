@@ -20,6 +20,22 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Added an optional welcome email when creating a family or individual
+login.** Creating a new family account or a Scout's own individual login
+from Roster now has an "Email login details" checkbox, checked by
+default, that sends the new login's email and temporary password by
+mail rather than requiring a leader to relay it manually — useful when
+they aren't handing the password off in person. The subject and body are
+per-unit and editable from Settings → Welcome Email (with `{{name}}`,
+`{{email}}`, `{{password}}`, `{{login_url}}`, `{{unit_name}}`
+placeholders, and sensible defaults if never customized); a family
+account's email always gets one additional, non-editable paragraph
+noting they can see every child linked to their account across both the
+Pack and Troop sites, since that's real behavior of a family login, not
+just template wording. Sending is best-effort — if mail isn't
+configured or delivery fails, the on-screen credentials (which already
+existed) are still shown so a leader can hand them off another way.
+
 **Fixed: sending mail via the Fastmail JMAP transport failed with
 `unknownMethod`.** The identity/mailbox lookup called `Identity/get`,
 which belongs to JMAP's submission capability, while only declaring the

@@ -545,6 +545,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/settings/unit/{key}/toggle", h.UnitSettingsToggle)
 	mux.HandleFunc("POST /admin/settings/unit/text", h.UnitSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/social", h.SocialSettingsUpdateText)
+	mux.HandleFunc("POST /admin/settings/unit/welcome-email", h.WelcomeEmailSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/fundraiser-storefront", h.FundraiserStorefrontSettingsUpdate)
 
 	// News/announcements and photo galleries (internal/web/content_posts.go).

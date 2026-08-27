@@ -158,7 +158,7 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		settings.SocialTikTokURL:    "home-tiktok",
 	}
 
-	var paymentTextViews, socialTextViews []unitTextSettingView
+	var paymentTextViews, socialTextViews, welcomeEmailTextViews []unitTextSettingView
 	for _, t := range settings.UnitTextSettings {
 		v := unitTextSettingView{UnitTextSetting: t}
 		if t.Secret {
@@ -175,9 +175,12 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		if t.Section == "social" {
+		switch t.Section {
+		case "social":
 			socialTextViews = append(socialTextViews, v)
-		} else {
+		case "welcome_email":
+			welcomeEmailTextViews = append(welcomeEmailTextViews, v)
+		default:
 			paymentTextViews = append(paymentTextViews, v)
 		}
 	}
@@ -230,6 +233,7 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		PaymentTextSettings []unitTextSettingView
 		SocialToggles       []unitToggleView
 		SocialTextSettings  []unitTextSettingView
+		WelcomeEmailText    []unitTextSettingView
 		Fundraisers         []ledger.Fundraiser
 		ActiveStorefrontID  string
 		StorageByCategory   []categorySummaryView
@@ -243,6 +247,7 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		PaymentTextSettings: paymentTextViews,
 		SocialToggles:       socialToggleViews,
 		SocialTextSettings:  socialTextViews,
+		WelcomeEmailText:    welcomeEmailTextViews,
 		Fundraisers:         fundraisers,
 		ActiveStorefrontID:  activeStorefrontID,
 		StorageByCategory:   storageByCategory,
@@ -391,6 +396,36 @@ func (h *Handlers) SocialSettingsUpdateText(w http.ResponseWriter, r *http.Reque
 		}
 		if err := settings.SetUnitText(r.Context(), h.Pool, unit.ID, t.Key, r.FormValue(t.Key), actor.ID); err != nil {
 			log.Printf("web: updating social setting %q: %v", t.Key, err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+}
+
+// WelcomeEmailSettingsUpdateText is UnitSettingsUpdateText's Welcome
+// Email-section sibling — saves only the subject/body template fields
+// (Section == "welcome_email") from their own form. See
+// Handlers.sendWelcomeEmail (welcome_email.go) for where these are
+// actually used.
+func (h *Handlers) WelcomeEmailSettingsUpdateText(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	actor, ok := h.requireSuperAdmin(w, r, "/admin/settings")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	for _, t := range settings.UnitTextSettings {
+		if t.Section != "welcome_email" {
+			continue
+		}
+		if err := settings.SetUnitText(r.Context(), h.Pool, unit.ID, t.Key, r.FormValue(t.Key), actor.ID); err != nil {
+			log.Printf("web: updating welcome email setting %q: %v", t.Key, err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}

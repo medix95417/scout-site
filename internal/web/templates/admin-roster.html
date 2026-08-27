@@ -82,6 +82,10 @@
               {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
             </select>
           </div>
+          <label class="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" name="send_welcome_email" value="1" checked>
+            Email login details to this family
+          </label>
           <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">
             Create Family
           </button>
