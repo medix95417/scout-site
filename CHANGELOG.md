@@ -20,6 +20,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-08-27
+
 **Fixed: `MAIL_PROVIDER`/`FASTMAIL_API_TOKEN` had no effect under Docker
 Compose.** `docker-compose.yml` passes environment variables to the
 `app` container as an explicit list rather than forwarding the whole
