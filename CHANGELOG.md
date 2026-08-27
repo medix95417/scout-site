@@ -20,6 +20,17 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-08-27
+
+**Added address and email fields to both roster account-creation forms.**
+"Add a New Family" now has an optional household address field alongside
+the existing login email; "Add a Member to an Existing Family" now has
+its own optional email (separate from the family's login) and an
+optional household address (only overwrites the family's existing
+address if actually filled in, so leaving it blank on a second or third
+family member never wipes out an address set earlier). Previously,
+either had to be added afterward from the member's own edit page.
+
 **Added an optional welcome email when creating a family or individual
 login.** Creating a new family account or a Scout's own individual login
 from Roster now has an "Email login details" checkbox, checked by

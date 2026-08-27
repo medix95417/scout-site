@@ -245,6 +245,7 @@ func (h *Handlers) AdminRosterCreateFamily(w http.ResponseWriter, r *http.Reques
 		Email:      r.FormValue("email"),
 		FirstName:  strings.TrimSpace(r.FormValue("first_name")),
 		LastName:   strings.TrimSpace(r.FormValue("last_name")),
+		Address:    strings.TrimSpace(r.FormValue("address")),
 	}, actor.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -298,7 +299,8 @@ func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) 
 	}
 
 	memberID, err := roster.AddMember(r.Context(), h.Pool, familyID,
-		strings.TrimSpace(r.FormValue("first_name")), strings.TrimSpace(r.FormValue("last_name")), memberType, actor.ID)
+		strings.TrimSpace(r.FormValue("first_name")), strings.TrimSpace(r.FormValue("last_name")), memberType,
+		strings.TrimSpace(r.FormValue("email")), strings.TrimSpace(r.FormValue("address")), actor.ID)
 	if err != nil {
 		log.Printf("web: adding member: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)

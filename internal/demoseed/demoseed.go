@@ -583,7 +583,7 @@ func addPersona(ctx context.Context, pool *pgxpool.Pool, passwordHash, actor, fa
 // the same two-step "add member, then assign role" flow /admin/roster
 // uses.
 func addFamilyMember(ctx context.Context, pool *pgxpool.Pool, familyID, firstName, lastName, memberType, unitID string, subGroupID *string, role, actor string) (person, error) {
-	memberID, err := roster.AddMember(ctx, pool, familyID, firstName, lastName, memberType, actor)
+	memberID, err := roster.AddMember(ctx, pool, familyID, firstName, lastName, memberType, "", "", actor)
 	if err != nil {
 		return person{}, fmt.Errorf("adding member: %w", err)
 	}
