@@ -1,0 +1,12 @@
+-- 0036_sub_group_active_status.sql
+--
+-- A den/patrol that's no longer running (e.g. folded for the year, merged
+-- into another) needs a way to disappear from the roster, calendar, and
+-- members-only group pages without losing its history — every member,
+-- role_assignment, calendar event, news post, and photo link tied to it by
+-- sub_group_id stays exactly as it was. `active` is the same soft-delete
+-- flag members.active already established (see migration 0022): false
+-- hides it everywhere a leader/family would pick or browse dens/patrols,
+-- while an admin can still find it (roster.InactiveSubGroupsForUnit) and
+-- flip it back (roster.SetSubGroupActive).
+ALTER TABLE sub_groups ADD COLUMN active boolean NOT NULL DEFAULT true;

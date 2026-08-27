@@ -84,7 +84,7 @@ func (h *Handlers) GroupView(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if !found {
+	if !found || !group.Active {
 		http.NotFound(w, r)
 		return
 	}

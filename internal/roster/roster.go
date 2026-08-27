@@ -152,17 +152,21 @@ type SubGroup struct {
 	Description  string // shown on the sub-group's own members-only page — see migration 0017
 	HeroImageURL string // this den's/patrol's own hero banner, distinct from content.HeroPages' unit-wide per-page banners — see migration 0031
 	HeroSize     string // content.HeroSize{Short,Medium,Tall} — see migration 0034; raw/unnormalized, same as content.Section.Body for a homepage/page hero's size — callers should run it through content.NormalizeHeroSize
+	Active       bool   // see migration 0036/SetSubGroupActive — false archives it out of every picker/listing below except InactiveSubGroupsForUnit
 }
 
-// SubGroupsForUnit lists every den/patrol in a unit, for populating
-// dropdowns. Deliberately unrestricted by scope — a Den Leader should be
-// able to see that other dens exist even though they can't manage them;
-// the actual write-time restriction happens in Scope.CanManageSubGroup.
+// SubGroupsForUnit lists every *active* den/patrol in a unit, for
+// populating dropdowns and member-facing listings. Deliberately
+// unrestricted by scope — a Den Leader should be able to see that other
+// dens exist even though they can't manage them; the actual write-time
+// restriction happens in Scope.CanManageSubGroup. An archived (inactive)
+// sub-group is deliberately left out — see InactiveSubGroupsForUnit below,
+// the only way an admin finds one again to reactivate it.
 func SubGroupsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]SubGroup, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, unit_id, name, sub_group_type::text, COALESCE(description, ''), COALESCE(hero_image_url, ''), hero_size
+		SELECT id, unit_id, name, sub_group_type::text, COALESCE(description, ''), COALESCE(hero_image_url, ''), hero_size, active
 		FROM sub_groups
-		WHERE unit_id = $1
+		WHERE unit_id = $1 AND active
 		ORDER BY name
 	`, unitID)
 	if err != nil {
@@ -173,7 +177,36 @@ func SubGroupsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([
 	var groups []SubGroup
 	for rows.Next() {
 		var g SubGroup
-		if err := rows.Scan(&g.ID, &g.UnitID, &g.Name, &g.Type, &g.Description, &g.HeroImageURL, &g.HeroSize); err != nil {
+		if err := rows.Scan(&g.ID, &g.UnitID, &g.Name, &g.Type, &g.Description, &g.HeroImageURL, &g.HeroSize, &g.Active); err != nil {
+			return nil, err
+		}
+		groups = append(groups, g)
+	}
+	return groups, rows.Err()
+}
+
+// InactiveSubGroupsForUnit is SubGroupsForUnit's mirror image: every
+// archived den/patrol in the unit. Since an archived sub-group no longer
+// shows up in SubGroupsForUnit, this is the only way the roster admin page
+// can list one again in order to reactivate it (see SetSubGroupActive) —
+// reactivating needs no repair, since every member, role_assignment,
+// event, and photo link tied to it by sub_group_id was never touched.
+func InactiveSubGroupsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]SubGroup, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, unit_id, name, sub_group_type::text, COALESCE(description, ''), COALESCE(hero_image_url, ''), hero_size, active
+		FROM sub_groups
+		WHERE unit_id = $1 AND NOT active
+		ORDER BY name
+	`, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var groups []SubGroup
+	for rows.Next() {
+		var g SubGroup
+		if err := rows.Scan(&g.ID, &g.UnitID, &g.Name, &g.Type, &g.Description, &g.HeroImageURL, &g.HeroSize, &g.Active); err != nil {
 			return nil, err
 		}
 		groups = append(groups, g)
@@ -183,16 +216,52 @@ func SubGroupsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([
 
 // GetSubGroup looks up a single patrol/den, scoped to a unit — what a
 // sub-group's own page (GroupView/AdminGroupEdit, internal/web) loads.
+// Deliberately not filtered by active, same as roster.GetMember: a
+// deactivated/archived record must stay reachable by its own detail page,
+// since that's how a leader finds their way to reactivating it.
 func GetSubGroup(ctx context.Context, pool *pgxpool.Pool, subGroupID, unitID string) (SubGroup, bool, error) {
 	var g SubGroup
 	err := pool.QueryRow(ctx, `
-		SELECT id, unit_id, name, sub_group_type::text, COALESCE(description, ''), COALESCE(hero_image_url, ''), hero_size
+		SELECT id, unit_id, name, sub_group_type::text, COALESCE(description, ''), COALESCE(hero_image_url, ''), hero_size, active
 		FROM sub_groups WHERE id = $1 AND unit_id = $2
-	`, subGroupID, unitID).Scan(&g.ID, &g.UnitID, &g.Name, &g.Type, &g.Description, &g.HeroImageURL, &g.HeroSize)
+	`, subGroupID, unitID).Scan(&g.ID, &g.UnitID, &g.Name, &g.Type, &g.Description, &g.HeroImageURL, &g.HeroSize, &g.Active)
 	if err != nil {
 		return SubGroup{}, false, nil //nolint:nilerr // "no such sub-group in this unit" is a normal, expected outcome
 	}
 	return g, true, nil
+}
+
+// SetSubGroupActive archives or reactivates a den/patrol — the "hide it
+// from every roster/calendar/members-only listing, but keep its history"
+// operation, same soft-delete shape as SetMemberActive. Every member still
+// assigned to it, past calendar event, news post, and photo link keeps
+// referencing it by sub_group_id untouched — reactivating needs no repair
+// beyond flipping the flag back.
+func SetSubGroupActive(ctx context.Context, pool *pgxpool.Pool, subGroupID string, active bool, actorID string) error {
+	var before struct{ Active bool }
+	_ = pool.QueryRow(ctx, `SELECT active FROM sub_groups WHERE id = $1`, subGroupID).Scan(&before.Active)
+
+	tag, err := pool.Exec(ctx, `UPDATE sub_groups SET active = $1 WHERE id = $2`, active, subGroupID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("sub_group %s not found", subGroupID)
+	}
+
+	action := "deactivate"
+	if active {
+		action = "reactivate"
+	}
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "sub_group",
+		EntityID:   subGroupID,
+		ActorID:    &actorID,
+		Action:     action,
+		Before:     before,
+		After:      map[string]bool{"active": active},
+	})
+	return nil
 }
 
 // UpdateSubGroupPage sets a patrol's/den's own-page blurb, hero banner
@@ -237,8 +306,8 @@ func CreateSubGroup(ctx context.Context, pool *pgxpool.Pool, unitID, name, subGr
 	err := pool.QueryRow(ctx, `
 		INSERT INTO sub_groups (unit_id, name, sub_group_type)
 		VALUES ($1, $2, $3)
-		RETURNING id, unit_id, name, sub_group_type::text
-	`, unitID, name, subGroupType).Scan(&g.ID, &g.UnitID, &g.Name, &g.Type)
+		RETURNING id, unit_id, name, sub_group_type::text, active
+	`, unitID, name, subGroupType).Scan(&g.ID, &g.UnitID, &g.Name, &g.Type, &g.Active)
 	if err != nil {
 		return SubGroup{}, err
 	}
