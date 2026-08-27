@@ -1,15 +1,15 @@
-// Package mailer sends plain-text email over SMTP — the transport for
-// password reset links and event reminders (see internal/auth and
-// internal/reminders). Deliberately built on the standard library's
-// net/smtp rather than a third-party client: Phase 1's sandbox couldn't
-// fetch new Go dependencies at all (see README's compile caveat), and a
-// hand-rolled SMTP send is about eighty lines — not worth a dependency
-// even without that constraint.
+// Package mailer sends email — the transport for password reset links
+// and event reminders (see internal/auth and internal/reminders). Two
+// transports: plain SMTP (net/smtp, no third-party client — Phase 1's
+// sandbox couldn't fetch new Go dependencies at all, and a hand-rolled
+// SMTP send is about eighty lines, not worth a dependency even without
+// that constraint), or Fastmail's JMAP HTTPS API (see jmap.go) for a
+// host whose network blocks outbound SMTP entirely — see Config.Provider.
 //
 // Plain text, not HTML: scouting emails (a reset link, "you're signed up
 // for Saturday's campout") don't need styling, and skipping HTML/MIME
 // multipart entirely avoids an entire class of rendering bugs email clients
-// are famous for.
+// are famous for. (internal/newsletter is the one exception — see SendHTML.)
 package mailer
 
 import (
@@ -29,8 +29,12 @@ import (
 	"github.com/47-yonkers/scout-site/internal/settings"
 )
 
-// Config configures the outbound SMTP connection. An empty Host means
-// email is disabled — see Enabled.
+// ProviderFastmailJMAP selects Config.Provider's JMAP transport (see
+// jmap.go) instead of the default SMTP one.
+const ProviderFastmailJMAP = "fastmail-jmap"
+
+// Config configures the outbound mail transport. An empty Host (with
+// Provider left at its default) means email is disabled — see Enabled.
 type Config struct {
 	Host     string
 	Port     string // e.g. "587" (STARTTLS, the common case) or "465" (implicit TLS)
@@ -38,6 +42,15 @@ type Config struct {
 	Password string
 	From     string // e.g. "Troop 47 <noreply@47-yonkers.org>" — used as both the envelope and header From
 	TLSMode  string // "starttls" (default) or "tls" (implicit TLS, typically port 465)
+
+	// Provider selects the transport: "" (default) uses Host/Port/
+	// Username/Password/TLSMode above over SMTP; ProviderFastmailJMAP
+	// instead sends over Fastmail's JMAP HTTPS API using APIToken, and
+	// ignores every SMTP-specific field except From (which still picks
+	// the sending identity). Exists for a host whose network blocks
+	// outbound SMTP entirely — JMAP rides over ordinary HTTPS instead.
+	Provider string
+	APIToken string // Fastmail API token — only used when Provider == ProviderFastmailJMAP
 }
 
 // Enabled reports whether enough configuration is present to attempt
@@ -45,6 +58,9 @@ type Config struct {
 // degrade gracefully — a scouting site without a configured mail provider
 // shouldn't be unable to log in or view its calendar.
 func (c Config) Enabled() bool {
+	if c.Provider == ProviderFastmailJMAP {
+		return strings.TrimSpace(c.APIToken) != "" && strings.TrimSpace(c.From) != ""
+	}
 	return strings.TrimSpace(c.Host) != ""
 }
 
@@ -131,14 +147,12 @@ var (
 )
 
 // Send delivers a single plain-text email. Bounded by a connection timeout
-// so a misconfigured or unreachable SMTP server can't hang the caller
+// so a misconfigured or unreachable mail server can't hang the caller
 // indefinitely — that matters here since this can be called synchronously
 // from an HTTP handler (forgot-password) as well as from the batch
 // reminders job.
 func (m *Mailer) Send(ctx context.Context, to, subject, body string) error {
-	return m.deliver(ctx, to, func(from string) string {
-		return buildMessage("text/plain", from, to, subject, body)
-	})
+	return m.deliver(ctx, to, subject, body, "text/plain")
 }
 
 // SendHTML delivers a single HTML email — used only by internal/newsletter,
@@ -147,26 +161,36 @@ func (m *Mailer) Send(ctx context.Context, to, subject, body string) error {
 // on body). Every other send in this codebase (password reset, event
 // reminders) stays plain-text via Send; this doesn't change that.
 func (m *Mailer) SendHTML(ctx context.Context, to, subject, body string) error {
-	return m.deliver(ctx, to, func(from string) string {
-		return buildMessage("text/html", from, to, subject, body)
-	})
+	return m.deliver(ctx, to, subject, body, "text/html")
 }
 
-// deliver is the shared SMTP dial/handshake/transmit path behind Send and
-// SendHTML — the only difference between a plain-text and an HTML send is
-// the already-built message string handed in.
-func (m *Mailer) deliver(ctx context.Context, to string, buildBody func(from string) string) error {
+// deliver validates the shared preconditions (configured, valid addresses)
+// then routes to whichever transport Config.Provider selects — deliverSMTP
+// below, or sendViaFastmailJMAP (jmap.go).
+func (m *Mailer) deliver(ctx context.Context, to, subject, body, contentType string) error {
 	cfg := m.effective(ctx)
 	if !cfg.Enabled() {
-		return fmt.Errorf("mailer: not configured — set SMTP_HOST (and SMTP_PORT/SMTP_USERNAME/SMTP_PASSWORD/SMTP_FROM), or fill in the host/port/username/from fields on /admin/settings, to enable email")
+		return fmt.Errorf("mailer: not configured — set SMTP_HOST (and SMTP_PORT/SMTP_USERNAME/SMTP_PASSWORD/SMTP_FROM) or MAIL_PROVIDER=fastmail-jmap (and FASTMAIL_API_TOKEN/SMTP_FROM), or fill in the host/port/username/from fields on /admin/settings, to enable email")
 	}
-
-	fromAddr, err := extractAddr(cfg.From)
-	if err != nil {
-		return fmt.Errorf("mailer: invalid SMTP From address %q: %w", cfg.From, err)
+	if _, err := extractAddr(cfg.From); err != nil {
+		return fmt.Errorf("mailer: invalid From address %q: %w", cfg.From, err)
 	}
 	if _, err := mail.ParseAddress(to); err != nil {
 		return fmt.Errorf("mailer: invalid recipient address %q: %w", to, err)
+	}
+
+	if cfg.Provider == ProviderFastmailJMAP {
+		return sendViaFastmailJMAP(ctx, cfg, to, subject, body, contentType)
+	}
+	return deliverSMTP(ctx, cfg, to, subject, body, contentType)
+}
+
+// deliverSMTP is the SMTP dial/handshake/transmit path — deliver's
+// default, used whenever Config.Provider isn't ProviderFastmailJMAP.
+func deliverSMTP(ctx context.Context, cfg Config, to, subject, body, contentType string) error {
+	fromAddr, err := extractAddr(cfg.From)
+	if err != nil {
+		return fmt.Errorf("mailer: invalid SMTP From address %q: %w", cfg.From, err)
 	}
 
 	addr := net.JoinHostPort(cfg.Host, cfg.Port)
@@ -225,7 +249,7 @@ func (m *Mailer) deliver(ctx context.Context, to string, buildBody func(from str
 	if err != nil {
 		return fmt.Errorf("mailer: DATA: %w", err)
 	}
-	if _, err := w.Write([]byte(buildBody(cfg.From))); err != nil {
+	if _, err := w.Write([]byte(buildMessage(contentType, cfg.From, to, subject, body))); err != nil {
 		return fmt.Errorf("mailer: writing message: %w", err)
 	}
 	if err := w.Close(); err != nil {

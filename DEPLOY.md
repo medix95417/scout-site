@@ -188,6 +188,18 @@ Set these for production:
   `SMTP_PASSWORD` is the one exception: it's only ever read from this
   file, never from the database, so it still needs a restart to change
   (see README.md's "Also added post-Phase-2" section on why).
+- `MAIL_PROVIDER=fastmail-jmap` — an alternative to all of the above for
+  a host whose network blocks outbound SMTP entirely (some shared
+  hosts/ISPs do, even on 465/587): sends mail over Fastmail's JMAP HTTPS
+  API instead of SMTP, so nothing needs an SMTP port to be reachable at
+  all. Needs `FASTMAIL_API_TOKEN` (Fastmail → Settings → Privacy &
+  Security → Integrations → API tokens — grant it "Mail" access) and
+  `SMTP_FROM` still set to one of that Fastmail account's own
+  addresses/aliases (an address JMAP doesn't recognize as belonging to
+  the token is rejected with a clear error, listing what it does
+  recognize). `SMTP_HOST`/`PORT`/`USERNAME`/`TLS_MODE` are ignored when
+  this is set. `FASTMAIL_API_TOKEN`, like `SMTP_PASSWORD`, is
+  environment-only — never settable from `/admin/settings`.
 - `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` — the file
   library and event photos (see README.md "Files") need an S3-compatible
   bucket you already run or manage — a self-hosted MinIO, AWS S3,

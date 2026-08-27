@@ -134,9 +134,12 @@ func main() {
 		Password: cfg.SMTPPassword,
 		From:     cfg.SMTPFrom,
 		TLSMode:  cfg.SMTPTLSMode,
+
+		Provider: cfg.MailProvider,
+		APIToken: cfg.FastmailAPIToken,
 	}, pool)
 	if !mail.Enabled(ctx) {
-		log.Println("email is not configured (no SMTP_HOST environment variable and no host set on /admin/settings) — password reset and event reminders will report a clear error instead of sending")
+		log.Println("email is not configured (no SMTP_HOST or MAIL_PROVIDER environment variable and no host set on /admin/settings) — password reset and event reminders will report a clear error instead of sending")
 	}
 
 	if *sendEventReminders {

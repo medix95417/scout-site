@@ -223,7 +223,9 @@
     Where outgoing mail (password reset links, event reminders) gets sent from. Leave any field blank to fall back
     to its environment variable — see DEPLOY.md. The SMTP password itself isn't set here; it stays in the
     <span class="font-mono">SMTP_PASSWORD</span> environment variable on the server, not in the database, since
-    it's the one real secret in this configuration.
+    it's the one real secret in this configuration. If this site sends mail via Fastmail's JMAP API instead of SMTP
+    (<span class="font-mono">MAIL_PROVIDER=fastmail-jmap</span>), these fields don't apply — that's configured
+    entirely through environment variables; see DEPLOY.md.
   </p>
   <form method="post" action="/admin/settings/text" class="max-w-2xl space-y-3">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
