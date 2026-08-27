@@ -29,12 +29,29 @@ func (h *Handlers) requestOrigin(r *http.Request) string {
 	return scheme + "://" + r.Host
 }
 
+// forgotPasswordData is the data forgot-password.html renders — one
+// named type shared by every place this page can be shown (the initial
+// form, disabled, and post-submission), so it's structurally impossible
+// for one of them to omit a field the template needs. The template
+// evaluates {{if .Disabled}}...{{else if .Submitted}}... unconditionally,
+// which means resolving .Disabled requires that field to exist on
+// whatever data is passed even along a branch that doesn't end up using
+// it — an earlier version built a separate ad hoc anonymous struct per
+// call site, and the "just submitted" one didn't declare Disabled at
+// all, which made html/template fail at *execute* time (not parse time
+// — see New's own template-parse check, which this class of bug slips
+// past entirely). That surfaced to a family resetting their password as
+// a generic 500 "internal error," logged only as a template execution
+// error with no hint the actual cause was a template/data mismatch
+// rather than anything to do with mail delivery.
+type forgotPasswordData struct {
+	baseData
+	Submitted bool
+	Disabled  bool
+}
+
 func (h *Handlers) ForgotPasswordForm(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		baseData
-		Submitted bool
-		Disabled  bool
-	}{baseData: h.base(r, "Forgot Password"), Disabled: !h.passwordResetEnabled(r)}
+	data := forgotPasswordData{baseData: h.base(r, "Forgot Password"), Disabled: !h.passwordResetEnabled(r)}
 	h.render(w, h.forgotPassword, data)
 }
 
@@ -68,11 +85,7 @@ func (h *Handlers) ForgotPasswordSubmit(w http.ResponseWriter, r *http.Request) 
 		// request arrived" posture as requireAdvancementEnabled/
 		// requireNewsletterEnabled, just presented as this page's own
 		// explanation instead of a 403.
-		data := struct {
-			baseData
-			Submitted bool
-			Disabled  bool
-		}{baseData: h.base(r, "Forgot Password"), Disabled: true}
+		data := forgotPasswordData{baseData: h.base(r, "Forgot Password"), Disabled: true}
 		h.render(w, h.forgotPassword, data)
 		return
 	}
@@ -107,10 +120,7 @@ func (h *Handlers) ForgotPasswordSubmit(w http.ResponseWriter, r *http.Request) 
 		log.Printf("web: password reset request rate-limited for %s", auth.NormalizeEmail(email))
 	}
 
-	data := struct {
-		baseData
-		Submitted bool
-	}{baseData: h.base(r, "Forgot Password"), Submitted: true}
+	data := forgotPasswordData{baseData: h.base(r, "Forgot Password"), Submitted: true}
 	h.render(w, h.forgotPassword, data)
 }
 

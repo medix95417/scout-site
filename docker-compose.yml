@@ -59,6 +59,10 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_TLS_MODE: ${SMTP_TLS_MODE:-starttls}
+      # Alternative to the SMTP_* settings above (see internal/mailer/jmap.go)
+      # for a host whose network blocks outbound SMTP entirely.
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-}
+      FASTMAIL_API_TOKEN: ${FASTMAIL_API_TOKEN:-}
       REMINDER_WINDOW_HOURS: ${REMINDER_WINDOW_HOURS:-24}
       # File library / event photos (internal/storage) — point these at
       # your own S3-compatible bucket (self-hosted MinIO, AWS S3,
