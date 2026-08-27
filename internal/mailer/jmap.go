@@ -198,7 +198,12 @@ func postJMAP(ctx context.Context, apiURL, token string, req jmapRequest) (jmapR
 // unnoticed is worse than a clear startup-time-ish configuration error.
 func fetchIdentityAndDrafts(ctx context.Context, apiURL, token, accountID, fromAddr string) (identityID, draftsMailboxID string, err error) {
 	resp, err := postJMAP(ctx, apiURL, token, jmapRequest{
-		Using: []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"},
+		// Identity lives under the submission capability (RFC 8621 §7),
+		// not mail (§1.4) — Mailbox/query alone would work with just
+		// "mail" declared, but Identity/get in the same request needs
+		// "submission" too, or the server rejects that one call with
+		// "unknownMethod: appropriate 'using' item not specified".
+		Using: []string{"urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:submission"},
 		MethodCalls: [][]any{
 			{"Identity/get", map[string]any{
 				"accountId":  accountID,

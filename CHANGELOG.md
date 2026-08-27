@@ -20,6 +20,16 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed: sending mail via the Fastmail JMAP transport failed with
+`unknownMethod`.** The identity/mailbox lookup called `Identity/get`,
+which belongs to JMAP's submission capability, while only declaring the
+mail capability in that request's `using` list — the email-submission
+step further down already declared both, so this only broke the very
+first call the JMAP transport ever made. Added the missing capability;
+hardened the transport's test double to actually enforce capability
+declarations the way a real JMAP server does, confirmed to reproduce
+this exact error before the fix and pass after it.
+
 ## [1.8.0] — 2026-08-27
 
 **Fixed: `MAIL_PROVIDER`/`FASTMAIL_API_TOKEN` had no effect under Docker
