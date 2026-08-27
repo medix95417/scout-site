@@ -20,6 +20,16 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Added the ability to archive a den/patrol.** Unit-wide leaders can now
+archive a den or patrol from Roster's "Dens & Patrols" section instead of
+only ever adding new ones — an archived group disappears from every
+dropdown, the members-only group directory, its own members-only page,
+and calendar/event scoping, exactly like deactivating a member already
+worked. Nothing about it is deleted: every member, role assignment, past
+event, news post, and photo tied to it keeps working normally, and an
+admin can find it again under "Archived" in that same section and
+reactivate it anytime, with nothing to repair.
+
 ## [2.0.0] — 2026-08-27
 
 **Added address and email fields to both roster account-creation forms.**

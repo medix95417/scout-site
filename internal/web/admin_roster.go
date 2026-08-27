@@ -185,6 +185,16 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 		inactiveRows = append(inactiveRows, rosterRow{RosterEntry: e, Editable: scope.UnitWide || manageable[e.ID]})
 	}
 
+	// Archived dens/patrols, same "no longer show up above" mirror as
+	// inactiveEntries — the only way to find one again to reactivate it.
+	var inactiveSubGroups []roster.SubGroup
+	if scope.UnitWide {
+		inactiveSubGroups, err = roster.InactiveSubGroupsForUnit(r.Context(), h.Pool, unit.ID)
+		if err != nil {
+			log.Printf("web: loading archived sub-groups: %v", err)
+		}
+	}
+
 	allowedRoles, err := roster.AllowedRoles(r.Context(), h.Pool, unit.UnitType, unit.ID, scope)
 	if err != nil {
 		log.Printf("web: loading allowed roles: %v", err)
@@ -192,26 +202,28 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 
 	data := struct {
 		baseData
-		Scope            roster.Scope
-		SubGroupNoun     string
-		SubGroups        []roster.SubGroup
-		AddableSubGroups []roster.SubGroup
-		Families         []roster.FamilyOption
-		Roles            []roster.RoleOption
-		Roster           []rosterRow
-		InactiveRoster   []rosterRow
-		OtherMembers     []roster.MemberOption
+		Scope             roster.Scope
+		SubGroupNoun      string
+		SubGroups         []roster.SubGroup
+		InactiveSubGroups []roster.SubGroup
+		AddableSubGroups  []roster.SubGroup
+		Families          []roster.FamilyOption
+		Roles             []roster.RoleOption
+		Roster            []rosterRow
+		InactiveRoster    []rosterRow
+		OtherMembers      []roster.MemberOption
 	}{
-		baseData:         h.base(r, "Manage Roster"),
-		Scope:            scope,
-		SubGroupNoun:     subGroupNoun(unit.UnitType),
-		SubGroups:        subGroups,
-		AddableSubGroups: addableSubGroups,
-		Families:         families,
-		Roles:            allowedRoles,
-		Roster:           rows,
-		InactiveRoster:   inactiveRows,
-		OtherMembers:     otherMembers,
+		baseData:          h.base(r, "Manage Roster"),
+		Scope:             scope,
+		SubGroupNoun:      subGroupNoun(unit.UnitType),
+		SubGroups:         subGroups,
+		InactiveSubGroups: inactiveSubGroups,
+		AddableSubGroups:  addableSubGroups,
+		Families:          families,
+		Roles:             allowedRoles,
+		Roster:            rows,
+		InactiveRoster:    inactiveRows,
+		OtherMembers:      otherMembers,
 	}
 	h.render(w, h.rosterAdmin, data)
 }
@@ -336,6 +348,45 @@ func (h *Handlers) AdminRosterCreateSubGroup(w http.ResponseWriter, r *http.Requ
 
 	if _, err := roster.CreateSubGroup(r.Context(), h.Pool, unit.ID, name, subGroupNoun(unit.UnitType), actor.ID); err != nil {
 		log.Printf("web: creating sub-group: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin/roster", http.StatusSeeOther)
+}
+
+// AdminRosterSetSubGroupActive archives or reactivates a den/patrol —
+// unit-wide leaders only, same restriction as creating one in the first
+// place: taking a whole group off the rolls (or bringing it back) is an
+// organizational decision above a single Den Leader's own-den scope. See
+// roster.SetSubGroupActive for what this does and doesn't touch.
+func (h *Handlers) AdminRosterSetSubGroupActive(w http.ResponseWriter, r *http.Request) {
+	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	if !ok {
+		return
+	}
+	if !scope.UnitWide {
+		http.Error(w, "only unit-wide leaders can archive or reactivate a "+subGroupNoun(unit.UnitType), http.StatusForbidden)
+		return
+	}
+
+	subGroupID := r.PathValue("id")
+	if subGroupUnitID, found, err := roster.SubGroupUnitID(r.Context(), h.Pool, subGroupID); err != nil || !found || subGroupUnitID != unit.ID {
+		http.NotFound(w, r)
+		return
+	}
+
+	var active bool
+	switch r.PathValue("action") {
+	case "deactivate":
+		active = false
+	case "reactivate":
+		active = true
+	default:
+		http.NotFound(w, r)
+		return
+	}
+	if err := roster.SetSubGroupActive(r.Context(), h.Pool, subGroupID, active, actor.ID); err != nil {
+		log.Printf("web: setting sub-group active status: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

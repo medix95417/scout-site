@@ -150,21 +150,46 @@
       </summary>
       <div class="border-t border-gray-100 p-4">
         {{if .SubGroups}}
-          <ul class="flex flex-wrap gap-2 mb-3">
+          <ul class="space-y-1 mb-3">
             {{range .SubGroups}}
-              <li><a href="/admin/groups/{{.ID}}" class="block rounded-full bg-gray-100 px-3 py-1 text-xs hover:bg-gray-200">{{.Name}}</a></li>
+              <li class="flex items-center justify-between gap-2 rounded-md bg-gray-50 pl-3 pr-1 py-1">
+                <a href="/admin/groups/{{.ID}}" class="text-sm underline" style="color: var(--unit-color);">{{.Name}}</a>
+                <form method="post" action="/admin/roster/sub-groups/{{.ID}}/deactivate"
+                      onsubmit="return confirm('Archive {{.Name}}? It will no longer show up in dropdowns, the members-only group page, or event scoping — its members, history, and photos are all kept, and you can reactivate it anytime.');">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <button type="submit" class="text-xs text-red-600 hover:underline whitespace-nowrap px-2 py-1">Archive</button>
+                </form>
+              </li>
             {{end}}
           </ul>
         {{else}}
           <p class="text-sm text-gray-500 mb-3">None set up yet.</p>
         {{end}}
-        <form method="post" action="/admin/roster/sub-groups" class="flex gap-2">
+        <form method="post" action="/admin/roster/sub-groups" class="flex gap-2 mb-3">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="name" placeholder="e.g. {{if eq .SubGroupNoun "patrol"}}Eagle Patrol{{else}}Bear Den 3{{end}}" required>
           <button type="submit" class="rounded-md px-4 py-2 text-sm whitespace-nowrap btn-accent">
             Add {{if eq .SubGroupNoun "patrol"}}Patrol{{else}}Den{{end}}
           </button>
         </form>
+        {{if .InactiveSubGroups}}
+          <details>
+            <summary class="cursor-pointer select-none text-xs font-semibold text-gray-500">
+              Archived ({{len .InactiveSubGroups}})
+            </summary>
+            <ul class="space-y-1 mt-2">
+              {{range .InactiveSubGroups}}
+                <li class="flex items-center justify-between gap-2 rounded-md bg-gray-50 pl-3 pr-1 py-1">
+                  <span class="text-sm text-gray-400">{{.Name}}</span>
+                  <form method="post" action="/admin/roster/sub-groups/{{.ID}}/reactivate">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <button type="submit" class="text-xs underline whitespace-nowrap px-2 py-1" style="color: var(--unit-color);">Reactivate</button>
+                  </form>
+                </li>
+              {{end}}
+            </ul>
+          </details>
+        {{end}}
       </div>
     </details>
   {{end}}
