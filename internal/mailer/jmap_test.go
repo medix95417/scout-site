@@ -96,6 +96,22 @@ func jmapTestServer(t *testing.T, identityEmail string) (*httptest.Server, *[]by
 		}
 		fmt.Fprintf(w, `{"apiUrl":%q,"primaryAccounts":{"urn:ietf:params:jmap:mail":"acct1"}}`, srv.URL+"/api")
 	})
+	// requiredCapability mirrors a real JMAP server's own capability
+	// gating (RFC 8620 §3.3, RFC 8621 §7) — a method call whose owning
+	// capability isn't in the request's top-level "using" gets rejected
+	// with "unknownMethod", even if every other call in the same batch
+	// is fine. This is exactly the bug this fake server exists to catch:
+	// an earlier version of fetchIdentityAndDrafts called Identity/get
+	// (submission) while only declaring the mail capability, which a
+	// less faithful fake (one that only checked the method name, not
+	// "using") would never have caught.
+	requiredCapability := map[string]string{
+		"Identity/get":        "urn:ietf:params:jmap:submission",
+		"Mailbox/query":       "urn:ietf:params:jmap:mail",
+		"Email/set":           "urn:ietf:params:jmap:mail",
+		"EmailSubmission/set": "urn:ietf:params:jmap:submission",
+	}
+
 	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		lastAPIBody = body
@@ -106,6 +122,22 @@ func jmapTestServer(t *testing.T, identityEmail string) (*httptest.Server, *[]by
 		if len(req.MethodCalls) == 0 {
 			t.Fatal("server: empty methodCalls")
 		}
+
+		using := map[string]bool{}
+		for _, capability := range req.Using {
+			using[capability] = true
+		}
+		for _, call := range req.MethodCalls {
+			method, _ := call[0].(string)
+			id, _ := call[2].(string)
+			need := requiredCapability[method]
+			if need != "" && !using[need] {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprintf(w, `{"methodResponses":[["error", {"type":"unknownMethod","description":"method exists, but appropriate 'using' item not specified for object"}, %q]]}`, id)
+				return
+			}
+		}
+
 		firstMethod, _ := req.MethodCalls[0][0].(string)
 
 		w.Header().Set("Content-Type", "application/json")
