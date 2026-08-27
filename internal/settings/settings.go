@@ -688,6 +688,9 @@ const (
 	SocialFacebookURL  = "social_facebook_url"
 	SocialInstagramURL = "social_instagram_url"
 	SocialTikTokURL    = "social_tiktok_url"
+
+	WelcomeEmailSubject = "welcome_email_subject"
+	WelcomeEmailBody    = "welcome_email_body"
 )
 
 // UnitTextSetting describes one per-unit text setting for /admin/settings.
@@ -705,6 +708,7 @@ type UnitTextSetting struct {
 	Description string
 	Placeholder string
 	Secret      bool
+	Multiline   bool // renders as a <textarea> instead of a single-line <input> — see admin-settings.html
 	Section     string
 }
 
@@ -769,6 +773,21 @@ var UnitTextSettings = []UnitTextSetting{
 		Description: "Shows a TikTok icon/link in the footer and on the homepage, once the toggle above is on.",
 		Placeholder: "https://tiktok.com/@yourtroop",
 		Section:     "social",
+	},
+	{
+		Key:         WelcomeEmailSubject,
+		Label:       "Welcome email subject",
+		Description: "Placeholders: {{name}}, {{email}}, {{password}}, {{login_url}}, {{unit_name}}. Left blank, a sensible default is used.",
+		Placeholder: "Welcome to {{unit_name}}!",
+		Section:     "welcome_email",
+	},
+	{
+		Key:         WelcomeEmailBody,
+		Label:       "Welcome email body",
+		Description: "Same placeholders as the subject. Sent only when a leader checks \"Email login details\" while creating a family or individual login — never automatically. A family account's email always gets one extra, non-editable paragraph appended noting they can see every child linked to their account across both the Pack and Troop sites, since that's real behavior of this login, not just wording.",
+		Placeholder: "",
+		Multiline:   true,
+		Section:     "welcome_email",
 	},
 }
 

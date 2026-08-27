@@ -73,6 +73,7 @@
             <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="last_name" placeholder="Last name" required>
           </div>
           <p class="text-xs text-gray-500">The first family member is added as an adult — this is who's logging in.</p>
+          <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="address" rows="2" placeholder="Household address (optional, shared by the whole family)"></textarea>
           <div class="flex gap-2">
             <select name="sub_group_id" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm">
               {{if .Scope.UnitWide}}<option value="">No {{.SubGroupNoun}} yet</option>{{end}}
@@ -82,6 +83,10 @@
               {{range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
             </select>
           </div>
+          <label class="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" name="send_welcome_email" value="1" checked>
+            Email login details to this family
+          </label>
           <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">
             Create Family
           </button>
@@ -113,6 +118,8 @@
               <label class="flex items-center gap-1"><input type="radio" name="member_type" value="youth" checked> Youth</label>
               <label class="flex items-center gap-1"><input type="radio" name="member_type" value="adult"> Adult</label>
             </div>
+            <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Email (optional, this person's own — separate from the family login)">
+            <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="address" rows="2" placeholder="Household address (optional — leave blank to keep the family's existing address)"></textarea>
             <div class="flex gap-2">
               <select name="sub_group_id" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm">
                 {{if .Scope.UnitWide}}<option value="">No {{.SubGroupNoun}} yet</option>{{end}}

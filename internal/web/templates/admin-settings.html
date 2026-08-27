@@ -218,6 +218,29 @@
     </button>
   </form>
 
+  <h2 class="text-lg font-semibold mt-10 mb-2">Welcome Email — {{.Unit.Name}}</h2>
+  <p class="text-sm text-gray-600 mb-4 max-w-2xl">
+    Sent only when a leader checks "Email login details" while creating a family or individual login on the Roster
+    page — never automatically. Leave either field blank to use the default wording.
+  </p>
+  <form method="post" action="/admin/settings/unit/welcome-email" class="max-w-2xl space-y-3">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    {{range .WelcomeEmailText}}
+      <div class="rounded-lg border border-gray-200 bg-white p-4">
+        <label class="block text-sm font-medium mb-1" for="{{.Key}}">{{.Label}}</label>
+        {{if .Multiline}}
+          <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono" rows="8" id="{{.Key}}" name="{{.Key}}" placeholder="{{.Placeholder}}">{{.Value}}</textarea>
+        {{else}}
+          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" id="{{.Key}}" name="{{.Key}}" value="{{.Value}}" placeholder="{{.Placeholder}}">
+        {{end}}
+        <p class="text-xs text-gray-500 mt-1">{{.Description}}</p>
+      </div>
+    {{end}}
+    <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
+      Save Welcome Email
+    </button>
+  </form>
+
   <h2 class="text-lg font-semibold mt-10 mb-2">Email (SMTP) Server</h2>
   <p class="text-sm text-gray-600 mb-4 max-w-2xl">
     Where outgoing mail (password reset links, event reminders) gets sent from. Leave any field blank to fall back

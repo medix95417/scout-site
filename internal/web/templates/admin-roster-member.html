@@ -94,12 +94,18 @@
               family's shared login. Give them one (useful for a Scout who wants to check their own account or
               RSVP themselves, or a family with more than one Scout who'd rather each log in separately).
             </p>
-            <form method="post" action="/admin/roster/members/{{.Member.ID}}/login" class="flex gap-2">
+            <form method="post" action="/admin/roster/members/{{.Member.ID}}/login" class="space-y-2">
               <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-              <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Login email" required>
-              <button type="submit" class="rounded-md px-4 py-2 text-sm whitespace-nowrap btn-accent">
-                Create Individual Login
-              </button>
+              <div class="flex gap-2">
+                <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Login email" required>
+                <button type="submit" class="rounded-md px-4 py-2 text-sm whitespace-nowrap btn-accent">
+                  Create Individual Login
+                </button>
+              </div>
+              <label class="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" name="send_welcome_email" value="1" checked>
+                Email login details to this person
+              </label>
             </form>
           {{end}}
         </div>

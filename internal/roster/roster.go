@@ -802,12 +802,16 @@ func MembersNotInUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([
 	return out, rows.Err()
 }
 
-// NewFamilyInput is what creating a brand-new family login needs.
+// NewFamilyInput is what creating a brand-new family login needs. Address
+// is the shared household address (optional) — separate from Email, which
+// is the login itself, not necessarily what the family wants released to
+// the rest of the unit as contact info.
 type NewFamilyInput struct {
 	FamilyName string
 	Email      string
 	FirstName  string // first adult member's name
 	LastName   string
+	Address    string
 }
 
 // CreateFamilyWithMember creates a family, its login, and its first adult
@@ -840,7 +844,7 @@ func CreateFamilyWithMember(ctx context.Context, pool *pgxpool.Pool, in NewFamil
 	defer tx.Rollback(ctx) //nolint:errcheck // no-op if already committed
 
 	if err := tx.QueryRow(ctx,
-		`INSERT INTO families (name) VALUES ($1) RETURNING id`, in.FamilyName,
+		`INSERT INTO families (name, address) VALUES ($1, NULLIF($2, '')) RETURNING id`, in.FamilyName, strings.TrimSpace(in.Address),
 	).Scan(&familyID); err != nil {
 		return "", "", "", fmt.Errorf("creating family: %w", err)
 	}
@@ -1018,21 +1022,45 @@ func ResetMemberLoginPassword(ctx context.Context, pool *pgxpool.Pool, memberID,
 }
 
 // AddMember adds a new member (adult or youth) to an existing family.
-func AddMember(ctx context.Context, pool *pgxpool.Pool, familyID, firstName, lastName, memberType, actorID string) (memberID string, err error) {
-	err = pool.QueryRow(ctx, `
-		INSERT INTO members (family_id, first_name, last_name, member_type)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id
-	`, familyID, firstName, lastName, memberType).Scan(&memberID)
+// email is this new member's own contact email (separate from any family
+// login), and address updates the family's shared household address —
+// only when non-blank, so leaving it blank on a second/third member added
+// to an already-addressed family doesn't wipe out what's already there.
+func AddMember(ctx context.Context, pool *pgxpool.Pool, familyID, firstName, lastName, memberType, email, address, actorID string) (memberID string, err error) {
+	email = strings.TrimSpace(email)
+	address = strings.TrimSpace(address)
+
+	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return "", err
 	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op if already committed
+
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO members (family_id, first_name, last_name, member_type, email)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''))
+		RETURNING id
+	`, familyID, firstName, lastName, memberType, email).Scan(&memberID); err != nil {
+		return "", err
+	}
+	if address != "" {
+		if _, err := tx.Exec(ctx,
+			`UPDATE families SET address = $1 WHERE id = $2`, address, familyID,
+		); err != nil {
+			return "", fmt.Errorf("updating family address: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+
 	audit.Log(ctx, pool, audit.Entry{
 		EntityType: "member",
 		EntityID:   memberID,
 		ActorID:    &actorID,
 		Action:     "create",
-		After:      map[string]string{"first_name": firstName, "last_name": lastName, "member_type": memberType},
+		After:      map[string]string{"first_name": firstName, "last_name": lastName, "member_type": memberType, "email": email},
 	})
 	return memberID, nil
 }

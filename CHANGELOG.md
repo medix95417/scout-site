@@ -20,6 +20,33 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-08-27
+
+**Added address and email fields to both roster account-creation forms.**
+"Add a New Family" now has an optional household address field alongside
+the existing login email; "Add a Member to an Existing Family" now has
+its own optional email (separate from the family's login) and an
+optional household address (only overwrites the family's existing
+address if actually filled in, so leaving it blank on a second or third
+family member never wipes out an address set earlier). Previously,
+either had to be added afterward from the member's own edit page.
+
+**Added an optional welcome email when creating a family or individual
+login.** Creating a new family account or a Scout's own individual login
+from Roster now has an "Email login details" checkbox, checked by
+default, that sends the new login's email and temporary password by
+mail rather than requiring a leader to relay it manually — useful when
+they aren't handing the password off in person. The subject and body are
+per-unit and editable from Settings → Welcome Email (with `{{name}}`,
+`{{email}}`, `{{password}}`, `{{login_url}}`, `{{unit_name}}`
+placeholders, and sensible defaults if never customized); a family
+account's email always gets one additional, non-editable paragraph
+noting they can see every child linked to their account across both the
+Pack and Troop sites, since that's real behavior of a family login, not
+just template wording. Sending is best-effort — if mail isn't
+configured or delivery fails, the on-screen credentials (which already
+existed) are still shown so a leader can hand them off another way.
+
 **Fixed: sending mail via the Fastmail JMAP transport failed with
 `unknownMethod`.** The identity/mailbox lookup called `Identity/get`,
 which belongs to JMAP's submission capability, while only declaring the

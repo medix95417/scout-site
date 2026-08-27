@@ -311,7 +311,7 @@ func (h *Handlers) AdminRosterImportApply(w http.ResponseWriter, r *http.Request
 			}
 		}
 		if memberID == "" {
-			memberID, err = roster.AddMember(r.Context(), h.Pool, familyID, row.FirstName, row.LastName, row.MemberType, actor.ID)
+			memberID, err = roster.AddMember(r.Context(), h.Pool, familyID, row.FirstName, row.LastName, row.MemberType, row.Email, "", actor.ID)
 			if err != nil {
 				skip(fmt.Sprintf("adding member: %v", err))
 				continue

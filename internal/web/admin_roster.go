@@ -245,6 +245,7 @@ func (h *Handlers) AdminRosterCreateFamily(w http.ResponseWriter, r *http.Reques
 		Email:      r.FormValue("email"),
 		FirstName:  strings.TrimSpace(r.FormValue("first_name")),
 		LastName:   strings.TrimSpace(r.FormValue("last_name")),
+		Address:    strings.TrimSpace(r.FormValue("address")),
 	}, actor.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -255,7 +256,13 @@ func (h *Handlers) AdminRosterCreateFamily(w http.ResponseWriter, r *http.Reques
 		log.Printf("web: assigning role to new family's member: %v", err)
 	}
 
-	h.renderCredentials(w, r, "Family created", r.FormValue("email"), tempPassword)
+	wantsWelcomeEmail := r.FormValue("send_welcome_email") == "1"
+	welcomeEmailSent := false
+	if wantsWelcomeEmail {
+		welcomeEmailSent = h.sendWelcomeEmail(r, strings.TrimSpace(r.FormValue("first_name")), r.FormValue("email"), tempPassword, true)
+	}
+
+	h.renderCredentials(w, r, "Family created", r.FormValue("email"), tempPassword, wantsWelcomeEmail, welcomeEmailSent)
 }
 
 // AdminRosterAddMember handles "Add a Member to an Existing Family" —
@@ -292,7 +299,8 @@ func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) 
 	}
 
 	memberID, err := roster.AddMember(r.Context(), h.Pool, familyID,
-		strings.TrimSpace(r.FormValue("first_name")), strings.TrimSpace(r.FormValue("last_name")), memberType, actor.ID)
+		strings.TrimSpace(r.FormValue("first_name")), strings.TrimSpace(r.FormValue("last_name")), memberType,
+		strings.TrimSpace(r.FormValue("email")), strings.TrimSpace(r.FormValue("address")), actor.ID)
 	if err != nil {
 		log.Printf("web: adding member: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -537,7 +545,13 @@ func (h *Handlers) AdminRosterCreateMemberLogin(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	h.renderCredentials(w, r, "Individual login created for "+member.FirstName+" "+member.LastName, email, tempPassword)
+	wantsWelcomeEmail := r.FormValue("send_welcome_email") == "1"
+	welcomeEmailSent := false
+	if wantsWelcomeEmail {
+		welcomeEmailSent = h.sendWelcomeEmail(r, member.FirstName, email, tempPassword, false)
+	}
+
+	h.renderCredentials(w, r, "Individual login created for "+member.FirstName+" "+member.LastName, email, tempPassword, wantsWelcomeEmail, welcomeEmailSent)
 }
 
 // AdminRosterResetMemberLoginPassword resets one member's individual
@@ -581,7 +595,7 @@ func (h *Handlers) AdminRosterResetMemberLoginPassword(w http.ResponseWriter, r 
 		log.Printf("web: loading individual login email: %v", err)
 	}
 
-	h.renderCredentials(w, r, "Individual login password reset for "+member.FirstName+" "+member.LastName, email, tempPassword)
+	h.renderCredentials(w, r, "Individual login password reset for "+member.FirstName+" "+member.LastName, email, tempPassword, false, false)
 }
 
 func (h *Handlers) AdminRosterMemberUpdate(w http.ResponseWriter, r *http.Request) {
@@ -822,23 +836,37 @@ func (h *Handlers) AdminRosterResetPassword(w http.ResponseWriter, r *http.Reque
 		log.Printf("web: loading family email: %v", err)
 	}
 
-	h.renderCredentials(w, r, "Password reset", email, tempPassword)
+	h.renderCredentials(w, r, "Password reset", email, tempPassword, false, false)
+}
+
+// credentialsData feeds admin-roster-credentials.html. A named type (rather
+// than an inline anonymous struct) so tests can render every data shape the
+// template actually receives, the same way forgotPasswordData does for
+// forgot-password.html.
+type credentialsData struct {
+	baseData
+	Heading               string
+	Email                 string
+	TempPassword          string
+	WelcomeEmailRequested bool
+	WelcomeEmailSent      bool
 }
 
 // renderCredentials shows a one-time confirmation screen with a login
 // email + temporary password — the only place either flow surfaces the
 // plaintext password, since only its bcrypt hash is ever stored.
-func (h *Handlers) renderCredentials(w http.ResponseWriter, r *http.Request, heading, email, tempPassword string) {
-	data := struct {
-		baseData
-		Heading      string
-		Email        string
-		TempPassword string
-	}{
-		baseData:     h.base(r, heading),
-		Heading:      heading,
-		Email:        email,
-		TempPassword: tempPassword,
+// welcomeEmailRequested/Sent are only ever true from the two account-
+// creation flows (AdminRosterCreateFamily/AdminRosterCreateMemberLogin);
+// a password reset always passes false, false — resetting an existing
+// account's password isn't "welcoming" anyone.
+func (h *Handlers) renderCredentials(w http.ResponseWriter, r *http.Request, heading, email, tempPassword string, welcomeEmailRequested, welcomeEmailSent bool) {
+	data := credentialsData{
+		baseData:              h.base(r, heading),
+		Heading:               heading,
+		Email:                 email,
+		TempPassword:          tempPassword,
+		WelcomeEmailRequested: welcomeEmailRequested,
+		WelcomeEmailSent:      welcomeEmailSent,
 	}
 	h.render(w, h.rosterCredentials, data)
 }
