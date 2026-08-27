@@ -20,6 +20,14 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed: `MAIL_PROVIDER`/`FASTMAIL_API_TOKEN` had no effect under Docker
+Compose.** `docker-compose.yml` passes environment variables to the
+`app` container as an explicit list rather than forwarding the whole
+`.env` file, and that list was never updated when these two were added
+— so setting them in `.env` silently did nothing, and the app kept
+trying (and failing) to send over SMTP. Added both to the `app`
+service's `environment:` block.
+
 **Fixed: submitting the "forgot password" form could show a generic
 500 error instead of the confirmation page.** Unrelated to which mail
 transport is configured — a pre-existing bug where the success page's
