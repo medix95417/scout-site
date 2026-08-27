@@ -20,6 +20,17 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed: submitting the "forgot password" form could show a generic
+500 error instead of the confirmation page.** Unrelated to which mail
+transport is configured — a pre-existing bug where the success page's
+data didn't declare a field the template needs unconditionally, which
+made template rendering fail every time that specific page actually
+got shown (evidently never previously exercised in production). The
+three places this page renders now share one struct type instead of
+each building its own ad hoc one, closing off this whole class of bug;
+added a test that renders the actual page data through the actual
+template to catch a recurrence.
+
 **Added an alternative outbound-email transport for hosts that block
 SMTP.** Some ISPs/hosting providers block outbound SMTP entirely, even
 on 465/587, which previously meant no way to send password-reset or
