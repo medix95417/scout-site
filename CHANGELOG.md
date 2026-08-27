@@ -20,6 +20,16 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Added an alternative outbound-email transport for hosts that block
+SMTP.** Some ISPs/hosting providers block outbound SMTP entirely, even
+on 465/587, which previously meant no way to send password-reset or
+event-reminder email at all. Setting `MAIL_PROVIDER=fastmail-jmap` (with
+`FASTMAIL_API_TOKEN`) now sends mail over Fastmail's JMAP HTTPS API
+instead of SMTP, so no SMTP port needs to be reachable — see
+DEPLOY.md/.env.example. `SMTP_FROM` still applies (must be one of that
+Fastmail account's own addresses/aliases); the SMTP-specific settings
+are ignored and unaffected when this is set.
+
 **The Files page now groups by event in a paginated accordion, same as
 the photo pickers.** It used to render every file in the library flat
 and all at once (or, with an event filter checked, grouped but still

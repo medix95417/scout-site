@@ -212,6 +212,12 @@ logs). No architecture change is needed for this move — see
   `/admin/roster` fallback) and `-send-event-reminders` logs a warning and
   sends nothing. Nothing else depends on email being configured.
 
+  If outbound SMTP is blocked at the network level (some hosts/ISPs block
+  it entirely), set `MAIL_PROVIDER=fastmail-jmap` and
+  `FASTMAIL_API_TOKEN` instead of the `SMTP_*` settings — sends over
+  Fastmail's JMAP HTTPS API rather than SMTP, so no SMTP port needs to be
+  reachable at all. See `.env.example` and DEPLOY.md.
+
 **Not in Phase 1** (see `scout-website-requirements.md` Section 6): any
 payment processing, fund ledgers, individual Scout accounts, or trip-fund
 transfers — Phase 2 (below) adds the ledger, accounts, and trip funds, but

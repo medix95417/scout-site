@@ -51,6 +51,18 @@ type Config struct {
 	SMTPFrom     string
 	SMTPTLSMode  string // "starttls" (default, port 587) or "tls" (implicit TLS, port 465)
 
+	// MailProvider selects the outbound transport: "" (default) uses
+	// the SMTP fields above; "fastmail-jmap" instead sends over
+	// Fastmail's JMAP HTTPS API (see internal/mailer/jmap.go), for a
+	// host whose network blocks outbound SMTP entirely. When set,
+	// SMTPHost/Port/Username/TLSMode are unused — SMTPFrom still
+	// applies, since it picks which of the account's identities to send
+	// from. FastmailAPIToken is environment-only, same as SMTPPassword
+	// above and for the same reason: it's a real, usable credential, not
+	// something to let a database dump/backup hand out in plaintext.
+	MailProvider     string
+	FastmailAPIToken string
+
 	// ReminderWindow is how far ahead of an event's start time
 	// -send-event-reminders looks when deciding a reminder is due.
 	ReminderWindow time.Duration
@@ -85,6 +97,9 @@ func Load() (Config, error) {
 		SMTPPassword: getenv("SMTP_PASSWORD", ""),
 		SMTPFrom:     getenv("SMTP_FROM", ""),
 		SMTPTLSMode:  getenv("SMTP_TLS_MODE", "starttls"),
+
+		MailProvider:     getenv("MAIL_PROVIDER", ""),
+		FastmailAPIToken: getenv("FASTMAIL_API_TOKEN", ""),
 
 		// Empty S3Endpoint is the safe default — it means "storage
 		// unconfigured," not "try to reach some placeholder host." See
