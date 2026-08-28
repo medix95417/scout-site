@@ -8,6 +8,28 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+
+    # The ledger's guarantees are guarantees about what the database ends
+    # up holding — the balance-to-zero rule is enforced partly by a
+    # deferred constraint trigger, which no amount of Go-level testing
+    # reaches. internal/ledger's tests skip themselves when
+    # TEST_DATABASE_URL is unset (so `go test ./...` still works on a
+    # laptop with no Postgres), so CI has to provide one or they'd never
+    # actually run.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: scout_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,6 +45,8 @@ jobs:
         run: go vet ./...
 
       - name: Test
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/scout_test?sslmode=disable
         run: go test ./...
 
   govulncheck:

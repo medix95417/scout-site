@@ -20,6 +20,41 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed: an uploaded file could be served back as a web page.** The file
+library stored whatever content type an upload claimed to be and echoed
+it back on download, from the site's own address. A file named
+`photo.png` could therefore declare itself a web page and run code as
+whoever opened it — including an admin. The type is now worked out from
+the file's actual contents instead of taken on trust, anything that
+isn't a photo, PDF or media file is sent as a download rather than
+displayed, and every file is served in a locked-down mode that can't run
+code even if something slips through. Nothing about normal photo or PDF
+use changes.
+
+**Fixed: unusual text typed into a dollar field could produce a nonsense
+amount.** Entering values like `Inf`, `1e5` or `1_0` into an amount box
+was quietly accepted and turned into something nobody meant — in the
+worst case a huge negative figure. Every place that takes an amount
+already refused those before they could reach the books, so no ledger
+was affected, but amounts are now checked once, properly, where they're
+read, and the arithmetic no longer goes anywhere near a decimal type.
+Amounts written the way people actually write them (`$1,250.99`) are now
+accepted too.
+
+**Fixed: a fundraiser order could be placed for an impossible amount.**
+The public order form put no ceiling on quantity, so a crafted
+submission could create an order for billions of dollars. Quantities are
+now capped at 10,000 per item and $1,000,000 per order, and an order past
+either is refused rather than recorded.
+
+**Added tests for the ledger's core guarantees.** The money-handling code
+had no tests despite carrying the rules that matter most: that a
+transaction's entries always cancel out, that one unit's books can't
+touch another's, that a Scout account can't be overdrawn, that a pending
+transfer moves nothing until it's approved, and that a fundraiser credit
+can never exceed what was actually raised. All of these are now covered
+against a real database, and CI runs them on every change.
+
 **Fixed: the one-time credentials screen still showed the temporary
 password on screen even after it was successfully emailed.** When a
 leader checks "Email login details" while creating a family or

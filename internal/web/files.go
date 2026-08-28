@@ -268,10 +268,10 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		contentType := fh.Header.Get("Content-Type")
-		if contentType == "" {
-			contentType = "application/octet-stream"
-		}
+		// Derived from the bytes, not from what the uploader claimed — see
+		// sniffContentType (file_serving.go) for why the multipart part
+		// header can't be trusted here.
+		contentType := sniffContentType(data, fh.Header.Get("Content-Type"))
 		key := files.NewStorageKey(unit.ID, fh.Filename)
 		if err := h.Storage.Put(r.Context(), key, bytes.NewReader(data), int64(len(data)), contentType); err != nil {
 			log.Printf("web: uploading file to storage: %v", err)
@@ -389,8 +389,7 @@ func (h *Handlers) FileDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer obj.Close()
 
-	w.Header().Set("Content-Type", f.ContentType)
-	w.Header().Set("Content-Disposition", `inline; filename="`+strings.ReplaceAll(f.Filename, `"`, "")+`"`)
+	writeUserFileHeaders(w, f.ContentType, f.Filename)
 	if _, err := io.Copy(w, obj); err != nil {
 		log.Printf("web: streaming file download: %v", err)
 	}
@@ -466,7 +465,10 @@ func (h *Handlers) FileThumbnail(w http.ResponseWriter, r *http.Request) {
 	thumb, src, err := fetchAndCacheThumbnail(r.Context(), h.Storage, f.StorageKey)
 	if err != nil {
 		if errors.Is(err, thumbnail.ErrNotAnImage) {
-			w.Header().Set("Content-Type", f.ContentType)
+			// Falls back to the original bytes, so this is a second path
+			// serving user-uploaded content and needs the same headers the
+			// download route gets — not just a bare Content-Type.
+			writeUserFileHeaders(w, f.ContentType, f.Filename)
 			w.Write(src)
 			return
 		}

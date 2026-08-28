@@ -24,6 +24,16 @@ import (
 // receiving the money would risk a phantom balance in the unit's general
 // fund.
 
+const (
+	// MaxOrderItemQuantity bounds a single line on a storefront order.
+	// Generous for popcorn or wreaths, small enough that price × quantity
+	// can't come near overflowing int64 — see CreateFundraiserOrder.
+	MaxOrderItemQuantity = 10_000
+
+	// MaxOrderTotalCents bounds a whole order at $1,000,000.
+	MaxOrderTotalCents = 100_000_000
+)
+
 // FundraiserItem is one sellable line in a fundraiser's catalog.
 type FundraiserItem struct {
 	ID           string
@@ -217,12 +227,26 @@ func CreateFundraiserOrder(ctx context.Context, pool *pgxpool.Pool, fundraiserID
 		return FundraiserOrder{}, fmt.Errorf("ledger: order needs at least one item")
 	}
 
+	// Quantities arrive from a public, unauthenticated form (see
+	// web.FundraiserPlaceOrder), so they're bounded here rather than
+	// trusted. Without an upper bound, price × quantity silently overflows
+	// int64 and can wrap back to a positive number — a $1.00 item at
+	// quantity 2e17 produces a "$15,532,559,262,904,483" order that sails
+	// past a total > 0 check. Rejecting is the point: an order this size
+	// is never real, and quietly clamping it would put a number nobody
+	// typed in front of a treasurer.
 	var total int64
 	for _, it := range items {
-		if it.UnitPriceCents <= 0 || it.Quantity <= 0 {
-			return FundraiserOrder{}, fmt.Errorf("ledger: every order item needs a positive price and quantity")
+		if it.UnitPriceCents <= 0 || it.UnitPriceCents > MaxOrderTotalCents {
+			return FundraiserOrder{}, fmt.Errorf("ledger: every order item needs a positive, sensible price")
+		}
+		if it.Quantity <= 0 || it.Quantity > MaxOrderItemQuantity {
+			return FundraiserOrder{}, fmt.Errorf("ledger: quantity for %q must be between 1 and %d", it.ItemName, MaxOrderItemQuantity)
 		}
 		total += it.UnitPriceCents * int64(it.Quantity)
+		if total > MaxOrderTotalCents {
+			return FundraiserOrder{}, fmt.Errorf("ledger: order total is larger than this system accepts")
+		}
 	}
 	if total <= 0 {
 		return FundraiserOrder{}, fmt.Errorf("ledger: order total must be positive")

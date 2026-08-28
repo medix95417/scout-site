@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -125,6 +126,13 @@ func (h *Handlers) FundraiserPlaceOrder(w http.ResponseWriter, r *http.Request) 
 	var orderItems []ledger.FundraiserOrderItem
 	for _, it := range catalog {
 		qty, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("qty_" + it.ID)))
+		if qty > ledger.MaxOrderItemQuantity {
+			// Bounded again in CreateFundraiserOrder, which is the real
+			// guard; caught here so an ordinary buyer gets a clear message
+			// instead of a generic failure. Anyone can POST to this route.
+			http.Error(w, fmt.Sprintf("please order at most %d of any one item", ledger.MaxOrderItemQuantity), http.StatusBadRequest)
+			return
+		}
 		if qty > 0 {
 			orderItems = append(orderItems, ledger.FundraiserOrderItem{ItemName: it.Name, UnitPriceCents: it.PriceCents, Quantity: qty})
 		}
