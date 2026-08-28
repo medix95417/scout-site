@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.1.1] — 2026-08-28
+
 **Fixed: the Resources page could serve an uploaded file as a web page.**
 The same problem that was fixed for the file library a few releases ago
 turned out to have a third copy here that was missed at the time — and
