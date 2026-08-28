@@ -32,6 +32,32 @@ const MaxDimension = 640
 // shown small.
 const Quality = 78
 
+// MaxPixels caps how large a source image may be, in total pixels,
+// before this package will decode it at all — 50 megapixels, comfortably
+// above any real camera photo (a 100 MP phone panorama is the only thing
+// that comes close) and far below the point where decoding threatens the
+// process.
+//
+// This exists because image dimensions are declared in a file's header
+// and cost nothing to inflate. A "decompression bomb" is a small file
+// claiming enormous dimensions: a PNG of a single repeated colour
+// compresses to almost nothing, so ~850 KB of upload — well under
+// maxUploadFileSize — is enough to declare 30000x30000 and make
+// image.Decode try to allocate around a gigabyte in one go. Since
+// thumbnails are generated eagerly at upload AND swept again by
+// -backfill-thumbnails on every startup, one such file would knock the
+// site over repeatedly, for both units, until it was found and removed.
+//
+// The fix is cheap: image.DecodeConfig reads only the header, so the
+// dimensions can be checked before committing to the allocation.
+const MaxPixels = 50_000_000
+
+// ErrTooLarge is returned when src's declared dimensions exceed
+// MaxPixels. Distinct from ErrNotAnImage because it isn't a "this isn't
+// an image" case — it decodes fine, it's just implausibly large, and the
+// caller logging it should be able to tell those apart.
+var ErrTooLarge = errors.New("thumbnail: image dimensions are too large to process")
+
 // ErrNotAnImage is returned when src can't be decoded as one of the
 // image formats this package handles (JPEG, PNG, GIF). Callers should
 // fall back to serving the original bytes unchanged — e.g. a
@@ -47,6 +73,20 @@ var ErrNotAnImage = errors.New("thumbnail: source is not a decodable image")
 // original file's own full-size download ever serves the source bytes
 // unchanged.
 func Generate(src []byte) ([]byte, error) {
+	// Check the header before decoding — see MaxPixels for why.
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(src))
+	if err != nil {
+		return nil, ErrNotAnImage
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 {
+		return nil, ErrNotAnImage
+	}
+	// int64 so the multiply can't overflow on a 32-bit build before the
+	// comparison gets a chance to reject it.
+	if int64(cfg.Width)*int64(cfg.Height) > MaxPixels {
+		return nil, ErrTooLarge
+	}
+
 	img, _, err := image.Decode(bytes.NewReader(src))
 	if err != nil {
 		return nil, ErrNotAnImage

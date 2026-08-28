@@ -1,0 +1,61 @@
+name: Release
+
+# Cutting a release is deliberately a decision someone makes, not
+# something that happens on every merge to main. Two reasons: a version
+# number is a message to whoever is running the site ("this is worth
+# deploying"), and a workflow that pushes to main on every merge to main
+# is a loop waiting to happen.
+#
+# What IS automatic is the part that's tedious and easy to get wrong:
+# which number comes next. Run this and it reads the labels of the PRs
+# merged since the last tag and picks the largest bump any of them asked
+# for — release:major, release:minor, or patch if nothing says otherwise.
+# The bump input overrides that when you want to decide by hand.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump (leave as 'auto' to read it from merged PR labels)"
+        required: true
+        default: auto
+        type: choice
+        options: [auto, patch, minor, major]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      # Needed to push the release commit and tag back to main.
+      contents: write
+      # Needed by `gh pr list` when inferring the bump from labels.
+      pull-requests: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The script reads `git describe` for the last tag and the log
+          # since then, so a shallow clone won't do.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Cut the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ inputs.bump }}" = "auto" ]; then
+            scripts/release.sh
+          else
+            scripts/release.sh "${{ inputs.bump }}"
+          fi
+
+      - name: Push the commit and tag
+        run: git push --follow-tags origin HEAD:main

@@ -63,6 +63,15 @@ type Config struct {
 	MailProvider     string
 	FastmailAPIToken string
 
+	// TrustProxyHeaders says whether X-Forwarded-For can be believed when
+	// working out a visitor's address for rate limiting (see
+	// internal/web.clientIP). Only turn this on when a reverse proxy is
+	// the ONLY route to this app — the Docker Compose stack puts Caddy in
+	// front, so it's set there. Left off, the header is ignored entirely,
+	// because a client can otherwise set it to anything and pick its own
+	// rate-limit bucket.
+	TrustProxyHeaders bool
+
 	// ReminderWindow is how far ahead of an event's start time
 	// -send-event-reminders looks when deciding a reminder is due.
 	ReminderWindow time.Duration
@@ -98,8 +107,9 @@ func Load() (Config, error) {
 		SMTPFrom:     getenv("SMTP_FROM", ""),
 		SMTPTLSMode:  getenv("SMTP_TLS_MODE", "starttls"),
 
-		MailProvider:     getenv("MAIL_PROVIDER", ""),
-		FastmailAPIToken: getenv("FASTMAIL_API_TOKEN", ""),
+		MailProvider:      getenv("MAIL_PROVIDER", ""),
+		TrustProxyHeaders: getenv("TRUST_PROXY_HEADERS", "") == "true",
+		FastmailAPIToken:  getenv("FASTMAIL_API_TOKEN", ""),
 
 		// Empty S3Endpoint is the safe default — it means "storage
 		// unconfigured," not "try to reach some placeholder host." See

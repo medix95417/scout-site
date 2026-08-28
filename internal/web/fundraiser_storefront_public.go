@@ -101,6 +101,18 @@ func (h *Handlers) FundraiserPlaceOrder(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// This is the only route an anonymous visitor can use to write to the
+	// database, so it's the one that needs a ceiling. Checked before any
+	// query runs, so a flood costs a map lookup rather than database work.
+	if ip := clientIP(r, h.TrustProxyHeaders); !h.orderLimiter.Allow(ip) {
+		retry := h.orderLimiter.RetryAfter(ip)
+		w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
+		http.Error(w, "That's a lot of orders from one place in a short time. Please wait a little while and try again — "+
+			"if you're placing orders on behalf of several people, the unit's Treasurer can enter them for you.",
+			http.StatusTooManyRequests)
+		return
+	}
+
 	f, active, err := ledger.ActiveStorefrontFundraiser(r.Context(), h.Pool, unit.ID)
 	if err != nil {
 		log.Printf("web: loading active storefront fundraiser: %v", err)

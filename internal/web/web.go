@@ -33,6 +33,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/ledger"
 	"github.com/47-yonkers/scout-site/internal/mailer"
 	"github.com/47-yonkers/scout-site/internal/permission"
+	"github.com/47-yonkers/scout-site/internal/ratelimit"
 	"github.com/47-yonkers/scout-site/internal/roster"
 	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/storage"
@@ -66,6 +67,15 @@ type Handlers struct {
 	SecureCookie bool // set true when serving over HTTPS (production); false for local http://
 	Mailer       *mailer.Mailer
 	Storage      *storage.Store
+
+	// TrustProxyHeaders — see internal/config.Config.TrustProxyHeaders and
+	// clientIP.
+	TrustProxyHeaders bool
+
+	// orderLimiter bounds how many fundraiser orders one address can place.
+	// The storefront order form is the only place an anonymous visitor can
+	// write to the database, so it's the only one that needs this.
+	orderLimiter *ratelimit.Limiter
 
 	home                 *template.Template
 	login                *template.Template
@@ -289,7 +299,17 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 		return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/_image-picker.html", "templates/"+page)
 	}
 
-	h := &Handlers{Pool: pool, CookieDomain: cookieDomain, SecureCookie: secureCookie, Mailer: mail, Storage: store}
+	h := &Handlers{
+		Pool:         pool,
+		CookieDomain: cookieDomain,
+		SecureCookie: secureCookie,
+		Mailer:       mail,
+		Storage:      store,
+		// 10 orders an hour from one address. A real family ordering
+		// popcorn places one, occasionally a second for a neighbour;
+		// anything past ten in an hour from the same place is a script.
+		orderLimiter: ratelimit.New(10, time.Hour),
+	}
 
 	var err error
 	if h.home, err = parse("home.html"); err != nil {

@@ -62,6 +62,9 @@ services:
       # Alternative to the SMTP_* settings above (see internal/mailer/jmap.go)
       # for a host whose network blocks outbound SMTP entirely.
       MAIL_PROVIDER: ${MAIL_PROVIDER:-}
+      # Caddy is the only way into the app in this stack, and it sets
+      # X-Forwarded-For itself, so the header can be believed here.
+      TRUST_PROXY_HEADERS: "true"
       FASTMAIL_API_TOKEN: ${FASTMAIL_API_TOKEN:-}
       REMINDER_WINDOW_HOURS: ${REMINDER_WINDOW_HOURS:-24}
       # File library / event photos (internal/storage) — point these at

@@ -214,6 +214,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("web: %v", err)
 	}
+	handlers.TrustProxyHeaders = cfg.TrustProxyHeaders
 
 	mux := http.NewServeMux()
 	handlers.Routes(mux)
