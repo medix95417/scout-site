@@ -158,7 +158,7 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		settings.SocialTikTokURL:    "home-tiktok",
 	}
 
-	var paymentTextViews, socialTextViews, welcomeEmailTextViews []unitTextSettingView
+	var paymentTextViews, socialTextViews, welcomeEmailTextViews, treasuryControlViews []unitTextSettingView
 	for _, t := range settings.UnitTextSettings {
 		v := unitTextSettingView{UnitTextSetting: t}
 		if t.Secret {
@@ -180,6 +180,8 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 			socialTextViews = append(socialTextViews, v)
 		case "welcome_email":
 			welcomeEmailTextViews = append(welcomeEmailTextViews, v)
+		case "treasury_controls":
+			treasuryControlViews = append(treasuryControlViews, v)
 		default:
 			paymentTextViews = append(paymentTextViews, v)
 		}
@@ -234,6 +236,7 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		SocialToggles       []unitToggleView
 		SocialTextSettings  []unitTextSettingView
 		WelcomeEmailText    []unitTextSettingView
+		TreasuryControls    []unitTextSettingView
 		Fundraisers         []ledger.Fundraiser
 		ActiveStorefrontID  string
 		StorageByCategory   []categorySummaryView
@@ -248,6 +251,7 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		SocialToggles:       socialToggleViews,
 		SocialTextSettings:  socialTextViews,
 		WelcomeEmailText:    welcomeEmailTextViews,
+		TreasuryControls:    treasuryControlViews,
 		Fundraisers:         fundraisers,
 		ActiveStorefrontID:  activeStorefrontID,
 		StorageByCategory:   storageByCategory,
@@ -403,6 +407,38 @@ func (h *Handlers) SocialSettingsUpdateText(w http.ResponseWriter, r *http.Reque
 		}
 		if err := settings.SetUnitText(r.Context(), h.Pool, unit.ID, t.Key, r.FormValue(t.Key), actor.ID); err != nil {
 			log.Printf("web: updating social setting %q: %v", t.Key, err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+}
+
+// TreasuryControlsUpdateText saves the Treasury Controls section — the
+// expense approval threshold — from its own form, so saving it can't
+// clobber a credential in the Payments section and vice versa.
+func (h *Handlers) TreasuryControlsUpdateText(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	actor, ok := h.requireSuperAdmin(w, r, "/admin/settings")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	for _, t := range settings.UnitTextSettings {
+		if t.Section != "treasury_controls" {
+			continue
+		}
+		if err := settings.SetUnitText(r.Context(), h.Pool, unit.ID, t.Key, r.FormValue(t.Key), actor.ID); err != nil {
+			if errors.Is(err, settings.ErrInvalidThreshold) {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			log.Printf("web: updating treasury control %q: %v", t.Key, err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}

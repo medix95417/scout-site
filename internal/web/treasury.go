@@ -16,6 +16,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/calendar"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/ledger"
+	"github.com/47-yonkers/scout-site/internal/roster"
 	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
@@ -304,6 +305,13 @@ func (h *Handlers) TreasuryDashboard(w http.ResponseWriter, r *http.Request) {
 		UpcomingEvents   []calendar.Event
 		TotalHeldCents   int64
 		TotalHeldDisplay string
+		// JustSubmitted is set after an expense went for authorization
+		// rather than straight onto the books, so the Treasurer isn't left
+		// wondering why their entry didn't appear (see
+		// TreasuryPostTransaction's ?submitted=1 redirect).
+		JustSubmitted    bool
+		ThresholdDisplay string
+		LeaderTitle      string
 	}{
 		baseData:         h.base(r, "Treasury"),
 		Accounts:         accountViews,
@@ -313,6 +321,13 @@ func (h *Handlers) TreasuryDashboard(w http.ResponseWriter, r *http.Request) {
 		UpcomingEvents:   upcomingEvents,
 		TotalHeldCents:   totalHeld,
 		TotalHeldDisplay: formatCents(totalHeld),
+		JustSubmitted:    r.URL.Query().Get("submitted") == "1",
+		LeaderTitle:      topLeaderTitle(unit.UnitType),
+	}
+	if threshold, err := settings.ExpenseApprovalThresholdCents(r.Context(), h.Pool, unit.ID); err != nil {
+		log.Printf("web: reading expense approval threshold: %v", err)
+	} else {
+		data.ThresholdDisplay = formatCents(threshold)
 	}
 	h.render(w, h.treasury, data)
 }
@@ -419,12 +434,66 @@ func (h *Handlers) TreasuryPostTransaction(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Segregation of duties: an expense over the unit's threshold isn't
+	// recorded on the Treasurer's say-so alone — it waits for the
+	// Cubmaster/Scoutmaster to authorize it. Deliberately scoped to
+	// expenses: a deposit brings money in, and a transfer moves it between
+	// the unit's own accounts, so neither carries the risk this control
+	// exists for.
+	if transactionType == "expense" {
+		threshold, err := settings.ExpenseApprovalThresholdCents(r.Context(), h.Pool, unit.ID)
+		if err != nil {
+			log.Printf("web: reading expense approval threshold: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if amountCents > threshold {
+			// Refuse rather than create an entry nobody can act on: with
+			// no Cubmaster/Scoutmaster on the roster it would sit pending
+			// forever, and the Treasurer would have no idea why.
+			approvers, err := roster.MembersWithCapability(r.Context(), h.Pool, unit.ID, units.CapApproveExpenses)
+			if err != nil {
+				log.Printf("web: finding expense approvers: %v", err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			eligible := 0
+			for _, m := range approvers {
+				if m.ID != actor.ID {
+					eligible++
+				}
+			}
+			if eligible == 0 {
+				http.Error(w, "an expense over "+formatCents(threshold)+" needs someone other than you to authorize it, "+
+					"and nobody on this unit's roster currently can. Assign a "+topLeaderTitle(unit.UnitType)+" on the Roster page, "+
+					"or raise the approval threshold in Site Settings.", http.StatusBadRequest)
+				return
+			}
+
+			if _, _, err := ledger.SubmitExpenseForApproval(r.Context(), h.Pool, unit.ID, description, actor.ID, postings); err != nil {
+				writeLedgerError(w, err)
+				return
+			}
+			http.Redirect(w, r, "/treasury?submitted=1", http.StatusSeeOther)
+			return
+		}
+	}
+
 	if _, err := ledger.PostTransaction(r.Context(), h.Pool, unit.ID, transactionType, description, actor.ID, postings); err != nil {
 		writeLedgerError(w, err)
 		return
 	}
 
 	http.Redirect(w, r, "/treasury", http.StatusSeeOther)
+}
+
+// topLeaderTitle names the role that authorizes spending, in the language
+// the unit actually uses.
+func topLeaderTitle(unitType string) string {
+	if unitType == "troop" {
+		return "Scoutmaster"
+	}
+	return "Cubmaster"
 }
 
 // writeLedgerError maps internal/ledger's sentinel errors to a reasonable

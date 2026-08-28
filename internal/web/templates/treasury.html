@@ -1,4 +1,14 @@
 {{define "content"}}
+  {{if .JustSubmitted}}
+    <div class="rounded-lg border border-amber-300 bg-amber-50 p-4 mb-6">
+      <p class="text-sm">
+        <span class="font-semibold">Sent for authorization.</span>
+        That expense is over {{.ThresholdDisplay}}, so it waits for the {{.LeaderTitle}} to approve it before it's
+        recorded. It won't affect any balance until then — you'll see it under "Recent Activity" marked
+        <em>pending_approval</em>.
+      </p>
+    </div>
+  {{end}}
   <h1 class="text-2xl font-bold mb-1">Treasury — {{.Unit.Name}}</h1>
   <p class="text-sm text-gray-600 mb-6">Total funds held across every account: <span class="font-semibold">{{.TotalHeldDisplay}}</span></p>
 
@@ -91,6 +101,9 @@
         </select>
         <input aria-label="Expense amount" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="amount" placeholder="Amount, e.g. 50.00" required>
         <input aria-label="Expense description" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="description" placeholder="Description, e.g. Camp site fee" required>
+        {{if .ThresholdDisplay}}
+          <p class="text-xs text-gray-500">Over {{.ThresholdDisplay}} this goes to the {{.LeaderTitle}} to authorize before it's recorded.</p>
+        {{end}}
         <button type="submit" class="rounded-md px-4 py-2 text-sm w-full btn-accent">Record Expense</button>
       </form>
     </section>

@@ -1,0 +1,49 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-2">Authorize Spending — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-6 max-w-2xl">
+    Anything the Treasurer records over {{.ThresholdDisplay}} waits here for the {{.LeaderTitle}} to sign off, so no
+    single person both spends the money and approves it. Nothing below has left the books yet — authorizing an
+    expense is what records it. An Admin can change the amount on the
+    <a href="/admin/settings" class="underline" style="color: var(--unit-color);">Site Settings</a> page.
+  </p>
+
+  {{if .Pending}}
+    <ul class="space-y-3">
+      {{range .Pending}}
+        <li class="rounded-lg border border-amber-300 bg-amber-50 p-4">
+          <div class="flex flex-wrap items-baseline justify-between gap-2">
+            <span class="font-semibold">{{.Description}}</span>
+            <span class="text-lg font-bold tabular-nums">{{.AmountDisplay}}</span>
+          </div>
+          <p class="text-xs text-gray-600 mt-1">
+            Entered by {{.CreatedByName}}
+            {{range .Postings}}{{if lt .AmountCents 0}} · from {{.AccountName}}{{end}}{{end}}
+          </p>
+
+          {{if .OwnEntry}}
+            <p class="text-sm text-gray-600 mt-3">
+              You entered this one, so it needs a different person to authorize it.
+            </p>
+          {{else}}
+            <div class="flex gap-2 mt-3">
+              <form method="post" action="/expense-approvals/{{.ApprovalRequestID}}/decide"
+                    onsubmit="return confirm('Authorize {{.AmountDisplay}} for &quot;{{.Description}}&quot;? This records it against the unit&#39;s books.');">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <input type="hidden" name="decision" value="approve">
+                <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Authorize</button>
+              </form>
+              <form method="post" action="/expense-approvals/{{.ApprovalRequestID}}/decide"
+                    onsubmit="return confirm('Decline this expense? The Treasurer will need to re-enter it if that was a mistake.');">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <input type="hidden" name="decision" value="decline">
+                <button type="submit" class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm hover:bg-gray-50">Decline</button>
+              </form>
+            </div>
+          {{end}}
+        </li>
+      {{end}}
+    </ul>
+  {{else}}
+    <p class="text-sm text-gray-500">Nothing is waiting on you right now.</p>
+  {{end}}
+{{end}}

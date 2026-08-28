@@ -596,3 +596,91 @@ func TestApproval_RechecksEveryDebitedAccount(t *testing.T) {
 	assertBalance(t, ctx, f.pool, funded.ID, 2000, "funded scout account")
 	assertBalance(t, ctx, f.pool, trip.ID, 0, "trip fund")
 }
+
+// TestSubmitExpenseForApproval_MovesNothingUntilAuthorized is the
+// segregation-of-duties control: an expense over the unit's threshold is
+// recorded but doesn't count until somebody other than the Treasurer
+// signs it off.
+func TestSubmitExpenseForApproval_MovesNothingUntilAuthorized(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	general, _ := EnsureUnitGeneralAccount(ctx, f.pool, f.unitID, f.memberID)
+	external, _ := EnsureExternalAccount(ctx, f.pool, f.unitID, f.memberID)
+
+	// Fund the general account so the expense is affordable.
+	if _, err := PostTransaction(ctx, f.pool, f.unitID, "deposit", "seed", f.memberID, []Posting{
+		{AccountID: external.ID, AmountCents: -100000},
+		{AccountID: general.ID, AmountCents: 100000},
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	expense := []Posting{
+		{AccountID: general.ID, AmountCents: -25000},
+		{AccountID: external.ID, AmountCents: 25000},
+	}
+	txn, req, err := SubmitExpenseForApproval(ctx, f.pool, f.unitID, "New tents", f.memberID, expense)
+	if err != nil {
+		t.Fatalf("SubmitExpenseForApproval: %v", err)
+	}
+	if txn.Status != "pending_approval" {
+		t.Errorf("status = %q, want pending_approval", txn.Status)
+	}
+	if txn.ApprovalRequestID == "" {
+		t.Error("the transaction should carry its approval request id")
+	}
+
+	assertBalance(t, ctx, f.pool, general.ID, 100000, "general fund while the expense waits")
+
+	// It shows up for the leader, and is kept off the Treasurer's
+	// trip-fund transfer queue.
+	pendingExpenses, err := PendingExpensesForUnit(ctx, f.pool, f.unitID)
+	if err != nil {
+		t.Fatalf("PendingExpensesForUnit: %v", err)
+	}
+	if len(pendingExpenses) != 1 || pendingExpenses[0].ID != txn.ID {
+		t.Fatalf("PendingExpensesForUnit returned %d rows, want the one submitted expense", len(pendingExpenses))
+	}
+	transfers, err := PendingTransfersForUnit(ctx, f.pool, f.unitID)
+	if err != nil {
+		t.Fatalf("PendingTransfersForUnit: %v", err)
+	}
+	for _, tr := range transfers {
+		if tr.ID == txn.ID {
+			t.Error("a pending expense should not appear in the Treasurer's transfer queue")
+		}
+	}
+
+	if err := approval.Decide(ctx, f.pool, req.ID, f.unitID, f.memberID, true); err != nil {
+		t.Fatalf("authorizing: %v", err)
+	}
+	assertBalance(t, ctx, f.pool, general.ID, 75000, "general fund once the expense is authorized")
+}
+
+// TestSubmitExpenseForApproval_DeclinedNeverCounts is the mirror image.
+func TestSubmitExpenseForApproval_DeclinedNeverCounts(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	general, _ := EnsureUnitGeneralAccount(ctx, f.pool, f.unitID, f.memberID)
+	external, _ := EnsureExternalAccount(ctx, f.pool, f.unitID, f.memberID)
+	if _, err := PostTransaction(ctx, f.pool, f.unitID, "deposit", "seed", f.memberID, []Posting{
+		{AccountID: external.ID, AmountCents: -50000},
+		{AccountID: general.ID, AmountCents: 50000},
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	_, req, err := SubmitExpenseForApproval(ctx, f.pool, f.unitID, "Not approved", f.memberID, []Posting{
+		{AccountID: general.ID, AmountCents: -20000},
+		{AccountID: external.ID, AmountCents: 20000},
+	})
+	if err != nil {
+		t.Fatalf("SubmitExpenseForApproval: %v", err)
+	}
+	if err := approval.Decide(ctx, f.pool, req.ID, f.unitID, f.memberID, false); err != nil {
+		t.Fatalf("declining: %v", err)
+	}
+	assertBalance(t, ctx, f.pool, general.ID, 50000, "general fund after the expense was declined")
+}

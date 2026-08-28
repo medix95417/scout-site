@@ -13,6 +13,7 @@ package settings
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -691,7 +692,39 @@ const (
 
 	WelcomeEmailSubject = "welcome_email_subject"
 	WelcomeEmailBody    = "welcome_email_body"
+
+	ExpenseApprovalThreshold = "expense_approval_threshold"
 )
+
+// DefaultExpenseApprovalThresholdCents is what an expense has to exceed
+// before it needs a second person's authorization, when a unit hasn't set
+// its own figure. $100 — high enough that routine spending (a campsite
+// deposit, a few boxes of supplies) isn't slowed down, low enough that
+// anything a committee would want to know about is covered.
+const DefaultExpenseApprovalThresholdCents int64 = 10000
+
+// ErrInvalidThreshold is returned by SetUnitText for an approval
+// threshold that isn't a whole number of dollars. Its message is written
+// to be shown straight to the admin who typed it.
+var ErrInvalidThreshold = errors.New(
+	"enter the approval threshold as a whole number of dollars, like 100 — no cents, no dollar sign")
+
+// ExpenseApprovalThresholdCents reads a unit's threshold, falling back to
+// DefaultExpenseApprovalThresholdCents when it's unset or unparseable.
+// Stored as whole dollars (see ExpenseApprovalThreshold) rather than
+// cents: nobody sets a $100.50 threshold, and keeping it to integers means
+// no decimal parsing anywhere near a money value.
+func ExpenseApprovalThresholdCents(ctx context.Context, pool *pgxpool.Pool, unitID string) (int64, error) {
+	raw, err := GetUnitText(ctx, pool, unitID, ExpenseApprovalThreshold)
+	if err != nil {
+		return DefaultExpenseApprovalThresholdCents, err
+	}
+	dollars, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 32)
+	if err != nil || dollars < 0 {
+		return DefaultExpenseApprovalThresholdCents, nil
+	}
+	return dollars * 100, nil
+}
 
 // UnitTextSetting describes one per-unit text setting for /admin/settings.
 // Secret marks a real credential: the admin page never re-displays its
@@ -737,7 +770,16 @@ var ErrLiveKeyNotAccepted = errors.New(
 // in SetUnitText rather than in the handler so every path that writes a
 // setting gets the same check.
 func validateUnitTextValue(key, trimmed string) error {
-	if PaymentsIntegrationLive || trimmed == "" {
+	if trimmed == "" {
+		return nil
+	}
+	if key == ExpenseApprovalThreshold {
+		if dollars, err := strconv.ParseInt(trimmed, 10, 32); err != nil || dollars < 0 {
+			return ErrInvalidThreshold
+		}
+		return nil
+	}
+	if PaymentsIntegrationLive {
 		return nil
 	}
 	// Only the secret half matters. A publishable key (pk_live_) is meant
@@ -789,6 +831,16 @@ var UnitTextSettings = []UnitTextSetting{
 		Placeholder: "",
 		Secret:      true,
 		Section:     "payments",
+	},
+	{
+		Key:   ExpenseApprovalThreshold,
+		Label: "Expense approval threshold (dollars)",
+		Description: "An expense above this amount isn't recorded straight away — it waits for the " +
+			"Cubmaster or Scoutmaster to authorize it, so the person spending the money isn't the only " +
+			"person who signed off on it. Whole dollars, no cents. Leave blank for the default of $100. " +
+			"Set it very high to effectively turn the requirement off.",
+		Placeholder: "100",
+		Section:     "treasury_controls",
 	},
 	{
 		Key:         SocialFacebookURL,
