@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-08-28
+
 ### Added
 
 - **Monthly bank reconciliation** (`/treasury/reconciliations`,
