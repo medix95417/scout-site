@@ -77,6 +77,17 @@ type Handlers struct {
 	// write to the database, so it's the only one that needs this.
 	orderLimiter *ratelimit.Limiter
 
+	// loginLimiter and resetLimiter are per-address ceilings on the two
+	// other endpoints an anonymous visitor can reach. They sit alongside
+	// the existing per-ACCOUNT limits in internal/auth (8 failed logins
+	// per email, 3 reset emails per email) rather than replacing them —
+	// the two answer different questions. A per-account lock stops one
+	// family's password being guessed however many addresses it comes
+	// from; a per-address cap stops one machine working through many
+	// accounts.
+	loginLimiter *ratelimit.Limiter
+	resetLimiter *ratelimit.Limiter
+
 	home                 *template.Template
 	login                *template.Template
 	roster               *template.Template
@@ -309,6 +320,14 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 		// popcorn places one, occasionally a second for a neighbour;
 		// anything past ten in an hour from the same place is a script.
 		orderLimiter: ratelimit.New(10, time.Hour),
+		// Counts FAILED logins only (see LoginSubmit), which is what
+		// makes 15 a safe number: a Scout meeting is a whole troop behind
+		// one router, and successful logins cost nothing. Fifteen wrong
+		// passwords from one address in fifteen minutes is not that.
+		loginLimiter: ratelimit.New(15, 15*time.Minute),
+		// Generous enough for a leader helping several families reset in
+		// one sitting; far below what a script would want.
+		resetLimiter: ratelimit.New(10, time.Hour),
 	}
 
 	var err error
@@ -1326,8 +1345,27 @@ func (h *Handlers) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	next := sanitizeNextPath(r.FormValue("next"))
 
+	// Per-address ceiling, alongside internal/auth's per-account lockout.
+	// Checked before the password is looked at, so a blocked address costs
+	// nothing — no user lookup, no bcrypt.
+	ip := clientIP(r, h.TrustProxyHeaders)
+	if h.loginLimiter.Blocked(ip) {
+		data := struct {
+			baseData
+			Next string
+		}{baseData: h.base(r, "Log in"), Next: next}
+		data.Flash = "Too many failed sign-in attempts from this connection. Please wait a few minutes and try again."
+		h.render(w, h.login, data)
+		return
+	}
+
 	user, err := auth.Authenticate(r.Context(), h.Pool, email, password)
 	if err != nil {
+		// Only failures are counted. A correct password costs nothing,
+		// which is what keeps a whole troop on one meeting-hall router
+		// from locking itself out.
+		h.loginLimiter.Allow(ip)
+
 		flash := "Incorrect email or password."
 		if errors.Is(err, auth.ErrAccountLocked) {
 			flash = "Too many failed login attempts. Please wait a few minutes and try again."
