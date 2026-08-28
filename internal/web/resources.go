@@ -189,6 +189,49 @@ func (h *Handlers) ResourceSetPublic(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/resources", http.StatusSeeOther)
 }
 
+// ResourceHideUnderlyingFile un-publishes the file behind a resource, so
+// it stops being downloadable through the file library too.
+//
+// This is the action offered alongside the warning on the resources admin
+// page (see resources.Resource.PubliclyReachableButPrivate): marking a
+// resource private doesn't touch its file, because one file can also be a
+// homepage hero or an event photo and flipping it from here would
+// silently un-publish it in those places. So the leader is told, and this
+// is the button that acts on it — an explicit choice, not a side effect.
+func (h *Handlers) ResourceHideUnderlyingFile(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	user, loggedIn := auth.UserFromContext(r.Context())
+	if !loggedIn {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.CanEditUnitContent(caps) {
+		http.Error(w, "you don't have permission to manage resources", http.StatusForbidden)
+		return
+	}
+
+	res, found, err := resources.Get(r.Context(), h.Pool, r.PathValue("id"), unit.ID)
+	if err != nil {
+		log.Printf("web: loading resource: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !found || res.FileID == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// files.SetPublic is scoped to the unit, so a resource id from this
+	// unit can't be used to reach another unit's file.
+	if err := files.SetPublic(r.Context(), h.Pool, *res.FileID, unit.ID, false); err != nil {
+		log.Printf("web: hiding resource's underlying file: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/resources", http.StatusSeeOther)
+}
+
 func (h *Handlers) ResourceDelete(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
