@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -81,21 +81,66 @@ func (h *Handlers) memberNames(ctx context.Context, memberIDs []string) (map[str
 	return names, rows.Err()
 }
 
-// parseDollarsToCents parses a user-typed dollar amount ("12.34") into
-// integer cents. Money is never handled as a floating-point type once
-// it's in the database (see internal/ledger's package comment) — this is
-// the one, deliberate boundary where a float briefly exists, right at
-// form-parsing, before immediately rounding to an exact integer.
+// maxAmountCents caps any single user-entered amount at $10,000,000 —
+// far above anything a unit will ever transact, and far below the point
+// where cents arithmetic could overflow an int64 downstream.
+const maxAmountCents = 1_000_000_000
+
+// amountPattern is what a dollar amount is allowed to look like after
+// currency formatting is stripped: optional sign, up to 9 digits, and at
+// most two decimal places.
+var amountPattern = regexp.MustCompile(`^-?\d{1,9}(\.\d{1,2})?$`)
+
+// parseDollarsToCents parses a user-typed dollar amount ("12.34",
+// "$1,250", "-5.00") into exact integer cents.
+//
+// Deliberately does NOT go via strconv.ParseFloat. Money is never a
+// floating-point type in this codebase (see internal/ledger's package
+// comment) and that used to have one exception right here, which was a
+// mistake on two counts. ParseFloat accepts "Inf", "NaN" and values past
+// int64's range, and converting those to an integer is undefined in Go —
+// on amd64 they all become math.MinInt64, i.e. a silent -$92 quadrillion.
+// It also quietly accepts Go literal syntax a treasurer never means:
+// "1e5" as $100,000, "1_0" as $10, "0x1p10" as $1,024.
+//
+// Every caller today happens to reject a non-positive result, which is
+// the only reason that never reached the books. Rather than rely on
+// seven call sites each remembering a guard, this validates the shape of
+// the input up front and does the arithmetic on integers, so there is no
+// value it can return that a caller has to defend against.
 func parseDollarsToCents(raw string) (int64, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+	cleaned := strings.TrimSpace(raw)
+	if cleaned == "" {
 		return 0, fmt.Errorf("amount is required")
 	}
-	f, err := strconv.ParseFloat(raw, 64)
+	// Accept what people actually type into a money field.
+	cleaned = strings.NewReplacer("$", "", ",", "", " ", "").Replace(cleaned)
+	if !amountPattern.MatchString(cleaned) {
+		return 0, fmt.Errorf("%q is not a valid amount — enter dollars and cents, like 12.34", raw)
+	}
+
+	negative := strings.HasPrefix(cleaned, "-")
+	cleaned = strings.TrimPrefix(cleaned, "-")
+
+	whole, frac, _ := strings.Cut(cleaned, ".")
+	dollars, err := strconv.ParseInt(whole, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("%q is not a valid amount", raw)
 	}
-	return int64(math.Round(f * 100)), nil
+	// "1.5" means 50 cents, not 5 — pad to exactly two digits.
+	cents, err := strconv.ParseInt((frac + "00")[:2], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%q is not a valid amount", raw)
+	}
+
+	total := dollars*100 + cents
+	if total > maxAmountCents {
+		return 0, fmt.Errorf("%q is larger than this system accepts for a single amount", raw)
+	}
+	if negative {
+		total = -total
+	}
+	return total, nil
 }
 
 // formatCents renders integer cents as a "$12.34"-style string for
