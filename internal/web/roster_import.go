@@ -84,6 +84,13 @@ var headerAliases = map[string][]string{
 	"subgroup":   {"subgroup", "den", "patrol"},
 }
 
+// maxImportRows bounds one paste. A unit's whole roster is well under a
+// hundred people, so this is generous — it exists so that pasting the
+// wrong thing (a full council export, a spreadsheet with thousands of
+// blank-but-not-empty rows) fails immediately with an explanation instead
+// of tying up a database connection working through it row by row.
+const maxImportRows = 500
+
 // parseImportRows parses a pasted header+data block into rows, or returns
 // an error describing which required column is missing. Unlike the
 // fundraiser bulk import, a header row is required here (not
@@ -99,6 +106,10 @@ func parseImportRows(raw string) ([]importRow, error) {
 	}
 	if len(lines) == 0 {
 		return nil, fmt.Errorf("paste a header row and at least one data row")
+	}
+	// -1 for the header row.
+	if len(lines)-1 > maxImportRows {
+		return nil, fmt.Errorf("that's %d rows — this imports at most %d at a time. Split it into smaller batches, or check you pasted the right thing", len(lines)-1, maxImportRows)
 	}
 
 	headerFields := splitBulkRow(lines[0])

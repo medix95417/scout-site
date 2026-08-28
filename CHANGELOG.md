@@ -27,6 +27,19 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed: the Resources page could serve an uploaded file as a web page.**
+The same problem that was fixed for the file library a few releases ago
+turned out to have a third copy here that was missed at the time — and
+this was the worst of the three, because a resource marked public is
+reachable by anybody, not just signed-in members. Documents on the
+Resources page are now served with the same protections as everywhere
+else. A check now runs automatically that would catch a fourth copy.
+
+**Limited how many rows a roster import accepts at once.** Pasting the
+wrong thing — a whole council export, or a spreadsheet with thousands of
+near-empty rows — used to sit there working through it. It now stops at
+500 rows and says so.
+
 **Added a limit on repeated failed sign-ins from one connection.** The
 site already locked an individual account after 8 wrong passwords, which
 stops someone guessing at one family's login. It did nothing about one

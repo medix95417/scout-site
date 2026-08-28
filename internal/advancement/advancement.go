@@ -77,12 +77,12 @@ func CreateRecord(ctx context.Context, pool *pgxpool.Pool, memberID, unitID, rec
 	return r, nil
 }
 
-// ListForMember lists one member's advancement history, most recently
-// earned first (records with no earned_date — the field is nullable —
-// sort last).
-func ListForMember(ctx context.Context, pool *pgxpool.Pool, memberID string) ([]Record, error) {
-	return queryRecords(ctx, pool, `WHERE member_id = $1 ORDER BY earned_date DESC NULLS LAST, imported_at DESC`, memberID)
-}
+// Deliberately absent: a ListForMember(memberID) with no unit argument.
+// It existed, had no callers, and was the one query in this package that
+// would happily return records for a member of a different unit — a trap
+// for whoever eventually wired it to a handler taking a member id from a
+// request. Anything needing one member's history should filter
+// ListForUnit's result, so the unit boundary is never optional.
 
 // ListForUnit lists every advancement record in a unit, most recently
 // earned first — the leader management view and the members-only
