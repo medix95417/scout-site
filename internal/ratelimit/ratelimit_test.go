@@ -120,3 +120,73 @@ func TestLimiter_ConcurrentUseIsSafe(t *testing.T) {
 		t.Errorf("counted %d of 1000 concurrent requests — updates were lost", count)
 	}
 }
+
+// TestLimiter_BlockedDoesNotCount is what makes "charge only for
+// failures" possible. The login form checks Blocked before touching the
+// password and records only when the password was wrong — if Blocked
+// counted, a Scout meeting behind one router would lock itself out
+// simply by everyone signing in successfully.
+func TestLimiter_BlockedDoesNotCount(t *testing.T) {
+	l := New(3, time.Hour)
+
+	// A thousand peeks must not consume any of the budget.
+	for i := 0; i < 1000; i++ {
+		if l.Blocked("ip") {
+			t.Fatalf("Blocked reported true on peek %d without anything being recorded", i)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		l.Allow("ip")
+	}
+	if !l.Blocked("ip") {
+		t.Error("after 3 recorded hits against a limit of 3, Blocked should be true")
+	}
+}
+
+// TestLimiter_BlockedRespectsWindowExpiry — a blocked address has to
+// recover on its own, without anyone intervening.
+func TestLimiter_BlockedRespectsWindowExpiry(t *testing.T) {
+	l := New(2, 15*time.Minute)
+	now := time.Date(2026, 8, 28, 9, 0, 0, 0, time.UTC)
+	l.now = func() time.Time { return now }
+
+	l.Allow("ip")
+	l.Allow("ip")
+	if !l.Blocked("ip") {
+		t.Fatal("should be blocked at the limit")
+	}
+	now = now.Add(16 * time.Minute)
+	if l.Blocked("ip") {
+		t.Error("the block should lapse once the window elapses")
+	}
+}
+
+// TestLimiter_FailureOnlyPatternAllowsBusySharedAddress models the real
+// scenario: many families signing in from one address, a few fumbling a
+// password. Under a failures-only policy the shared address survives.
+func TestLimiter_FailureOnlyPatternAllowsBusySharedAddress(t *testing.T) {
+	l := New(15, 15*time.Minute)
+	const sharedIP = "198.51.100.1"
+
+	// 30 families sign in; 10 of them get their password wrong once first.
+	for i := 0; i < 30; i++ {
+		if l.Blocked(sharedIP) {
+			t.Fatalf("family %d was turned away — the meeting-hall case is what this limit must not break", i)
+		}
+		if i < 10 {
+			l.Allow(sharedIP) // one wrong password, recorded
+		}
+		// The successful sign-in that follows records nothing.
+	}
+	if l.Blocked(sharedIP) {
+		t.Error("30 sign-ins with 10 fumbles should not exhaust a limit of 15 failures")
+	}
+
+	// A script working through passwords, though, runs out.
+	for i := 0; i < 10; i++ {
+		l.Allow(sharedIP)
+	}
+	if !l.Blocked(sharedIP) {
+		t.Error("20 failures against a limit of 15 should be blocked")
+	}
+}

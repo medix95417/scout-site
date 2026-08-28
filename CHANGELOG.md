@@ -27,6 +27,24 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Added a limit on repeated failed sign-ins from one connection.** The
+site already locked an individual account after 8 wrong passwords, which
+stops someone guessing at one family's login. It did nothing about one
+machine trying a wrong password against many different accounts in turn,
+because no single account ever reached its limit. Fifteen failed attempts
+from the same connection in fifteen minutes now pauses that connection
+for a few minutes.
+
+Only *failed* sign-ins count. A whole troop signing in from the hall's
+shared Wi-Fi is one connection as far as the internet is concerned, and
+successful sign-ins cost nothing against the limit, so ordinary use at a
+meeting can't trip it.
+
+The same idea is applied to "forgot password" requests: at most ten an
+hour from one connection, alongside the existing cap of three per email
+address. As before, the page a visitor sees never changes — it can't be
+used to work out which addresses have accounts.
+
 ## [2.1.0] — 2026-08-28
 
 **Fixed: a small uploaded image could take the site down.** The size of

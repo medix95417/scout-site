@@ -109,6 +109,22 @@ func (h *Handlers) ForgotPasswordSubmit(w http.ResponseWriter, r *http.Request) 
 		allowed = true
 	}
 
+	// A second ceiling, per requesting address rather than per account.
+	// The cap above protects one inbox from being flooded; this one stops
+	// a single machine walking a list of addresses to find out which are
+	// registered, or to spray reset mail across a whole roster.
+	//
+	// Deliberately silent, exactly like the per-account cap above: this
+	// handler's whole design is that the page it renders never varies —
+	// not on whether the account exists, not on whether anything was
+	// actually sent. Returning a visible "too many requests" here would
+	// be the one response that differs, and it isn't worth giving that up
+	// for a limit a real person won't reach. It's logged instead.
+	if !h.resetLimiter.Allow(clientIP(r, h.TrustProxyHeaders)) {
+		log.Printf("web: password reset requests rate-limited for address %s", clientIP(r, h.TrustProxyHeaders))
+		allowed = false
+	}
+
 	if allowed {
 		user, found, err := auth.UserByEmail(r.Context(), h.Pool, email)
 		if err != nil {

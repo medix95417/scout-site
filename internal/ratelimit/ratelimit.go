@@ -76,6 +76,26 @@ func (l *Limiter) Allow(key string) bool {
 	return w.count <= l.limit
 }
 
+// Blocked reports whether key is already over its limit, WITHOUT counting
+// this call against it.
+//
+// This is what lets a caller charge only for the attempts it cares about.
+// The login form is the case that needs it: a Scout meeting is thirty
+// families behind one router, so counting every login would let ordinary
+// use exhaust a shared address. Checking Blocked first and recording only
+// on a failed password means legitimate traffic is free and only guessing
+// costs anything.
+func (l *Limiter) Blocked(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	w, ok := l.windows[key]
+	if !ok || l.now().After(w.expiresAt) {
+		return false
+	}
+	return w.count >= l.limit
+}
+
 // RetryAfter reports how long until key's current window resets. Zero if
 // the key isn't currently limited — used to set a Retry-After header.
 func (l *Limiter) RetryAfter(key string) time.Duration {
