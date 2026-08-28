@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-08-28
+
 ### Added
 
 - **In-app help** at `/help`, scoped to the reader. Sign-in required —
