@@ -295,7 +295,7 @@ func CreatePendingTwoFactorLogin(ctx context.Context, pool *pgxpool.Pool, userID
 
 	_, err = pool.Exec(ctx,
 		`INSERT INTO pending_two_factor_logins (token, user_id, next, expires_at) VALUES ($1, $2, $3, $4)`,
-		token, userID, next, expiresAt,
+		hashToken(token), userID, next, expiresAt,
 	)
 	if err != nil {
 		return "", time.Time{}, err
@@ -320,7 +320,7 @@ func PendingTwoFactorLoginExists(ctx context.Context, pool *pgxpool.Pool, token 
 	var exists bool
 	err := pool.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM pending_two_factor_logins WHERE token = $1 AND expires_at > now())`,
-		token,
+		hashToken(token),
 	).Scan(&exists)
 	return exists, err
 }
@@ -344,7 +344,7 @@ func VerifyPendingTwoFactorLogin(ctx context.Context, pool *pgxpool.Pool, token,
 		SELECT user_id, next, attempts FROM pending_two_factor_logins
 		WHERE token = $1 AND expires_at > now()
 		FOR UPDATE
-	`, token).Scan(&userID, &next, &attempts)
+	`, hashToken(token)).Scan(&userID, &next, &attempts)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", "", ErrInvalidPendingLogin
@@ -353,7 +353,7 @@ func VerifyPendingTwoFactorLogin(ctx context.Context, pool *pgxpool.Pool, token,
 	}
 
 	if attempts >= maxPendingTwoFactorAttempts {
-		if _, err := tx.Exec(ctx, `DELETE FROM pending_two_factor_logins WHERE token = $1`, token); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM pending_two_factor_logins WHERE token = $1`, hashToken(token)); err != nil {
 			return "", "", err
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -375,7 +375,7 @@ func VerifyPendingTwoFactorLogin(ctx context.Context, pool *pgxpool.Pool, token,
 
 	if !ok {
 		if _, err := tx.Exec(ctx,
-			`UPDATE pending_two_factor_logins SET attempts = attempts + 1 WHERE token = $1`, token,
+			`UPDATE pending_two_factor_logins SET attempts = attempts + 1 WHERE token = $1`, hashToken(token),
 		); err != nil {
 			return "", "", err
 		}
@@ -385,7 +385,7 @@ func VerifyPendingTwoFactorLogin(ctx context.Context, pool *pgxpool.Pool, token,
 		return "", "", ErrInvalidTOTPCode
 	}
 
-	if _, err := tx.Exec(ctx, `DELETE FROM pending_two_factor_logins WHERE token = $1`, token); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM pending_two_factor_logins WHERE token = $1`, hashToken(token)); err != nil {
 		return "", "", err
 	}
 	if err := tx.Commit(ctx); err != nil {

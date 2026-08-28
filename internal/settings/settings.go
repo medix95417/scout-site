@@ -712,6 +712,43 @@ type UnitTextSetting struct {
 	Section     string
 }
 
+// PaymentsIntegrationLive records whether this codebase actually has a
+// checkout flow wired up. It does not: there is no Stripe or PayPal API
+// call, and no webhook handler, anywhere in this repository — the
+// credential fields below exist so a unit can get set up ahead of that
+// work landing.
+//
+// Which makes a live secret key stored here pure downside: nothing reads
+// it, and it sits in the database and in every backup taken from here on.
+// While this is false, validateUnitTextValue refuses to store a live
+// Stripe secret key and points the admin at a test key instead. Flip it
+// to true in the same change that adds the checkout integration.
+const PaymentsIntegrationLive = false
+
+// ErrLiveKeyNotAccepted is returned by SetUnitText for a live payment
+// credential entered while PaymentsIntegrationLive is false. Its message
+// is written to be shown straight to the admin who typed it.
+var ErrLiveKeyNotAccepted = errors.New(
+	"online payments aren't switched on in this version of the site yet — nothing here can charge a card, " +
+		"so a live secret key would just sit in the database and in every backup. Use your test key " +
+		"(sk_test_...) for now; enter the live one when checkout is actually turned on.")
+
+// validateUnitTextValue rejects values that shouldn't be stored yet. Kept
+// in SetUnitText rather than in the handler so every path that writes a
+// setting gets the same check.
+func validateUnitTextValue(key, trimmed string) error {
+	if PaymentsIntegrationLive || trimmed == "" {
+		return nil
+	}
+	// Only the secret half matters. A publishable key (pk_live_) is meant
+	// to be visible in a browser and is harmless at rest, so it's still
+	// accepted — a unit can stage that side of the config now.
+	if key == StripeSecretKey && strings.HasPrefix(trimmed, "sk_live_") {
+		return ErrLiveKeyNotAccepted
+	}
+	return nil
+}
+
 // UnitTextSettings is every per-unit text/credential setting the
 // "Payments" section of /admin/settings shows, in display order.
 var UnitTextSettings = []UnitTextSetting{
@@ -725,15 +762,15 @@ var UnitTextSettings = []UnitTextSetting{
 	{
 		Key:         StripeSecretKey,
 		Label:       "Stripe secret key",
-		Description: "Starts with sk_test_ or sk_live_ — grants real account access; never share it outside this form.",
-		Placeholder: "sk_live_...",
+		Description: "Starts with sk_test_ — grants real account access; never share it outside this form. Live keys (sk_live_) aren't accepted yet: no checkout is wired up in this version, so a live key would sit unused in the database and in every backup.",
+		Placeholder: "sk_test_...",
 		Secret:      true,
 		Section:     "payments",
 	},
 	{
 		Key:         StripeWebhookSigningSecret,
 		Label:       "Stripe webhook signing secret",
-		Description: "Starts with whsec_ — from the webhook endpoint's settings in the Stripe Dashboard, once a checkout integration is wired up to verify incoming events actually came from Stripe.",
+		Description: "Starts with whsec_ — from the webhook endpoint's settings in the Stripe Dashboard. Nothing reads this yet; it's here so the configuration is ready when checkout is turned on.",
 		Placeholder: "whsec_...",
 		Secret:      true,
 		Section:     "payments",
@@ -886,6 +923,9 @@ func SetUnitText(ctx context.Context, pool *pgxpool.Pool, unitID, key, value, ac
 
 	if secret && trimmed == "" {
 		return nil // leave the existing credential untouched
+	}
+	if err := validateUnitTextValue(key, trimmed); err != nil {
+		return err
 	}
 
 	var existing *string

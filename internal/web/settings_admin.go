@@ -366,6 +366,13 @@ func (h *Handlers) UnitSettingsUpdateText(w http.ResponseWriter, r *http.Request
 			continue
 		}
 		if err := settings.SetUnitText(r.Context(), h.Pool, unit.ID, t.Key, r.FormValue(t.Key), actor.ID); err != nil {
+			// A live key entered before checkout exists is the admin's
+			// mistake to correct, not a server fault — show them why
+			// rather than a generic 500.
+			if errors.Is(err, settings.ErrLiveKeyNotAccepted) {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 			log.Printf("web: updating unit text setting %q: %v", t.Key, err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return

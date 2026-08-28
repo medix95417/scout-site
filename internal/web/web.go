@@ -520,6 +520,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /treasury/reports/saved/{id}/run", h.TreasuryReportRunSaved)
 	mux.HandleFunc("POST /treasury/reports/saved/{id}/delete", h.TreasuryReportDeleteSaved)
 	mux.HandleFunc("POST /treasury/transactions", h.TreasuryPostTransaction)
+	mux.HandleFunc("POST /treasury/transactions/{id}/reverse", h.TreasuryReverseTransaction)
 	mux.HandleFunc("POST /treasury/trip-funds", h.TreasuryCreateTripFund)
 	mux.HandleFunc("POST /treasury/accounts/{id}/close", h.TreasuryCloseTripFund)
 	mux.HandleFunc("POST /treasury/transfers/{id}/decide", h.TreasuryDecideTransfer)

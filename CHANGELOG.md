@@ -20,6 +20,38 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Login tokens are no longer stored where they could be read.** Session
+cookies, password-reset links, and the short-lived tokens used during
+two-factor and forced-password-change sign-in were all kept in the
+database exactly as they were issued. Anyone who got hold of a copy of
+the database — a backup file, a snapshot, a dump shared for
+troubleshooting — could have used them to sign in as somebody else until
+they expired. Only a scrambled version is stored now, which is useless to
+anyone holding a copy. **Everyone will be signed out once when this is
+deployed, and any password-reset link sent in the previous hour will need
+requesting again.**
+
+**Added a way to correct a mistaken Treasury entry.** Posted entries
+still can't be edited or deleted — that's what makes the books
+trustworthy — but a treasurer can now reverse one, which adds a matching
+opposite entry linked to the original. Both stay visible and the
+statement shows them as a pair, which is what an auditor expects, instead
+of leaving an unexplained correction floating on its own.
+
+**Hardened approval of Scout account transfers.** The balance check when
+a treasurer approves a transfer now locks the account while it runs, so
+two approvals happening at once can't both go through and overdraw it,
+and it checks every account a transfer draws from rather than just the
+first. It also refuses a transfer into an account that was closed while
+the request was waiting.
+
+**Stopped accepting live payment keys that nothing uses.** Online payment
+processing isn't built yet — there's no checkout anywhere in the site —
+so a live Stripe secret key entered on the Settings page would have sat
+unused in the database and in every backup. Live keys are now refused
+with an explanation, and test keys still work so a unit can get set up
+ahead of time.
+
 **Fixed: an uploaded file could be served back as a web page.** The file
 library stored whatever content type an upload claimed to be and echoed
 it back on download, from the site's own address. A file named

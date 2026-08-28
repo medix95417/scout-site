@@ -405,3 +405,194 @@ func assertBalance(t *testing.T, ctx context.Context, pool *pgxpool.Pool, accoun
 		t.Errorf("%s = %d cents, want %d", what, got, want)
 	}
 }
+
+// TestReverseTransaction covers the correction path (F8): a posted entry
+// can be undone by an equal-and-opposite entry that stays linked to it,
+// rather than by editing or deleting anything.
+func TestReverseTransaction(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	general, _ := EnsureUnitGeneralAccount(ctx, f.pool, f.unitID, f.memberID)
+	external, _ := EnsureExternalAccount(ctx, f.pool, f.unitID, f.memberID)
+
+	orig, err := PostTransaction(ctx, f.pool, f.unitID, "deposit", "Dues — typo, $500 not $50", f.memberID, []Posting{
+		{AccountID: external.ID, AmountCents: -50000},
+		{AccountID: general.ID, AmountCents: 50000},
+	})
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+	assertBalance(t, ctx, f.pool, general.ID, 50000, "general fund after the mistaken deposit")
+
+	rev, err := ReverseTransaction(ctx, f.pool, f.unitID, orig.ID, f.memberID)
+	if err != nil {
+		t.Fatalf("ReverseTransaction: %v", err)
+	}
+	if rev.ReversesTransactionID != orig.ID {
+		t.Errorf("reversal links to %q, want %q", rev.ReversesTransactionID, orig.ID)
+	}
+	assertBalance(t, ctx, f.pool, general.ID, 0, "general fund after the reversal")
+
+	// The original is still on the books — a correction shows, it doesn't hide.
+	var stillThere bool
+	if err := f.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM ledger_transactions WHERE id = $1 AND status = 'posted')`, orig.ID,
+	).Scan(&stillThere); err != nil {
+		t.Fatal(err)
+	}
+	if !stillThere {
+		t.Error("the original transaction was removed — a reversal must leave it in place")
+	}
+
+	// Reversing twice would double-count the correction.
+	if _, err := ReverseTransaction(ctx, f.pool, f.unitID, orig.ID, f.memberID); !errors.Is(err, ErrNotReversible) {
+		t.Errorf("second reversal: want ErrNotReversible, got %v", err)
+	}
+	// Reversing a reversal is refused — re-post the original instead.
+	if _, err := ReverseTransaction(ctx, f.pool, f.unitID, rev.ID, f.memberID); !errors.Is(err, ErrNotReversible) {
+		t.Errorf("reversing a reversal: want ErrNotReversible, got %v", err)
+	}
+	// And it can't reach across units.
+	other := newFixture(t)
+	if _, err := ReverseTransaction(ctx, f.pool, other.unitID, orig.ID, other.memberID); !errors.Is(err, ErrAccountNotFound) {
+		t.Errorf("cross-unit reversal: want ErrAccountNotFound, got %v", err)
+	}
+}
+
+// TestReverseTransaction_RefusesPending — a pending transfer never moved
+// money, so there is nothing to undo; it should be rejected instead.
+func TestReverseTransaction_RefusesPending(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	general, _ := EnsureUnitGeneralAccount(ctx, f.pool, f.unitID, f.memberID)
+	scout, _ := EnsureScoutAccount(ctx, f.pool, f.unitID, f.memberID, "Test Scout", f.memberID)
+	trip, err := CreateTripFund(ctx, f.pool, f.unitID, f.newEvent(t, "Trip"), "Trip", f.memberID)
+	if err != nil {
+		t.Fatalf("CreateTripFund: %v", err)
+	}
+	if _, err := PostTransaction(ctx, f.pool, f.unitID, "fundraiser_allocation", "seed", f.memberID, []Posting{
+		{AccountID: general.ID, AmountCents: -5000},
+		{AccountID: scout.ID, AmountCents: 5000},
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	pending, _, err := RequestTripFundTransfer(ctx, f.pool, f.unitID, scout.ID, trip.ID, 1000, "fee", f.memberID)
+	if err != nil {
+		t.Fatalf("RequestTripFundTransfer: %v", err)
+	}
+
+	if _, err := ReverseTransaction(ctx, f.pool, f.unitID, pending.ID, f.memberID); !errors.Is(err, ErrNotReversible) {
+		t.Errorf("reversing a pending transfer: want ErrNotReversible, got %v", err)
+	}
+}
+
+// TestApproval_SequentialTransfersCannotOverdraw locks in the property
+// that two separately-approved transfers can't together overdraw an
+// account — the balance is re-read at each decision, not at request time.
+// (This passed before the F7 fix too; it's here to keep it passing.)
+func TestApproval_SequentialTransfersCannotOverdraw(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	general, _ := EnsureUnitGeneralAccount(ctx, f.pool, f.unitID, f.memberID)
+	scout, _ := EnsureScoutAccount(ctx, f.pool, f.unitID, f.memberID, "Test Scout", f.memberID)
+	trip, err := CreateTripFund(ctx, f.pool, f.unitID, f.newEvent(t, "Camp"), "Camp", f.memberID)
+	if err != nil {
+		t.Fatalf("CreateTripFund: %v", err)
+	}
+	if _, err := PostTransaction(ctx, f.pool, f.unitID, "fundraiser_allocation", "seed", f.memberID, []Posting{
+		{AccountID: general.ID, AmountCents: -2000},
+		{AccountID: scout.ID, AmountCents: 2000},
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	// Two pending transfers, each affordable alone ($15 of a $20 balance)
+	// but not together. Approving both must not overdraw the account.
+	_, reqA, err := RequestTripFundTransfer(ctx, f.pool, f.unitID, scout.ID, trip.ID, 1500, "first", f.memberID)
+	if err != nil {
+		t.Fatalf("first request: %v", err)
+	}
+	_, reqB, err := RequestTripFundTransfer(ctx, f.pool, f.unitID, scout.ID, trip.ID, 1500, "second", f.memberID)
+	if err != nil {
+		t.Fatalf("second request: %v", err)
+	}
+
+	if err := approval.Decide(ctx, f.pool, reqA.ID, f.unitID, f.memberID, true); err != nil {
+		t.Fatalf("approving the first: %v", err)
+	}
+	if err := approval.Decide(ctx, f.pool, reqB.ID, f.unitID, f.memberID, true); err == nil {
+		t.Error("approving the second should have been refused — together they overdraw the account")
+	}
+
+	assertBalance(t, ctx, f.pool, scout.ID, 500, "scout account after one of two transfers")
+	if bal, _ := BalanceForAccount(ctx, f.pool, scout.ID); bal < 0 {
+		t.Errorf("scout account went negative (%d) — the overdraft guard failed", bal)
+	}
+}
+
+// TestApproval_RechecksEveryDebitedAccount is the real regression test for
+// F7's aggregation half. The old re-check ran a query returning one row
+// per debited account and read it with QueryRow — so it validated only the
+// FIRST debit and approved any others unchecked.
+//
+// Every trip-fund transfer built by RequestTripFundTransfer has exactly
+// one debit, which is why nothing was wrong in practice. This constructs
+// the two-debit case directly to prove the guard now covers all of them.
+func TestApproval_RechecksEveryDebitedAccount(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	general, _ := EnsureUnitGeneralAccount(ctx, f.pool, f.unitID, f.memberID)
+	funded, _ := EnsureScoutAccount(ctx, f.pool, f.unitID, f.memberID, "Funded Scout", f.memberID)
+
+	// A second Scout account, left at a zero balance.
+	var emptyMemberID string
+	if err := f.pool.QueryRow(ctx,
+		`INSERT INTO members (family_id, first_name, last_name, member_type)
+		 SELECT family_id, 'Empty', 'Scout', 'youth' FROM members WHERE id = $1 RETURNING id`,
+		f.memberID,
+	).Scan(&emptyMemberID); err != nil {
+		t.Fatalf("creating second member: %v", err)
+	}
+	empty, err := EnsureScoutAccount(ctx, f.pool, f.unitID, emptyMemberID, "Empty Scout", f.memberID)
+	if err != nil {
+		t.Fatalf("EnsureScoutAccount: %v", err)
+	}
+	trip, err := CreateTripFund(ctx, f.pool, f.unitID, f.newEvent(t, "Camp"), "Camp", f.memberID)
+	if err != nil {
+		t.Fatalf("CreateTripFund: %v", err)
+	}
+
+	if _, err := PostTransaction(ctx, f.pool, f.unitID, "fundraiser_allocation", "seed", f.memberID, []Posting{
+		{AccountID: general.ID, AmountCents: -2000},
+		{AccountID: funded.ID, AmountCents: 2000},
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	// Two debits: the first affordable, the second not. The affordable one
+	// is listed first, which is exactly what the old single-row read saw.
+	pending, err := insertTransaction(ctx, f.pool, f.unitID, "trip_fund_transfer", "two debits", f.memberID, "pending_approval", "", []Posting{
+		{AccountID: funded.ID, AmountCents: -1000},
+		{AccountID: empty.ID, AmountCents: -1000},
+		{AccountID: trip.ID, AmountCents: 2000},
+	})
+	if err != nil {
+		t.Fatalf("insertTransaction: %v", err)
+	}
+	req, err := approval.Submit(ctx, f.pool, "ledger_transaction", pending.ID, f.unitID, f.memberID)
+	if err != nil {
+		t.Fatalf("approval.Submit: %v", err)
+	}
+
+	if err := approval.Decide(ctx, f.pool, req.ID, f.unitID, f.memberID, true); err == nil {
+		t.Error("approval succeeded — the second debit overdraws an empty account and must be caught")
+	}
+
+	assertBalance(t, ctx, f.pool, empty.ID, 0, "empty scout account")
+	assertBalance(t, ctx, f.pool, funded.ID, 2000, "funded scout account")
+	assertBalance(t, ctx, f.pool, trip.ID, 0, "trip fund")
+}

@@ -319,6 +319,34 @@ func (h *Handlers) TreasuryDashboard(w http.ResponseWriter, r *http.Request) {
 
 // --- Manual entries: deposit / expense / internal transfer ----------------
 
+// TreasuryReverseTransaction corrects a mistaken entry by posting its
+// exact opposite, linked to the original — the sanctioned alternative to
+// editing or deleting a posted transaction, which this codebase
+// deliberately never does. Treasurer-only, same as posting one in the
+// first place.
+func (h *Handlers) TreasuryReverseTransaction(w http.ResponseWriter, r *http.Request) {
+	unit, actor, ok := h.requireTreasurer(w, r, "/treasury")
+	if !ok {
+		return
+	}
+
+	if _, err := ledger.ReverseTransaction(r.Context(), h.Pool, unit.ID, r.PathValue("id"), actor.ID); err != nil {
+		switch {
+		case errors.Is(err, ledger.ErrAccountNotFound):
+			http.NotFound(w, r)
+		case errors.Is(err, ledger.ErrNotReversible):
+			http.Error(w, "only a posted entry that hasn't already been reversed can be reversed", http.StatusBadRequest)
+		case errors.Is(err, ledger.ErrAccountClosed):
+			http.Error(w, "one of the accounts in that entry has been closed — reopen it first, or record the correction as a new entry", http.StatusBadRequest)
+		default:
+			log.Printf("web: reversing transaction: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		}
+		return
+	}
+	http.Redirect(w, r, "/treasury", http.StatusSeeOther)
+}
+
 func (h *Handlers) TreasuryPostTransaction(w http.ResponseWriter, r *http.Request) {
 	unit, actor, ok := h.requireTreasurer(w, r, "/treasury")
 	if !ok {
