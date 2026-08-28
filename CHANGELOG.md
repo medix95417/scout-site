@@ -6,6 +6,13 @@ for breaking/schema changes that need a manual step beyond the normal
 automatic migration, MINOR for new features, PATCH for fixes to existing
 behavior) and are tagged in git as `vX.Y.Z`.
 
+Releases are cut with the "Release" GitHub Actions workflow (or
+`scripts/release.sh` by hand). It picks the next number by reading the
+labels of the pull requests merged since the last tag: a `release:major`
+or `release:minor` label on any of them sets the bump, and anything
+unlabelled is treated as a patch. Label a PR when its change deserves
+more than a patch — that is the whole of the process.
+
 **A note on the early history below:** this project didn't have
 incremental commits until the `v1.4.0` catch-up commit — everything from
 `v1.0.0`'s initial scaffold through `v1.3.0` was built and delivered
@@ -19,6 +26,37 @@ commit. Every version from `v1.4.0` onward is a real, individually
 tagged commit with an accurate date.
 
 ## [Unreleased]
+
+## [2.1.0] — 2026-08-28
+
+**Fixed: a small uploaded image could take the site down.** The size of
+an image is written in the file's header, and costs nothing to inflate.
+A picture under a megabyte could claim to be 30,000 by 30,000 pixels,
+and the site would try to make room for all 900 million of them at once
+— enough to run the server out of memory. Because thumbnails are made as
+soon as a photo is uploaded and checked again every time the site
+restarts, one such file could have kept knocking both the Troop and Pack
+sites over until somebody found and deleted it. The size is now checked
+before any of that work starts, and anything implausibly large is
+refused.
+
+**Added a limit on how many fundraiser orders one person can place.**
+The public order form is the only place a visitor who isn't logged in
+can add anything to the site, so it now accepts at most ten orders an
+hour from the same place. A real family orders once, occasionally twice;
+this only stops an automated script filling the Treasurer's queue.
+
+**Fixed: the Assistant Scoutmaster workaround for authorizing spending
+didn't actually work.** The spending-approval feature said a unit could
+give an Assistant Scoutmaster the ability to authorize expenses through
+a custom role. That option was missing from the list of things a custom
+role can be given, so it would have failed if anyone tried. It's there
+now, and a test checks the two lists can't drift apart again.
+
+**Added tests for the roster's permission rules.** The roster code
+decides what each kind of leader is allowed to do — most importantly
+that a Den Leader manages their own den and can't promote anyone. That
+had no tests; it now has sixteen, covering the rules that matter.
 
 **Large expenses now need a second person to sign off.** Anything the
 Treasurer records over $100 is no longer entered straight away — it waits

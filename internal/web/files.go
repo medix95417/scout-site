@@ -464,7 +464,12 @@ func (h *Handlers) FileThumbnail(w http.ResponseWriter, r *http.Request) {
 	// still returns something usable instead of a broken image.
 	thumb, src, err := fetchAndCacheThumbnail(r.Context(), h.Storage, f.StorageKey)
 	if err != nil {
-		if errors.Is(err, thumbnail.ErrNotAnImage) {
+		// ErrTooLarge joins ErrNotAnImage here: both mean "no thumbnail
+		// for this one", and serving the original bytes is the right
+		// fallback for either. It is NOT a reason to fail the request —
+		// the original still downloads fine, under the safe headers
+		// writeUserFileHeaders sets.
+		if errors.Is(err, thumbnail.ErrNotAnImage) || errors.Is(err, thumbnail.ErrTooLarge) {
 			// Falls back to the original bytes, so this is a second path
 			// serving user-uploaded content and needs the same headers the
 			// download route gets — not just a bare Content-Type.

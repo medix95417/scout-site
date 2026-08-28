@@ -178,7 +178,7 @@ const (
 // AllCapabilities lists every capability a custom role can be granted —
 // the checkbox list on the "create a custom role" admin form iterates
 // this, and custom_roles' CHECK constraint mirrors it.
-var AllCapabilities = []string{CapEditContent, CapApproveSubmissions, CapSubmitForApproval, CapManageLedger, CapSuperAdmin}
+var AllCapabilities = []string{CapEditContent, CapApproveSubmissions, CapSubmitForApproval, CapManageLedger, CapApproveExpenses, CapSuperAdmin}
 
 // systemRoleCapabilities maps each of the 9 fixed, code-defined role
 // slugs (see migration 0001_init.sql's original member_role enum — the
