@@ -127,6 +127,7 @@ type Handlers struct {
 	adminLeadersFormTmpl *template.Template
 
 	fundraiserStorefront *template.Template
+	expenseApprovals     *template.Template
 	fundraiserThankYou   *template.Template
 }
 
@@ -429,6 +430,9 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.adminLeadersFormTmpl, err = parse("admin-leaders-form.html"); err != nil {
 		return nil, err
 	}
+	if h.expenseApprovals, err = parse("expense-approvals.html"); err != nil {
+		return nil, err
+	}
 	if h.fundraiserStorefront, err = parse("fundraiser-storefront.html"); err != nil {
 		return nil, err
 	}
@@ -519,6 +523,8 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /treasury/reports/save", h.TreasuryReportSave)
 	mux.HandleFunc("GET /treasury/reports/saved/{id}/run", h.TreasuryReportRunSaved)
 	mux.HandleFunc("POST /treasury/reports/saved/{id}/delete", h.TreasuryReportDeleteSaved)
+	mux.HandleFunc("GET /expense-approvals", h.ExpenseApprovalsList)
+	mux.HandleFunc("POST /expense-approvals/{id}/decide", h.ExpenseApprovalDecide)
 	mux.HandleFunc("POST /treasury/transactions", h.TreasuryPostTransaction)
 	mux.HandleFunc("POST /treasury/transactions/{id}/reverse", h.TreasuryReverseTransaction)
 	mux.HandleFunc("POST /treasury/trip-funds", h.TreasuryCreateTripFund)
@@ -548,6 +554,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/settings/unit/text", h.UnitSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/social", h.SocialSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/welcome-email", h.WelcomeEmailSettingsUpdateText)
+	mux.HandleFunc("POST /admin/settings/unit/treasury-controls", h.TreasuryControlsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/fundraiser-storefront", h.FundraiserStorefrontSettingsUpdate)
 
 	// News/announcements and photo galleries (internal/web/content_posts.go).
@@ -634,6 +641,7 @@ type baseData struct {
 	LoggedIn                 bool
 	CanEditContent           bool              // leader roles only — drives the "Edit Homepage" nav link and homepage edit affordances
 	CanManageLedger          bool              // Treasurer/super_admin in *this* unit — drives the "Treasury" nav link
+	CanApproveExpenses       bool              // Cubmaster/Scoutmaster/super_admin in *this* unit — drives the "Authorize Spending" nav link, see internal/web/expense_approvals.go
 	IsSuperAdmin             bool              // super_admin in *this* unit — drives the "Site Settings" nav link (see internal/web/settings_admin.go)
 	AdvancementEnabled       bool              // this unit's settings.AdvancementEnabled toggle — drives the "Advancement"/"Manage Advancement" nav links, see internal/web/advancement.go
 	TreasuryEnabled          bool              // this unit's settings.TreasuryEnabled toggle — drives the "My Accounts"/"Treasury"/"Reports" nav links, see internal/web/treasury.go's requireTreasuryEnabled
@@ -843,6 +851,7 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 		}
 		data.CanEditContent = units.CanEditUnitContent(caps)
 		data.CanManageLedger = units.CanManageLedger(caps)
+		data.CanApproveExpenses = units.CanApproveExpenses(caps)
 		data.IsSuperAdmin = units.IsSuperAdmin(caps)
 
 		if enabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.AdvancementEnabled); err != nil {

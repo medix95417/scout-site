@@ -1513,3 +1513,48 @@ func SetMemberActive(ctx context.Context, pool *pgxpool.Pool, memberID string, a
 	})
 	return nil
 }
+
+// --- Capability lookup ---------------------------------------------------
+
+// MembersWithCapability lists every active member who holds capability in
+// a unit, whether through a system role or a custom one. The inverse of
+// units.CapabilitiesForRoles: that answers "what can this person do", this
+// answers "who can do this".
+//
+// Used to check a unit actually has somebody who can authorize a large
+// expense before an entry is parked waiting for one (see
+// internal/web.TreasuryPostTransaction), so a unit with no Cubmaster or
+// Scoutmaster on the roster gets told plainly instead of accumulating
+// entries nobody can act on.
+func MembersWithCapability(ctx context.Context, pool *pgxpool.Pool, unitID, capability string) ([]MemberOption, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT DISTINCT members.id, members.first_name, members.last_name, families.name
+		FROM role_assignments
+		JOIN members ON members.id = role_assignments.member_id
+		JOIN families ON families.id = members.family_id
+		LEFT JOIN custom_roles
+			ON custom_roles.unit_id = role_assignments.unit_id
+			AND custom_roles.slug = role_assignments.role::text
+		WHERE role_assignments.unit_id = $1
+			AND members.active
+			AND (
+				role_assignments.role::text = ANY($2)
+				OR $3 = ANY(COALESCE(custom_roles.capabilities, ARRAY[]::text[]))
+			)
+		ORDER BY members.last_name, members.first_name
+	`, unitID, units.SystemRolesWithCapability(capability), capability)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []MemberOption
+	for rows.Next() {
+		var m MemberOption
+		if err := rows.Scan(&m.ID, &m.FirstName, &m.LastName, &m.FamilyName); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}

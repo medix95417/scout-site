@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -170,6 +171,7 @@ const (
 	CapApproveSubmissions = "approve_submissions" // decide a pending SPL/Patrol-Leader submission
 	CapSubmitForApproval  = "submit_for_approval" // can submit content/events, but they need approval first
 	CapManageLedger       = "manage_ledger"       // fund accounting — ledger, trip funds, fundraisers
+	CapApproveExpenses    = "approve_expenses"    // authorize a large expense a Treasurer entered — see CanApproveExpenses
 	CapSuperAdmin         = "super_admin"         // site-wide settings; minting/granting other capabilities
 )
 
@@ -187,14 +189,17 @@ var AllCapabilities = []string{CapEditContent, CapApproveSubmissions, CapSubmitF
 // can this role do," matching how a custom role's capabilities are looked
 // up (see custom_roles.capabilities).
 var systemRoleCapabilities = map[string][]string{
-	"cubmaster":             {CapEditContent},
-	"den_leader":            {CapEditContent},
-	"scoutmaster":           {CapEditContent, CapApproveSubmissions},
+	"cubmaster":   {CapEditContent, CapApproveExpenses},
+	"den_leader":  {CapEditContent},
+	"scoutmaster": {CapEditContent, CapApproveSubmissions, CapApproveExpenses},
+	// Deliberately NOT CapApproveExpenses: the unit's top leader signs off
+	// on spending. A unit that wants an ASM to cover can grant the
+	// capability through a custom role (see custom_roles.capabilities).
 	"assistant_scoutmaster": {CapEditContent, CapApproveSubmissions},
 	"senior_patrol_leader":  {CapSubmitForApproval},
 	"patrol_leader":         {CapSubmitForApproval},
 	"treasurer":             {CapManageLedger},
-	"super_admin":           {CapEditContent, CapApproveSubmissions, CapManageLedger, CapSuperAdmin},
+	"super_admin":           {CapEditContent, CapApproveSubmissions, CapManageLedger, CapApproveExpenses, CapSuperAdmin},
 	// "parent" and "scout" intentionally grant nothing extra.
 }
 
@@ -209,6 +214,24 @@ var ReservedRoleSlugs = func() map[string]bool {
 	}
 	return m
 }()
+
+// SystemRolesWithCapability returns the fixed role slugs that grant
+// capability, in sorted order. The inverse of the systemRoleCapabilities
+// map above, for callers asking "who can do this" rather than "what can
+// this person do" — see roster.MembersWithCapability.
+func SystemRolesWithCapability(capability string) []string {
+	var slugs []string
+	for slug, granted := range systemRoleCapabilities {
+		for _, c := range granted {
+			if c == capability {
+				slugs = append(slugs, slug)
+				break
+			}
+		}
+	}
+	sort.Strings(slugs)
+	return slugs
+}
 
 // Capabilities is a resolved set of capabilities a member/family holds in
 // a unit — what CanEditUnitContent and friends check against.
@@ -296,6 +319,17 @@ func CanApprove(caps Capabilities) bool { return caps.has(CapApproveSubmissions)
 // viewing balances, entering transactions, deciding pending trip-fund
 // transfers, and managing fundraisers.
 func CanManageLedger(caps Capabilities) bool { return caps.has(CapManageLedger) }
+
+// CanApproveExpenses reports whether caps can authorize a large expense
+// a Treasurer has entered (see settings.ExpenseApprovalThresholdCents).
+//
+// Deliberately separate from CapManageLedger, and never held alongside it
+// by the same system role: the whole point of the control is that the
+// person spending the money isn't the person approving it. Granted to the
+// unit's top leader — Cubmaster in a Pack, Scoutmaster in a Troop — plus
+// super_admin, which needs to be able to unblock a unit whose leader is
+// unavailable.
+func CanApproveExpenses(caps Capabilities) bool { return caps.has(CapApproveExpenses) }
 
 // IsSuperAdmin reports whether caps includes the super_admin capability —
 // the gate for the site-wide settings page (internal/web/settings_admin.go)

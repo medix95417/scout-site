@@ -595,6 +595,46 @@ func insertTransaction(ctx context.Context, pool *pgxpool.Pool, unitID, transact
 	return t, nil
 }
 
+// SubmitExpenseForApproval records an expense that needs a second
+// person's sign-off before it counts — the segregation-of-duties control
+// a volunteer-run unit's books need most, and the single most common
+// finding in unit audits: one person shouldn't be able to both spend the
+// money and be the only one who approved it.
+//
+// Shaped exactly like RequestTripFundTransfer: the postings exist from
+// the moment it's submitted (so the database's balance check validates
+// them) but status stays 'pending_approval', which every balance and
+// statement query filters out. Nothing moves until someone with
+// units.CapApproveExpenses decides it — see internal/approval.Decide,
+// which is also where the account is re-checked under a lock.
+func SubmitExpenseForApproval(ctx context.Context, pool *pgxpool.Pool, unitID, description, submittedBy string, postings []Posting) (Transaction, approval.Request, error) {
+	t, err := insertTransaction(ctx, pool, unitID, "expense", description, submittedBy, "pending_approval", "", postings)
+	if err != nil {
+		return Transaction{}, approval.Request{}, err
+	}
+
+	req, err := approval.Submit(ctx, pool, "ledger_transaction", t.ID, unitID, submittedBy)
+	if err != nil {
+		return t, approval.Request{}, err
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE ledger_transactions SET approval_request_id = $1 WHERE id = $2`, req.ID, t.ID,
+	); err != nil {
+		return t, req, err
+	}
+	t.ApprovalRequestID = req.ID
+	return t, req, nil
+}
+
+// PendingExpensesForUnit lists expenses awaiting authorization — what the
+// Cubmaster/Scoutmaster sees on /expense-approvals. Deliberately excludes
+// trip-fund transfers, which are a Treasurer's to decide and appear on
+// the Treasury page instead.
+func PendingExpensesForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]TransactionDetail, error) {
+	return transactionsQuery(ctx, pool,
+		`WHERE t.unit_id = $1 AND t.status = 'pending_approval' AND t.transaction_type = 'expense' ORDER BY t.occurred_at`, unitID)
+}
+
 // ErrNotReversible is returned by ReverseTransaction when a transaction
 // can't be reversed: it isn't posted (a pending or rejected one never
 // moved money, so there's nothing to undo — reject it instead), it has
@@ -817,7 +857,8 @@ func TransactionsForAccount(ctx context.Context, pool *pgxpool.Pool, accountID s
 // PendingTransfersForUnit lists trip-fund transfers awaiting Treasurer
 // approval — what the Treasurer dashboard shows as "needs your decision".
 func PendingTransfersForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]TransactionDetail, error) {
-	return transactionsQuery(ctx, pool, `WHERE t.unit_id = $1 AND t.status = 'pending_approval' ORDER BY t.occurred_at`, unitID)
+	return transactionsQuery(ctx, pool,
+		`WHERE t.unit_id = $1 AND t.status = 'pending_approval' AND t.transaction_type <> 'expense' ORDER BY t.occurred_at`, unitID)
 }
 
 // TransactionsForAccountInRange lists every transaction touching a single

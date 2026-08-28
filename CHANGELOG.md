@@ -20,6 +20,32 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Large expenses now need a second person to sign off.** Anything the
+Treasurer records over $100 is no longer entered straight away — it waits
+on a new "Authorize Spending" page for the Cubmaster (Pack) or
+Scoutmaster (Troop) to approve, so one person can't both spend the unit's
+money and be the only one who approved it. This is the control a unit
+committee or chartered-organisation review is most likely to ask about.
+
+The amount is per-unit and editable under Site Settings → Spending
+Controls, so a Troop and a Pack can set it differently, and a unit that
+wants the requirement to apply more or less often can move it. Deposits
+and transfers between the unit's own accounts are unaffected — only money
+leaving the unit.
+
+Some details worth knowing:
+
+- Whoever entered the expense can't authorize it, even if they hold both
+  roles. That's the whole point of the check.
+- A pending expense affects no balance until it's authorized, and a
+  declined one never counts.
+- The Cubmaster/Scoutmaster reaches the authorization page **without**
+  being given access to the rest of the Treasury.
+- Assistant Scoutmasters don't get this by default. A unit that wants an
+  ASM to be able to cover can grant it through a custom role.
+- If nobody on the roster can authorize, the Treasurer is told so when
+  they try, rather than the expense silently sitting unapproved forever.
+
 **Login tokens are no longer stored where they could be read.** Session
 cookies, password-reset links, and the short-lived tokens used during
 two-factor and forced-password-change sign-in were all kept in the

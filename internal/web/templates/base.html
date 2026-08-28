@@ -143,6 +143,9 @@
                 <a href="/admin/leaders" class="block px-4 py-2 hover:bg-gray-100">Manage Leaders</a>
                 {{if .NewsletterEnabled}}<a href="/admin/newsletters" class="block px-4 py-2 hover:bg-gray-100">Newsletters</a>{{end}}
               {{end}}
+              {{if and .TreasuryEnabled .CanApproveExpenses}}
+                <a href="/expense-approvals" class="block px-4 py-2 hover:bg-gray-100">Authorize Spending</a>
+              {{end}}
               {{if and .TreasuryEnabled .CanManageLedger}}
                 <a href="/treasury" class="block px-4 py-2 hover:bg-gray-100">Treasury</a>
                 <a href="/treasury/reports" class="block px-4 py-2 hover:bg-gray-100">Reports</a>
