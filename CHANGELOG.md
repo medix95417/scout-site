@@ -60,6 +60,12 @@ tagged commit with an accurate date.
 - Removed the homepage's closing "Ready to join the adventure?" band.
   The hero already offers Family Log In and How to Join to a logged-out
   visitor, so it was a second copy of the same two actions.
+- Help's treasury topics also now name the Admin among those who can
+  authorize spending (they hold the capability, and the app's own error
+  message already said so), list the fundraiser-proceeds report that was
+  missing from the five, explain that an over-threshold expense is
+  refused outright when nobody else can authorize it, and say that only
+  the unit's general fund is reconcilable against a bank statement.
 
 ### Fixed
 
@@ -70,24 +76,12 @@ tagged commit with an accurate date.
   reported on an iPad. A plain `:focus` rule now always paints the ring,
   suppressed via `:focus:not(:focus-visible)` on browsers that support
   it so mouse clicks stay clean.
-
-### Fixed
-
 - **The help page's expense-approval topic said the requirement could be
   turned off. It can't.** There is no off switch — the threshold is a
   dollar amount, and setting it to `0` does the *opposite* of what a
   reader following that sentence would expect, sending every expense for
   authorization. Now says to set it very high instead, matching what the
   setting's own description on the Site Settings page has always said.
-
-### Changed
-
-- Help's treasury topics also now name the Admin among those who can
-  authorize spending (they hold the capability, and the app's own error
-  message already said so), list the fundraiser-proceeds report that was
-  missing from the five, explain that an over-threshold expense is
-  refused outright when nobody else can authorize it, and say that only
-  the unit's general fund is reconcilable against a bank statement.
 
 ## [2.3.0] — 2026-08-28
 
