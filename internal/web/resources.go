@@ -268,8 +268,13 @@ func (h *Handlers) ResourceDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer obj.Close()
 
-	w.Header().Set("Content-Type", f.ContentType)
-	w.Header().Set("Content-Disposition", `inline; filename="`+strings.ReplaceAll(f.Filename, `"`, "")+`"`)
+	// Same treatment as the file library's own download route: the type is
+	// re-derived and anything that isn't inert is sent as an attachment,
+	// under a sandbox CSP. This is the THIRD route that serves stored
+	// bytes, and the one that most needs it — a resource marked public is
+	// reachable by an anonymous visitor, where /files/{id}/download at
+	// least requires a login. See file_serving.go.
+	writeUserFileHeaders(w, f.ContentType, f.Filename)
 	if _, err := io.Copy(w, obj); err != nil {
 		log.Printf("web: streaming resource download: %v", err)
 	}
