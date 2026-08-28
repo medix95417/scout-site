@@ -239,6 +239,14 @@ type Capabilities map[string]bool
 
 func (c Capabilities) has(capability string) bool { return c[capability] }
 
+// Has is the exported form, for callers that hold a capability as a
+// string rather than calling one of the named predicates below —
+// internal/help gates each help topic on a units.Cap* value carried in
+// the topic itself, so it can't use CanEditUnitContent and friends.
+// Prefer the named predicates where one fits; they document intent at
+// the call site in a way a bare string can't.
+func (c Capabilities) Has(capability string) bool { return c.has(capability) }
+
 // CapabilitiesForRoles resolves a set of role slugs (from
 // RolesForMemberInUnit/RolesForFamilyInUnit) into the capabilities they
 // grant — system roles via the fixed map above, anything else via a

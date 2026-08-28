@@ -75,10 +75,11 @@
            that case. Shown to every visitor, logged in or not — these are
            all public pages either way. -->
       <nav class="hidden sm:flex items-center gap-5 text-sm">
-        <a href="/leaders" class="hover:underline">Our Leaders</a>
-        <a href="/resources" class="hover:underline">Resources</a>
+        <a href="/news" class="hover:underline">News</a>
         <a href="/gallery" class="hover:underline">Photos</a>
+        <a href="/leaders" class="hover:underline">Our Leaders</a>
         <a href="/calendar" class="hover:underline">Calendar</a>
+        <a href="/resources" class="hover:underline">Resources</a>
       </nav>
 
       <!-- A <details>/<summary> disclosure needs no JS to open/close —
@@ -94,10 +95,10 @@
           </svg>
         </summary>
         <nav class="absolute right-0 mt-2 w-64 max-w-[90vw] rounded-md bg-white text-gray-900 shadow-lg ring-1 ring-black/10 py-2 text-sm z-50">
-          <a href="/calendar" class="block px-4 py-2 hover:bg-gray-100">Calendar</a>
           <a href="/news" class="block px-4 py-2 hover:bg-gray-100">News</a>
           <a href="/gallery" class="block px-4 py-2 hover:bg-gray-100">Photos</a>
           <a href="/leaders" class="block px-4 py-2 hover:bg-gray-100">Our Leaders</a>
+          <a href="/calendar" class="block px-4 py-2 hover:bg-gray-100">Calendar</a>
           <a href="/resources" class="block px-4 py-2 hover:bg-gray-100">Resources</a>
           {{if .LoggedIn}}
             <div class="border-t border-gray-100 my-1"></div>
@@ -131,6 +132,7 @@
             <a href="/files" class="block px-4 py-2 hover:bg-gray-100">Files</a>
             {{if and .TreasuryEnabled (or .ScoutAccountsSelfService .CanManageLedger)}}<a href="/accounts" class="block px-4 py-2 hover:bg-gray-100">My Accounts</a>{{end}}
             <a href="/my-family" class="block px-4 py-2 hover:bg-gray-100">My Family</a>
+            <a href="/help" class="block px-4 py-2 hover:bg-gray-100">Help</a>
             {{if or .CanEditContent .CanManageLedger .IsSuperAdmin}}
               <div class="border-t border-gray-100 my-1"></div>
               <div class="px-4 pt-1 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">Admin</div>

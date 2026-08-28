@@ -27,6 +27,50 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **In-app help** at `/help`, scoped to the reader. Sign-in required —
+  there is no public version, since every topic describes something
+  behind the login and several describe the unit's internal controls.
+  Topics are gated twice over: on the capabilities the login holds in
+  this unit, so a Scout never reads about the treasury, and on the
+  unit's feature toggles, so help stops describing a feature that's been
+  switched off rather than sending someone looking for a nav link that
+  isn't there. Content lives in `internal/help` as a declarative catalog
+  where each topic carries its own gates.
+- **A downloadable sample CSV** on the roster import page, generated per
+  unit: the right header row, "Patrol" or "Den" to match the unit type,
+  and this unit's own assignable roles and real den/patrol names filled
+  in, so it imports cleanly as-is and can't demonstrate a role or group
+  that doesn't exist.
+- **A news section on the homepage**, showing the three most recent
+  posts. Signed out it draws only from public posts; signed in it also
+  includes members-only ones, flagged as such — two separate queries
+  rather than one query filtered afterwards, so a members-only post
+  can't reach an anonymous response.
+- **A permission-slips on/off switch** (`permission_slips_enabled`,
+  default on), alongside the existing "only show slips on events that
+  need one" narrowing. Off means off for everyone: no link on any event
+  for a family, a logged-out visitor, or a leader, and the slip routes
+  return 404 — including for an event explicitly flagged as requiring
+  one. Slips and signatures already collected are kept.
+- A template parse test covering every page template, and route guards
+  asserting that every permission-slip route consults the new toggle.
+
+### Changed
+
+- **The homepage is reflowed** around what a reader actually needs:
+  hero, then what's happening (news and upcoming events side by side),
+  then recent photos at full width, then the program, then how to reach
+  you. Removed the three quick-link cards in the middle (Upcoming Events
+  / How to Join / Family Portal — all duplicated the nav or a section
+  directly above) and the "Glad to have you as part of…" band at the
+  bottom, which cost a full-bleed section to say nothing actionable.
+  Signed-in families no longer see the recruitment framing at all.
+- **The top link bar is News, Photos, Our Leaders, Calendar,
+  Resources**, in that order. News was previously missing from the
+  desktop bar entirely; the hamburger now matches the same order.
+
 ## [2.2.0] — 2026-08-28
 
 ### Added

@@ -42,8 +42,39 @@ type signRow struct {
 	SignedOn      string
 }
 
+// permissionSlipsEnabled reports whether this unit has the permission-slip
+// feature switched on (settings.PermissionSlipsEnabled), writing a 404 and
+// returning false when it doesn't.
+//
+// 404 rather than 403 on purpose: with the feature off there is no such
+// page for this unit, and saying "forbidden" would tell a logged-out
+// visitor that a slip exists for an event — which is most of what the
+// setting is meant to stop. Deliberately has no leader exception, unlike
+// PermissionSlipEnforcement's narrowing: off means off for everyone.
+//
+// Fails closed. An unreadable setting hides the page rather than serving
+// it, since the cost of a wrongly-hidden slip is a leader turning the
+// setting back on, and the cost of a wrongly-shown one is the exposure
+// this setting exists to prevent.
+func (h *Handlers) permissionSlipsEnabled(w http.ResponseWriter, r *http.Request, unitID string) bool {
+	enabled, err := settings.GetForUnit(r.Context(), h.Pool, unitID, settings.PermissionSlipsEnabled)
+	if err != nil {
+		log.Printf("web: checking permission-slips-enabled setting: %v", err)
+		http.NotFound(w, r)
+		return false
+	}
+	if !enabled {
+		http.NotFound(w, r)
+		return false
+	}
+	return true
+}
+
 func (h *Handlers) PermissionSlipView(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
+	if !h.permissionSlipsEnabled(w, r, unit.ID) {
+		return
+	}
 	user, loggedIn := auth.UserFromContext(r.Context())
 	if !loggedIn {
 		http.Redirect(w, r, "/login?next="+r.URL.Path, http.StatusSeeOther)
@@ -200,6 +231,9 @@ func (h *Handlers) PermissionSlipSave(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.permissionSlipsEnabled(w, r, unit.ID) {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
@@ -244,6 +278,9 @@ func (h *Handlers) PermissionSlipSave(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) PermissionSlipSign(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
+	if !h.permissionSlipsEnabled(w, r, unit.ID) {
+		return
+	}
 	user, loggedIn := auth.UserFromContext(r.Context())
 	if !loggedIn {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
