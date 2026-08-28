@@ -141,6 +141,8 @@ type Handlers struct {
 
 	resourcesList *template.Template
 
+	helpPage *template.Template
+
 	treasuryReports    *template.Template
 	treasuryReportView *template.Template
 
@@ -309,10 +311,16 @@ func templateDict(pairs ...any) (map[string]any, error) {
 }
 
 // New parses templates and returns a ready-to-use Handlers.
+// parsePageTemplate parses one page template together with the shared
+// base layout and partials — the single definition of how a page is
+// assembled, so that TestEveryTemplateParses exercises the same path New
+// does rather than a copy of it that could drift.
+func parsePageTemplate(page string) (*template.Template, error) {
+	return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/_image-picker.html", "templates/"+page)
+}
+
 func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *mailer.Mailer, store *storage.Store) (*Handlers, error) {
-	parse := func(page string) (*template.Template, error) {
-		return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/_image-picker.html", "templates/"+page)
-	}
+	parse := parsePageTemplate
 
 	h := &Handlers{
 		Pool:         pool,
@@ -458,6 +466,9 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.resourcesList, err = parse("resources.html"); err != nil {
 		return nil, err
 	}
+	if h.helpPage, err = parse("help.html"); err != nil {
+		return nil, err
+	}
 	if h.treasuryReports, err = parse("treasury-reports.html"); err != nil {
 		return nil, err
 	}
@@ -553,11 +564,13 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/roster/sub-groups/{id}/{action}", h.AdminRosterSetSubGroupActive)
 	mux.HandleFunc("POST /admin/roster/existing-member", h.AdminRosterAssignExistingMember)
 	mux.HandleFunc("GET /admin/roster/import", h.AdminRosterImportForm)
+	mux.HandleFunc("GET /admin/roster/import/template.csv", h.AdminRosterImportTemplate)
 	mux.HandleFunc("POST /admin/roster/import", h.AdminRosterImportApply)
 
 	// Phase 2: two-factor login (Treasurer/super_admin) and self-service enrollment.
 	mux.HandleFunc("GET /login/2fa", h.LoginTwoFactorForm)
 	mux.HandleFunc("POST /login/2fa", h.LoginTwoFactorSubmit)
+	mux.HandleFunc("GET /help", h.Help)
 	mux.HandleFunc("GET /settings/2fa", h.TwoFactorSettings)
 	mux.HandleFunc("POST /settings/2fa/enroll", h.TwoFactorEnroll)
 	mux.HandleFunc("POST /settings/2fa/confirm", h.TwoFactorConfirm)
@@ -701,6 +714,7 @@ type baseData struct {
 	IsSuperAdmin             bool              // super_admin in *this* unit — drives the "Site Settings" nav link (see internal/web/settings_admin.go)
 	AdvancementEnabled       bool              // this unit's settings.AdvancementEnabled toggle — drives the "Advancement"/"Manage Advancement" nav links, see internal/web/advancement.go
 	TreasuryEnabled          bool              // this unit's settings.TreasuryEnabled toggle — drives the "My Accounts"/"Treasury"/"Reports" nav links, see internal/web/treasury.go's requireTreasuryEnabled
+	PermissionSlipsEnabled   bool              // this unit's settings.PermissionSlipsEnabled toggle — when off, no event anywhere offers a permission slip, see internal/web/permission_slip.go
 	NewsletterEnabled        bool              // this unit's settings.NewsletterEnabled toggle — drives the "Newsletters" nav link, see internal/web/newsletter.go
 	ScoutAccountsSelfService bool              // this unit's settings.ScoutAccountSelfService toggle — drives the "My Accounts" nav link and family self-service account access, see internal/web/accounts.go
 	PasswordResetEnabled     bool              // site-wide settings.PasswordResetEnabled toggle — drives whether the login page's "Forgot your password?" link points to the reset form or an explanation, see internal/web/password_reset.go. Computed for every request (not just logged-in ones), since /login and /forgot-password are reached signed out
@@ -901,6 +915,16 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 		data.PasswordResetEnabled = enabled
 	}
 
+	// Loaded for every request, not just logged-in ones, unlike the other
+	// per-unit feature toggles below: /calendar is a public page, and
+	// hiding the permission-slip link from a logged-out visitor is the
+	// specific thing this setting is for.
+	if enabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.PermissionSlipsEnabled); err != nil {
+		log.Printf("web: checking permission-slips-enabled setting: %v", err)
+	} else {
+		data.PermissionSlipsEnabled = enabled
+	}
+
 	if loggedIn {
 		caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 		if err != nil {
@@ -1007,6 +1031,16 @@ type homeActivity struct {
 	Photos []content.GalleryPhoto
 }
 
+// homeNewsItem is one news post as the homepage shows it: title, link,
+// date, and a short plain-text lead-in pulled out of the post body.
+type homeNewsItem struct {
+	Title       string
+	URL         string
+	DateDisplay string
+	Excerpt     string
+	MembersOnly bool
+}
+
 // maxHomeActivities caps how many Photo Album posts the homepage
 // previews at once — ListPublishedPublicForUnit returns every published
 // public one, but the homepage only has room for a couple rows before it
@@ -1021,6 +1055,12 @@ type homeActivity struct {
 // a unit with a deep gallery history isn't stuck always featuring the
 // same handful.
 const maxHomeActivities = 4
+
+// maxHomeNews caps the homepage's news list. Three is a headline block,
+// not a feed — the full list is one click away at /news, and the point of
+// the homepage section is "something happened recently", not archive
+// browsing.
+const maxHomeNews = 3
 
 // randomHomeActivities picks up to max activities at random out of all —
 // see maxHomeActivities — so a visitor sees a different rotation on each
@@ -1095,6 +1135,35 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 	}
 	activities = randomHomeActivities(activities, maxHomeActivities)
 
+	// News for the homepage block. Which list is used is the whole
+	// privacy question here: a signed-out visitor gets only posts
+	// published as public, while a signed-in one also sees members-only
+	// posts. Two different queries rather than one query plus filtering
+	// in Go, so a members-only post can never reach an anonymous
+	// response even if the rendering below changes later.
+	var newsPosts []content.Post
+	if loggedIn {
+		newsPosts, err = content.ListPublishedForUnit(r.Context(), h.Pool, unit.ID, "post")
+	} else {
+		newsPosts, err = content.ListPublishedPublicForUnit(r.Context(), h.Pool, unit.ID, "post")
+	}
+	if err != nil {
+		log.Printf("web: listing news for homepage: %v", err)
+	}
+	if len(newsPosts) > maxHomeNews {
+		newsPosts = newsPosts[:maxHomeNews]
+	}
+	news := make([]homeNewsItem, 0, len(newsPosts))
+	for _, p := range newsPosts {
+		news = append(news, homeNewsItem{
+			Title:       p.Title,
+			URL:         "/news/" + p.ID,
+			DateDisplay: postedOn(p.CreatedAt),
+			Excerpt:     excerpt(p.Body, 160),
+			MembersOnly: p.Visibility != "public",
+		})
+	}
+
 	// The storefront button never shows while Treasury itself is off for
 	// this unit — see settings.TreasuryEnabled — since it exists to feed
 	// the same ledger that toggle gates.
@@ -1122,6 +1191,7 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		baseData
 		Events              []calendar.Event
+		News                []homeNewsItem
 		Activities          []homeActivity
 		Hero                string
 		HeroImageURL        string
@@ -1137,6 +1207,7 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 	}{
 		baseData:            bd,
 		Events:              events,
+		News:                news,
 		Activities:          activities,
 		Hero:                text["home-hero"],
 		HeroImageURL:        text["home-hero-image"],
@@ -1728,6 +1799,19 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("web: loading permission slip enforcement setting: %v", err)
 	}
+	// The feature's master switch (settings.PermissionSlipsEnabled). Off
+	// beats every exception below — including the leader escape hatch and
+	// "an event already has a slip attached" — because a unit that turned
+	// slips off wants them gone from the calendar entirely, not merely
+	// narrowed.
+	slipsEnabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.PermissionSlipsEnabled)
+	if err != nil {
+		log.Printf("web: loading permission-slips-enabled setting: %v", err)
+		// Fail closed: an unreadable setting hides the link rather than
+		// exposing it, which is the safe direction for a feature whose
+		// whole purpose here is not being shown.
+		slipsEnabled = false
+	}
 	eventsWithSlips, err := permission.EventIDsWithSlips(r.Context(), h.Pool, unit.ID)
 	if err != nil {
 		log.Printf("web: loading events with permission slips: %v", err)
@@ -1740,7 +1824,7 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		if e.SubGroupID != nil {
 			subGroupName = subGroupNameByID[*e.SubGroupID]
 		}
-		showSlip := !slipEnforcement || e.RequiresPermissionSlip || canEditContent || eventsWithSlips[e.ID]
+		showSlip := slipsEnabled && (!slipEnforcement || e.RequiresPermissionSlip || canEditContent || eventsWithSlips[e.ID])
 		v := eventView{Event: e, Files: filesByEvent[e.ID], SubGroupName: subGroupName, ShowPermissionSlip: showSlip}
 		if e.SubGroupID != nil {
 			v.SubGroupIDValue = *e.SubGroupID

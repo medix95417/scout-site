@@ -50,7 +50,8 @@ a new one.
 `internal/roster`, `internal/calendar`, `internal/content`,
 `internal/approval`, `internal/audit`, `internal/ledger`,
 `internal/twofactor`, `internal/settings`, `internal/permission`,
-`internal/advancement`, `internal/leaders`, `internal/resources`) contain
+`internal/advancement`, `internal/leaders`, `internal/resources`,
+`internal/help`) contain
 data model and business rules only — no HTTP or template code. All HTTP
 handlers and `html/template` rendering live together in `internal/web`
 (one package, many files split by feature area, e.g. `treasury.go`,
@@ -99,6 +100,13 @@ elsewhere. Follow this pattern for any new optional external dependency.
 - `internal/settings` — small generic key/value store for site-wide
   on/off toggles (`system_settings` table); add a new toggle here rather
   than inventing a one-off settings mechanism.
+- `internal/help` — the in-app help catalog. Each topic declares the
+  capability it needs and the feature toggles it depends on, and
+  `help.For(Viewer)` is the only place that decides visibility. When you
+  add a feature, add its help topic here with its gates rather than
+  writing prose into the template — `help_test.go` fails a topic that
+  mentions a gated feature without declaring the gate, and that guard is
+  what keeps help from describing a switched-off feature.
 
 **Ledger (`internal/ledger`, Phase 2).** Double-entry accounting:
 transactions and postings, unit general funds, per-Scout individual

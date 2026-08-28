@@ -1,17 +1,27 @@
 {{define "content"}}
-  {{/* Structure modeled on pack6crestwood.org, adapted to only link to
-       pages this site actually has: a full-bleed hero banner, recent
-       activity photos + upcoming public events right underneath (the
-       page's freshest, most-changing content), a row of quick-link
-       cards, a bulleted "Our Program" section with a photo, meeting/
-       leadership info, and a closing CTA band. Sections use the "break
-       out of the centered <main> column" trick (relative left-1/2
-       -mx-[50vw] w-screen) to go edge-to-edge even though the rest of
-       the site stays in a centered column; see base.html for the
-       overflow-x-hidden that keeps that trick from causing a stray
-       horizontal scrollbar. */}}
+  {{/* Homepage flow, in the order a reader actually needs it:
 
-  <!-- Hero -->
+         1. Hero — who this unit is, and the one action that matters
+            (log in, or find out how to join).
+         2. What's happening — news and upcoming events, side by side.
+            The freshest, most-changing content, and the reason a family
+            comes back to the site at all.
+         3. Recent photos — proof of the program, and the thing
+            prospective families actually scroll for.
+         4. Our Program — what we do, for someone still deciding.
+         5. Meeting info & contact — how to reach us, the #join anchor.
+         6. A closing invitation, for logged-out visitors only.
+
+       Signed-in families get (2) first and never see the recruitment
+       framing: they already joined, so "How to Join" CTAs and the
+       closing invitation are wasted rows between them and the calendar.
+
+       Sections use the "break out of the centered <main> column" trick
+       (relative left-1/2 -mx-[50vw] w-screen) to go edge-to-edge; see
+       base.html for the overflow-x-hidden that keeps that from causing a
+       stray horizontal scrollbar. */}}
+
+  <!-- 1. Hero -->
   <section
     class="relative left-1/2 right-1/2 -mx-[50vw] w-screen -mt-8 mb-12 bg-cover bg-center text-white"
     style="{{if .HeroImageURL}}background-image: linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.5)), url('{{.HeroImageURL}}');{{else}}background-color: var(--unit-color);{{end}}"
@@ -34,68 +44,8 @@
     </div>
   </section>
 
-  <!-- Recent activity photos (left column) + upcoming public events
-       (right column), side by side so a visitor sees both at a glance —
-       placed right under the hero since it's the freshest, most-changing
-       content on the page. Activity photos render as a large square tile
-       (rather than a short wide strip) so a portrait phone photo shows
-       top-to-bottom instead of getting most of its height cropped away.
-       Recent Activities is itself a grid so several galleries show side
-       by side: 2 columns × 2 rows on desktop (up to 4 total — the extra
-       room comes from home.html's own wider <main>, see baseData.
-       MainWidthClass), 1 column on mobile, where only the first 2 rows'
-       worth (index 0-1) show — the 3rd/4th are hidden rather than fetched
-       differently per viewport, so mobile still gets exactly 2 "layers". -->
-  <section class="mb-14 grid gap-8 sm:grid-cols-2">
-    <div>
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-xl font-semibold">Recent Activities</h2>
-        <a href="/gallery" class="text-sm underline whitespace-nowrap" style="color: var(--unit-color);">View all photos &rarr;</a>
-      </div>
-      {{if .Activities}}
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {{range $i, $activity := .Activities}}
-            <div{{if ge $i 2}} class="hidden sm:block"{{end}}>
-              <a href="{{$activity.URL}}" class="block font-medium mb-2 hover:underline">{{$activity.Title}}</a>
-              {{template "photoCarousel" (dict "Photos" $activity.Photos "HeightClass" "aspect-square" "AutoRotate" true)}}
-            </div>
-          {{end}}
-        </div>
-      {{else}}
-        <p class="text-sm text-gray-500">No public photos yet — check back soon.</p>
-      {{end}}
-    </div>
-    <div>
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-xl font-semibold">Upcoming Events</h2>
-        <a href="/calendar" class="text-sm underline whitespace-nowrap" style="color: var(--unit-color);">View full calendar &rarr;</a>
-      </div>
-      {{if .Events}}
-        <ul class="space-y-3">
-          {{range .Events}}
-            <li class="rounded-xl border border-gray-200 bg-white p-4">
-              <div class="font-medium">{{.Title}}</div>
-              <div class="text-sm text-gray-500">{{.DateRangeDisplay}}{{if .Location}} · {{.Location}}{{end}}</div>
-              {{if .Description}}<p class="text-sm mt-1 text-gray-600">{{.Description}}</p>{{end}}
-            </li>
-          {{end}}
-        </ul>
-      {{else}}
-        <p class="text-sm text-gray-500">No public events scheduled right now — check back soon.</p>
-      {{end}}
-    </div>
-  </section>
-  {{template "lightbox" .}}
-  {{template "photoCarouselScript" .}}
-
-  {{if .CanEditContent}}
-    <div class="mb-6 text-right">
-      <a href="/admin/home" class="text-sm underline" style="color: var(--unit-color);">Edit homepage content &amp; photos</a>
-    </div>
-  {{end}}
-
   {{if .StorefrontActive}}
-    <a href="/fundraiser" class="block mb-10 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow">
+    <a href="/fundraiser" class="block mb-12 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow">
       {{if .StorefrontButtonURL}}
         <img src="{{.StorefrontButtonURL}}" alt="Shop {{.StorefrontName}}" class="w-full max-h-64 object-cover">
       {{else}}
@@ -106,49 +56,101 @@
     </a>
   {{end}}
 
-  <!-- Quick-link cards -->
-  <div class="grid gap-4 sm:grid-cols-3 mb-14">
-    <a href="/calendar" class="rounded-xl border border-gray-200 bg-white p-5 text-center hover:shadow-md transition-shadow">
-      <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-2xl">&#128197;</div>
-      <div class="font-semibold">Upcoming Events</div>
-      <div class="text-sm text-gray-500 mt-1">See the full calendar</div>
-    </a>
-    <a href="#join" class="rounded-xl border border-gray-200 bg-white p-5 text-center hover:shadow-md transition-shadow">
-      <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-sky-100 text-2xl">&#129309;</div>
-      <div class="font-semibold">How to Join</div>
-      <div class="text-sm text-gray-500 mt-1">Meeting info &amp; contacts</div>
-    </a>
-    <a href="/login" class="rounded-xl border border-gray-200 bg-white p-5 text-center hover:shadow-md transition-shadow">
-      <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl">&#128101;</div>
-      <div class="font-semibold">Family Portal</div>
-      <div class="text-sm text-gray-500 mt-1">Roster, RSVPs &amp; more</div>
-    </a>
-  </div>
+  <!-- 2. What's happening: news + upcoming events, side by side.
+       Both are lists of dated items, so they share one visual language —
+       a plain bordered row, no card-inside-a-card nesting. -->
+  <section class="mb-14 grid gap-8 sm:grid-cols-2">
+    <div>
+      {{template "homeSectionHeading" (dict "Title" "Latest News" "Href" "/news" "LinkText" "All news")}}
+      {{if .News}}
+        <ul class="space-y-3">
+          {{range .News}}
+            <li>
+              <a href="{{.URL}}" class="block rounded-xl border border-gray-200 bg-white p-4 hover:border-gray-300">
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="text-xs text-gray-400">{{.DateDisplay}}</span>
+                  {{if .MembersOnly}}
+                    <span class="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium whitespace-nowrap">Members only</span>
+                  {{end}}
+                </div>
+                <div class="font-medium mt-0.5" style="color: var(--unit-color);">{{.Title}}</div>
+                {{if .Excerpt}}<p class="text-sm text-gray-600 mt-1">{{.Excerpt}}</p>{{end}}
+              </a>
+            </li>
+          {{end}}
+        </ul>
+      {{else}}
+        <p class="text-sm text-gray-500">No news posted yet — check back soon.</p>
+      {{end}}
+    </div>
 
-  <!-- Our Program: bullets + photo -->
+    <div>
+      {{template "homeSectionHeading" (dict "Title" "Upcoming Events" "Href" "/calendar" "LinkText" "Full calendar")}}
+      {{if .Events}}
+        <ul class="space-y-3">
+          {{range .Events}}
+            <li class="rounded-xl border border-gray-200 bg-white p-4">
+              <div class="text-xs text-gray-400">{{.DateRangeDisplay}}</div>
+              <div class="font-medium mt-0.5">{{.Title}}</div>
+              {{if .Location}}<div class="text-sm text-gray-500">{{.Location}}</div>{{end}}
+              {{if .Description}}<p class="text-sm mt-1 text-gray-600">{{.Description}}</p>{{end}}
+            </li>
+          {{end}}
+        </ul>
+      {{else}}
+        <p class="text-sm text-gray-500">No public events scheduled right now — check back soon.</p>
+      {{end}}
+    </div>
+  </section>
+
+  <!-- 3. Recent photos, full width. Given the whole row rather than half
+       of one: these are the images the page is really selling, and at
+       half width the 2-up grid squeezed each one to a thumbnail. -->
+  <section class="mb-14">
+    {{template "homeSectionHeading" (dict "Title" "Recent Activities" "Href" "/gallery" "LinkText" "All photos")}}
+    {{if .Activities}}
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {{range $i, $activity := .Activities}}
+          <div{{if ge $i 2}} class="hidden sm:block"{{end}}>
+            <a href="{{$activity.URL}}" class="block font-medium mb-2 hover:underline">{{$activity.Title}}</a>
+            {{template "photoCarousel" (dict "Photos" $activity.Photos "HeightClass" "aspect-square" "AutoRotate" true)}}
+          </div>
+        {{end}}
+      </div>
+    {{else}}
+      <p class="text-sm text-gray-500">No public photos yet — check back soon.</p>
+    {{end}}
+  </section>
+  {{template "lightbox" .}}
+  {{template "photoCarouselScript" .}}
+
+  <!-- 4. Our Program: bullets + photo -->
   <section class="mb-14 grid gap-8 sm:grid-cols-2 items-center">
     <div>
-      <h2 class="text-xl font-bold tracking-wide mb-4">OUR PROGRAM</h2>
+      <h2 class="text-xl font-semibold mb-4">Our Program</h2>
       {{if .ProgramItems}}
         <ul class="space-y-2 mb-5">
           {{range .ProgramItems}}
             <li class="flex items-start gap-2 text-gray-700">
-              <span class="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full" style="background-color: var(--unit-color);"></span>
+              <span class="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full" style="background-color: var(--unit-color);"></span>
               <span>{{.}}</span>
             </li>
           {{end}}
         </ul>
       {{end}}
-      <a href="#join" class="inline-block rounded-md px-5 py-2 text-sm font-medium btn-accent">
-        Join {{if eq .Unit.UnitType "troop"}}Scouts BSA{{else}}Cub Scouts{{end}}! Contact Us!
-      </a>
+      {{if not .LoggedIn}}
+        <a href="#join" class="inline-block rounded-md px-5 py-2 text-sm font-medium btn-accent">
+          Join {{if eq .Unit.UnitType "troop"}}Scouts BSA{{else}}Cub Scouts{{end}} &#8594;
+        </a>
+      {{end}}
     </div>
     {{if .ProgramImageURL}}
       <img src="{{.ProgramImageURL}}" alt="" class="rounded-xl shadow-md w-full h-64 object-cover">
     {{end}}
   </section>
 
-  <!-- Meeting info + leadership/contact -->
+  <!-- 5. Meeting info + leadership/contact — the #join anchor the hero
+       and Our Program both point at. -->
   <div id="join" class="grid gap-6 sm:grid-cols-2 mb-14">
     <section class="rounded-xl border border-gray-200 bg-white p-5">
       <h2 class="text-lg font-semibold mb-2">Meeting Info</h2>
@@ -160,16 +162,33 @@
     </section>
   </div>
 
-  <!-- Closing CTA band, echoing the hero, full-bleed -->
-  <section class="relative left-1/2 right-1/2 -mx-[50vw] w-screen mb-2 px-4 py-12 text-center text-white" style="background-color: var(--unit-color);">
-    {{if .LoggedIn}}
-      <p class="text-lg font-medium">Glad to have you as part of {{.Unit.Name}}!</p>
-    {{else}}
+  {{if .CanEditContent}}
+    <div class="mb-10 text-right">
+      <a href="/admin/home" class="text-sm underline" style="color: var(--unit-color);">Edit homepage content &amp; photos</a>
+    </div>
+  {{end}}
+
+  <!-- 6. Closing invitation — logged-out only. A signed-in family has
+       already joined; the old band told them "Glad to have you as part
+       of ..." and cost a full-bleed section to say nothing actionable. -->
+  {{if not .LoggedIn}}
+    <section class="relative left-1/2 right-1/2 -mx-[50vw] w-screen mb-2 px-4 py-12 text-center text-white" style="background-color: var(--unit-color);">
       <p class="text-lg font-medium mb-4">Ready to join the adventure?</p>
       <a href="/login" class="rounded-md bg-white px-6 py-2.5 font-medium" style="color: var(--unit-color);">Family Log In</a>
-    {{end}}
-  </section>
+    </section>
+  {{end}}
 
-  <!-- Facebook/Instagram/TikTok links show once, in the site-wide footer
-       (see base.html) — not duplicated here. -->
+  {{/* Facebook/Instagram/TikTok links show once, in the site-wide footer
+       (see base.html) — not duplicated here. */}}
+{{end}}
+
+{{/* homeSectionHeading is every homepage section's title row: the heading
+     and its "see everything" link, at one consistent size and spacing.
+     Factored out because the three of them had drifted into three
+     slightly different sizes and link wordings. */}}
+{{define "homeSectionHeading"}}
+  <div class="flex items-baseline justify-between gap-3 mb-3">
+    <h2 class="text-xl font-semibold">{{.Title}}</h2>
+    <a href="{{.Href}}" class="text-sm underline whitespace-nowrap" style="color: var(--unit-color);">{{.LinkText}} &rarr;</a>
+  </div>
 {{end}}

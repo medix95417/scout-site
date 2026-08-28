@@ -1,0 +1,53 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-2">Help — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-8 max-w-2xl">
+    What's here depends on what your login can do, and on which features this
+    {{if eq .Unit.UnitType "troop"}}Troop{{else}}Pack{{end}} has turned on — so this page
+    only describes things you can actually reach.
+  </p>
+
+  {{if .Sections}}
+    {{/* Contents jump-list. Worth the space because the leader and
+         treasurer sections are long, and someone arriving with a specific
+         question shouldn't have to read past everyone else's. */}}
+    {{if gt (len .Sections) 1}}
+      <nav aria-label="Help contents" class="rounded-lg border border-gray-200 bg-white p-4 mb-8 max-w-2xl">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">On this page</p>
+        <ul class="grid gap-1 sm:grid-cols-2 text-sm">
+          {{range .Sections}}
+            {{$audience := .Audience}}
+            {{range .Topics}}
+              <li>
+                <a href="#{{.ID}}" class="hover:underline" style="color: var(--unit-color);">{{.Title}}</a>
+                <span class="text-xs text-gray-400">· {{$audience}}</span>
+              </li>
+            {{end}}
+          {{end}}
+        </ul>
+      </nav>
+    {{end}}
+
+    {{range .Sections}}
+      <section class="mb-10">
+        <h2 class="text-lg font-semibold pb-2 mb-4 border-b border-gray-200">{{.Audience}}</h2>
+        <div class="space-y-6">
+          {{range .Topics}}
+            <article id="{{.ID}}" class="scroll-mt-20">
+              <h3 class="font-semibold mb-1">{{.Title}}</h3>
+              {{range .Body}}
+                <p class="text-sm text-gray-700 leading-relaxed mb-2">{{.}}</p>
+              {{end}}
+            </article>
+          {{end}}
+        </div>
+      </section>
+    {{end}}
+  {{else}}
+    <p class="text-sm text-gray-500">There's nothing to show here yet for this login.</p>
+  {{end}}
+
+  <p class="text-sm text-gray-500 border-t border-gray-200 pt-6">
+    Still stuck? Your {{if eq .Unit.UnitType "troop"}}Scoutmaster or Committee Chair{{else}}Cubmaster or Committee Chair{{end}}
+    can help — see <a href="/leaders" class="underline" style="color: var(--unit-color);">Our Leaders</a> for how to reach them.
+  </p>
+{{end}}

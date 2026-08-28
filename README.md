@@ -286,6 +286,14 @@ nav link, not required, just discoverable. Real payment processing
 (Stripe) is intentionally not wired up yet — see `PHASE2_TREASURY.md` for
 why and what that'll take.
 
+**In-app help (`/help`).** Signed-in only, and scoped to the reader
+twice over: on what the login can do in this unit (a Scout never sees
+treasury topics) and on which features the unit has switched on (help
+stops describing a feature that's off). The catalog lives in
+`internal/help` as data, with each topic declaring its own capability
+and feature gates, so gating can't drift from content — a test fails a
+topic that discusses a gated feature without declaring the gate.
+
 **Also added post-Phase-2:** a `/admin/settings` page, visible only to
 `super_admin` logins, for site-wide configuration toggles — starting with
 whether the two-factor reminder banner should nudge every login or just

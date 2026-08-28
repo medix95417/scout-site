@@ -16,6 +16,7 @@ package web
 // forms already enforce — bulk doesn't mean less-checked.
 
 import (
+	"encoding/csv"
 	"fmt"
 	"log"
 	"net/http"
@@ -162,14 +163,124 @@ func parseImportRows(raw string) ([]importRow, error) {
 type rosterImportFormData struct {
 	baseData
 	ParseError string
+	// HasSubGroups drives whether the template's blurb claims the
+	// downloadable sample is pre-filled with this unit's den/patrol names
+	// — it isn't, when the unit hasn't created any yet.
+	HasSubGroups bool
 }
 
 func (h *Handlers) AdminRosterImportForm(w http.ResponseWriter, r *http.Request) {
-	_, _, _, ok := h.requireRosterEditor(w, r, "/admin/roster/import")
+	unit, _, _, ok := h.requireRosterEditor(w, r, "/admin/roster/import")
 	if !ok {
 		return
 	}
-	h.render(w, h.rosterImport, rosterImportFormData{baseData: h.base(r, "Import Roster")})
+	h.render(w, h.rosterImport, rosterImportFormData{
+		baseData:     h.base(r, "Import Roster"),
+		HasSubGroups: h.sampleSubGroupName(r, unit.ID) != "",
+	})
+}
+
+// sampleSubGroupName is the first active den/patrol on this unit's
+// roster, or "" when it has none — used both to fill the downloadable
+// template's sub-group column and to decide what the page claims about
+// it. Logs and degrades to "" rather than failing the page: a sample CSV
+// missing one optional column is not worth a 500.
+func (h *Handlers) sampleSubGroupName(r *http.Request, unitID string) string {
+	groups, err := roster.SubGroupsForUnit(r.Context(), h.Pool, unitID)
+	if err != nil {
+		log.Printf("web: loading sub-groups for the import template: %v", err)
+		return ""
+	}
+	for _, g := range groups {
+		if g.Active {
+			return g.Name
+		}
+	}
+	return ""
+}
+
+// AdminRosterImportTemplate serves a sample CSV in exactly the shape this
+// importer reads, so a leader starts from something known-good rather than
+// reshaping a Scoutbook export against a list of column names and hoping.
+//
+// It's generated per-unit rather than served as a static file, because a
+// generic sample is the thing most likely to be edited wrong: the header
+// says "Patrol" for a Troop and "Den" for a Pack, the roles are this
+// unit's actual assignable roles (custom roles included), and the
+// sub-group column is filled with a real group off this roster — so the
+// sample imports cleanly as-is, and every value in it is one the importer
+// will accept. A leader who only swaps the names out can't accidentally
+// invent a role or a den that doesn't exist.
+//
+// The three rows demonstrate the two things the format's rules turn on:
+// a family's first adult carries the email that becomes the login, other
+// members of that family are grouped by sharing the family name and leave
+// email blank, and a second family starts the pattern over.
+func (h *Handlers) AdminRosterImportTemplate(w http.ResponseWriter, r *http.Request) {
+	unit, _, scope, ok := h.requireRosterEditor(w, r, "/admin/roster/import")
+	if !ok {
+		return
+	}
+
+	subGroupHeader := "Den"
+	if unit.UnitType == "troop" {
+		subGroupHeader = "Patrol"
+	}
+
+	// Fall back to a plausible name when the unit has no dens/patrols yet
+	// — the sample stays valid to look at, and the column is optional, so
+	// a leader clearing it still gets a working import.
+	sampleSubGroup := h.sampleSubGroupName(r, unit.ID)
+
+	adultRole, youthRole := "parent", "scout"
+	if opts, err := roster.AllowedRoles(r.Context(), h.Pool, unit.UnitType, unit.ID, scope); err != nil {
+		log.Printf("web: loading allowed roles for the import template: %v", err)
+	} else {
+		// "parent"/"scout" are in every unit's fixed set, but a scoped
+		// leader's set is narrower — prefer whatever they can actually
+		// assign so the sample never demonstrates a role they'd be
+		// refused for.
+		adultRole = firstAllowedRole(opts, []string{"parent", "committee_member"}, adultRole)
+		youthRole = firstAllowedRole(opts, []string{"scout"}, youthRole)
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="roster-import-template.csv"`)
+	// Not a user-supplied document, but it's still a file the browser is
+	// about to save — no reason for it to be sniffed as anything else.
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	cw := csv.NewWriter(w)
+	rows := [][]string{
+		{"First Name", "Last Name", "Member Type", "Email", "Role", "Family Name", subGroupHeader},
+		{"Jamie", "Rivera", "adult", "jamie.rivera@example.com", adultRole, "Rivera Family", sampleSubGroup},
+		{"Sam", "Rivera", "youth", "", youthRole, "Rivera Family", sampleSubGroup},
+		{"Alex", "Okafor", "adult", "alex.okafor@example.com", adultRole, "Okafor Family", ""},
+	}
+	if err := cw.WriteAll(rows); err != nil {
+		log.Printf("web: writing the roster import template: %v", err)
+		return
+	}
+	cw.Flush()
+}
+
+// firstAllowedRole returns the first of prefer that appears in opts,
+// falling back to the first option the scope allows at all, and finally
+// to def when there are none.
+func firstAllowedRole(opts []roster.RoleOption, prefer []string, def string) string {
+	allowed := make(map[string]bool, len(opts))
+	for _, o := range opts {
+		allowed[o.Value] = true
+	}
+	for _, p := range prefer {
+		if allowed[p] {
+			return p
+		}
+	}
+	if len(opts) > 0 {
+		return opts[0].Value
+	}
+	return def
 }
 
 // AdminRosterImportApply parses and applies a pasted roster CSV in one
@@ -195,7 +306,11 @@ func (h *Handlers) AdminRosterImportApply(w http.ResponseWriter, r *http.Request
 
 	rows, err := parseImportRows(r.FormValue("csv_rows"))
 	if err != nil {
-		h.render(w, h.rosterImport, rosterImportFormData{baseData: h.base(r, "Import Roster"), ParseError: err.Error()})
+		h.render(w, h.rosterImport, rosterImportFormData{
+			baseData:     h.base(r, "Import Roster"),
+			ParseError:   err.Error(),
+			HasSubGroups: h.sampleSubGroupName(r, unit.ID) != "",
+		})
 		return
 	}
 

@@ -212,6 +212,25 @@ const AdvancementEnabled = "advancement_enabled"
 // browsing balances turn that off without dropping the treasury feature.
 const ScoutAccountSelfService = "scout_account_self_service"
 
+// PermissionSlipsEnabled is the feature's master switch, distinct from
+// PermissionSlipEnforcement below (which only narrows *which* events show
+// a slip while the feature is on). Defaults to true, so a unit already
+// using slips sees no change.
+//
+// Off means off for everyone, with no leader escape hatch: no link on any
+// event on /calendar for a family, a logged-out visitor, or a leader, and
+// every /calendar/{id}/permission-slip route returns 404 — including for
+// an event a leader flagged as requiring one, or already attached a real
+// slip to. That last part is the point of the setting rather than an edge
+// case: a unit that collects slips on paper doesn't want a half-finished
+// digital slip reachable by URL, and it especially doesn't want one
+// listed on the calendar a prospective family is reading.
+//
+// Nothing underneath is deleted — slips and the signatures already
+// collected stay in the database exactly as they are, and turning the
+// feature back on restores them. Same treatment as TreasuryEnabled.
+const PermissionSlipsEnabled = "permission_slips_enabled"
+
 // PermissionSlipEnforcement controls whether the "Permission slip" link on
 // /calendar only shows for events a leader has explicitly marked as
 // requiring one (see calendar.Event.RequiresPermissionSlip) — a weekly
@@ -318,6 +337,12 @@ var UnitToggles = []UnitToggle{
 		Key:         ScoutAccountSelfService,
 		Label:       "My Accounts (family access to Scout account balances)",
 		Description: "Shows the \"My Accounts\" nav link and page, letting a family (or a Scout's own login) view their own Scout account balance and history. Turn off to keep account balances treasurer-only — the Treasury area is unchanged, this just shuts off the family-facing self-service view.",
+		Default:     true,
+	},
+	{
+		Key:         PermissionSlipsEnabled,
+		Label:       "Permission slips",
+		Description: "On (default): families can view and sign permission slips for events from the calendar. Turn off for a unit that handles slips on paper — the link disappears from every event for everyone, leaders included, and the slip pages return \"not found\" even for an event already marked as needing one. Slips and signatures already recorded are kept, and come back if you turn this on again.",
 		Default:     true,
 	},
 	{
