@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-08-28
+
 ### Added
 
 - **An Admin can permanently delete a member** from their roster page.
