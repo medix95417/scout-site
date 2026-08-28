@@ -904,20 +904,30 @@ type credentialsData struct {
 }
 
 // renderCredentials shows a one-time confirmation screen with a login
-// email + temporary password — the only place either flow surfaces the
-// plaintext password, since only its bcrypt hash is ever stored.
-// welcomeEmailRequested/Sent are only ever true from the two account-
-// creation flows (AdminRosterCreateFamily/AdminRosterCreateMemberLogin);
-// a password reset always passes false, false — resetting an existing
-// account's password isn't "welcoming" anyone.
+// email and, usually, the temporary password — the only place either flow
+// ever surfaces it in plaintext, since only its bcrypt hash is ever
+// stored. welcomeEmailRequested/Sent are only ever true from the two
+// account-creation flows (AdminRosterCreateFamily/
+// AdminRosterCreateMemberLogin); a password reset always passes false,
+// false — resetting an existing account's password isn't "welcoming"
+// anyone.
+//
+// When welcomeEmailSent is true, the password already reached the family
+// by mail, so it's deliberately left out of data entirely rather than
+// just hidden by the template — it never touches this response's HTML,
+// only "sent to <email>" does. It still displays normally whenever email
+// wasn't requested, isn't configured, or delivery failed, so a leader
+// always has a way to hand it off.
 func (h *Handlers) renderCredentials(w http.ResponseWriter, r *http.Request, heading, email, tempPassword string, welcomeEmailRequested, welcomeEmailSent bool) {
 	data := credentialsData{
 		baseData:              h.base(r, heading),
 		Heading:               heading,
 		Email:                 email,
-		TempPassword:          tempPassword,
 		WelcomeEmailRequested: welcomeEmailRequested,
 		WelcomeEmailSent:      welcomeEmailSent,
+	}
+	if !welcomeEmailSent {
+		data.TempPassword = tempPassword
 	}
 	h.render(w, h.rosterCredentials, data)
 }
