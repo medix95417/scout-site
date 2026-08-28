@@ -1,0 +1,97 @@
+name: Tag a commit
+
+# A maintenance tool for putting a tag on a commit that didn't get one at
+# the time — a release cut by hand before the Release workflow existed,
+# say. Normal releases don't need this: the Release workflow tags as it
+# goes.
+#
+# It exists because pushing a tag needs credentials that a laptop may not
+# have set up (GitHub no longer accepts a password for git over HTTPS, so
+# it takes a personal access token or an SSH key), while a workflow can
+# push one with the token it already gets.
+#
+# Deliberately guarded rather than a bare `git tag && git push`:
+#
+#   - it refuses to move a tag that already exists, so re-running it (or
+#     mistyping a name that's taken) can't silently repoint a released
+#     version at different code;
+#   - it refuses a commit that isn't an ancestor of the default branch, so
+#     a tag can't be parked on an abandoned or unreviewed commit;
+#   - it checks the tag looks like vX.Y.Z, since that's what this repo's
+#     tooling and CHANGELOG assume.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create, e.g. v2.1.0"
+        required: true
+        type: string
+      sha:
+        description: "Full or short commit SHA to tag (must be on main)"
+        required: true
+        type: string
+      message:
+        description: "Annotation message (defaults to the tag name)"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Needs the whole history: the commit being tagged is usually
+          # well behind the tip, and the ancestry check below has to be
+          # able to see it.
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Check the request
+        env:
+          TAG: ${{ inputs.tag }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::$TAG doesn't look like a version tag (expected vX.Y.Z)"
+            exit 1
+          fi
+
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            existing=$(git rev-list -n1 "$TAG")
+            echo "::error::$TAG already exists (on $existing). Refusing to move it — a released version must keep pointing at the code that was released."
+            exit 1
+          fi
+
+          if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then
+            echo "::error::$SHA is not a commit in this repository"
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::$SHA is not an ancestor of main — refusing to tag a commit that isn't part of the released history"
+            exit 1
+          fi
+
+          echo "will tag $TAG at $(git log --oneline -1 "$SHA")"
+
+      - name: Create and push the tag
+        env:
+          TAG: ${{ inputs.tag }}
+          SHA: ${{ inputs.sha }}
+          MESSAGE: ${{ inputs.message }}
+        run: |
+          set -euo pipefail
+          git tag -a "$TAG" "$SHA" -m "${MESSAGE:-$TAG}"
+          git push origin "refs/tags/$TAG"
+          echo "pushed $TAG -> $(git rev-list -n1 "$TAG")"
