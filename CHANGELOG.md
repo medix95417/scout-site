@@ -20,6 +20,17 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**Fixed: the one-time credentials screen still showed the temporary
+password on screen even after it was successfully emailed.** When a
+leader checks "Email login details" while creating a family or
+individual login and the welcome email actually goes out, the password
+is now left out of that page entirely — it's replaced by a confirmation
+that it was emailed to the address shown — rather than being emailed
+*and* displayed. The password still shows normally whenever email
+wasn't requested, isn't configured, or delivery failed, so there's
+always a way to hand it off. Password *resets* are unaffected — they
+don't offer to email, so nothing changes there.
+
 **Added the ability to archive a den/patrol.** Unit-wide leaders can now
 archive a den or patrol from Roster's "Dens & Patrols" section instead of
 only ever adding new ones — an archived group disappears from every
