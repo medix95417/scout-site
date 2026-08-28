@@ -48,6 +48,18 @@
       {{end}}
     </div>
 
+    {{if .Kind.HasDate}}
+      <div>
+        <label class="block text-sm font-medium mb-1" for="photo-date">Date these photos were taken</label>
+        <input class="rounded-md border border-gray-300 px-3 py-2 text-sm" type="date" id="photo-date" name="photo_date" value="{{.PhotoDateInput}}">
+        <p class="text-xs text-gray-500 mt-1">
+          Optional. The Photos page shows this date and sorts by it, newest first — so an album of an older trip
+          uploaded today files under when it happened rather than jumping to the top. Leave blank to use the date
+          the album was created.
+        </p>
+      </div>
+    {{end}}
+
     <div>
       <label class="block text-sm font-medium mb-1">Visibility</label>
       <div class="flex gap-4 text-sm">

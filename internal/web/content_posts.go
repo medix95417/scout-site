@@ -104,6 +104,7 @@ type contentKind struct {
 	BodyHelp        string
 	BodyPlaceholder string
 	HasImagePicker  bool // true for galleryKind — offers the "choose from library" thumbnail strip alongside the body textarea (see admin-content-form.html)
+	HasDate         bool // true for galleryKind — offers the editable "date these photos were taken" field, which display and ordering then use in place of the creation time (see content.Post.DisplayDate)
 }
 
 var (
@@ -126,6 +127,7 @@ var (
 		BodyHelp:        "One photo per line: paste a link to an image hosted elsewhere (e.g. a photo shared publicly from Google Photos/Drive), or click one from your library below — either way, optionally followed by | and a caption, e.g. https://example.com/photo.jpg | Sam at the summit.",
 		BodyPlaceholder: "https://example.com/photo1.jpg | Setting up camp\nhttps://example.com/photo2.jpg",
 		HasImagePicker:  true,
+		HasDate:         true,
 	}
 )
 
@@ -157,6 +159,24 @@ type publicPostView struct {
 	PostedOn string
 	Excerpt  string                 // news only; "" for galleries
 	Photos   []content.GalleryPhoto // galleries only; nil for news
+}
+
+// parsePhotoDate reads the optional "photo_date" form field. An empty or
+// unparseable value returns nil, which clears the stored date and falls
+// display and ordering back to the album's creation time — a leader
+// clearing the field is asking for exactly that, and a malformed one
+// (only reachable by hand-crafting the request, since the input is
+// type=date) is not worth a hard error over.
+func parsePhotoDate(raw string) *time.Time {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	d, err := time.Parse("2006-01-02", raw)
+	if err != nil {
+		return nil
+	}
+	return &d
 }
 
 func postedOn(t time.Time) string {
@@ -220,7 +240,7 @@ func (h *Handlers) publicContentView(w http.ResponseWriter, r *http.Request, kin
 func (h *Handlers) newsList(w http.ResponseWriter, r *http.Request, posts []content.Post) {
 	items := make([]publicPostView, 0, len(posts))
 	for _, p := range posts {
-		items = append(items, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.CreatedAt), Excerpt: excerpt(p.Body, 220)})
+		items = append(items, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.DisplayDate()), Excerpt: excerpt(p.Body, 220)})
 	}
 	data := struct {
 		baseData
@@ -235,7 +255,7 @@ func (h *Handlers) newsDetail(w http.ResponseWriter, r *http.Request, p content.
 		Title    string
 		Body     string
 		PostedOn string
-	}{baseData: h.base(r, p.Title), Title: p.Title, Body: p.Body, PostedOn: postedOn(p.CreatedAt)}
+	}{baseData: h.base(r, p.Title), Title: p.Title, Body: p.Body, PostedOn: postedOn(p.DisplayDate())}
 	h.render(w, h.newsDetailTmpl, data)
 }
 
@@ -246,7 +266,7 @@ func (h *Handlers) galleryList(w http.ResponseWriter, r *http.Request, posts []c
 	items := make([]publicPostView, 0, len(posts))
 	for _, p := range posts {
 		photos := h.filterViewableGalleryPhotos(r.Context(), unit.ID, content.ParseGalleryPhotos(p.Body), loggedIn)
-		items = append(items, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.CreatedAt), Photos: photos})
+		items = append(items, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.DisplayDate()), Photos: photos})
 	}
 	data := struct {
 		baseData
@@ -265,7 +285,7 @@ func (h *Handlers) galleryDetail(w http.ResponseWriter, r *http.Request, p conte
 		Title    string
 		PostedOn string
 		Photos   []content.GalleryPhoto
-	}{baseData: h.base(r, p.Title), Title: p.Title, PostedOn: postedOn(p.CreatedAt), Photos: photos}
+	}{baseData: h.base(r, p.Title), Title: p.Title, PostedOn: postedOn(p.DisplayDate()), Photos: photos}
 	h.render(w, h.galleryDetailTmpl, data)
 }
 
@@ -413,15 +433,25 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 		}
 	}
 
+	// Pre-formatted for <input type="date">, which only accepts
+	// YYYY-MM-DD. Empty when no date has been set, leaving the field blank
+	// rather than pre-filling the creation date — a leader who doesn't
+	// touch it shouldn't silently pin the album to today.
+	photoDateInput := ""
+	if post.PhotoDate != nil {
+		photoDateInput = post.PhotoDate.Format("2006-01-02")
+	}
+
 	data := struct {
 		baseData
 		Kind                 contentKind
 		IsEdit               bool
 		Post                 content.Post
+		PhotoDateInput       string
 		PublicMediaGroups    []files.EventFileGroup
 		PublicMediaUngrouped []files.File
 		EventPhotoGroups     []files.EventFileGroup
-	}{baseData: h.base(r, kind.Label), Kind: kind, IsEdit: isEdit, Post: post, PublicMediaGroups: publicMediaGroups, PublicMediaUngrouped: publicMediaUngrouped, EventPhotoGroups: eventPhotoGroups}
+	}{baseData: h.base(r, kind.Label), Kind: kind, IsEdit: isEdit, Post: post, PhotoDateInput: photoDateInput, PublicMediaGroups: publicMediaGroups, PublicMediaUngrouped: publicMediaUngrouped, EventPhotoGroups: eventPhotoGroups}
 	h.render(w, h.adminContentFormTmpl, data)
 }
 
@@ -489,7 +519,12 @@ func (h *Handlers) adminContentUpdate(w http.ResponseWriter, r *http.Request, ki
 		return
 	}
 
-	if _, err := content.UpdatePost(r.Context(), h.Pool, id, unit.ID, title, body, visibility, actor.ID); err != nil {
+	var photoDate *time.Time
+	if kind.HasDate {
+		photoDate = parsePhotoDate(r.PostFormValue("photo_date"))
+	}
+
+	if _, err := content.UpdatePost(r.Context(), h.Pool, id, unit.ID, title, body, visibility, photoDate, actor.ID); err != nil {
 		log.Printf("web: updating %s %s: %v", kind.Label, id, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

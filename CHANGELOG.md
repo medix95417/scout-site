@@ -27,6 +27,36 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **Photo albums can carry the date the photos were taken**, separate
+  from when the album was uploaded, and the Photos page now shows and
+  sorts by it (newest first). An album of last spring's campout uploaded
+  today files under last spring instead of jumping above this month's.
+  Optional — an album with no date set keeps exactly the date and
+  position it has now, since every read falls back to the creation time.
+- **The "Add a Member to an Existing Family" form can now create that
+  person's own login**, with the option to email them the details. The
+  form already took an email described as "this person's own — separate
+  from the family login" and then only stored it as a contact detail,
+  which read as though a login had been set up when none had.
+
+### Changed
+
+- Removed the homepage's closing "Ready to join the adventure?" band.
+  The hero already offers Family Log In and How to Join to a logged-out
+  visitor, so it was a second copy of the same two actions.
+
+### Fixed
+
+- **Keyboard focus is now visible in every browser.** Focus was styled
+  only with `:focus-visible`, so anywhere that selector doesn't match on
+  keyboard focus the ring never painted — and invisible focus is
+  indistinguishable from "Tab isn't working", which is how it was
+  reported on an iPad. A plain `:focus` rule now always paints the ring,
+  suppressed via `:focus:not(:focus-visible)` on browsers that support
+  it so mouse clicks stay clean.
+
 ### Fixed
 
 - **The help page's expense-approval topic said the requirement could be

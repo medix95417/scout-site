@@ -279,6 +279,15 @@ func (h *Handlers) AdminRosterCreateFamily(w http.ResponseWriter, r *http.Reques
 
 // AdminRosterAddMember handles "Add a Member to an Existing Family" —
 // e.g. a second Scout joining a family already in the system.
+//
+// The new member is normally covered by the family's existing shared
+// login, so no new login is created by default. When the leader ticks
+// "give this person their own login", the same individual-login path the
+// member page uses (roster.CreateMemberLogin) runs here too, and the
+// temporary password is shown once on the credentials page — previously
+// the form took an email address described as "this person's own" and
+// then did nothing with it but store it as contact detail, which read as
+// though a login had been set up when none had.
 func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) {
 	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
@@ -310,9 +319,23 @@ func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	firstName := strings.TrimSpace(r.FormValue("first_name"))
+	email := strings.TrimSpace(r.FormValue("email"))
+	wantsLogin := r.FormValue("create_login") == "1"
+
+	// Checked before the member is created, not after: a login with no
+	// address to send it to is the one failure worth catching while
+	// nothing has been written yet, so the leader can correct the form
+	// rather than find a half-finished person on the roster.
+	if wantsLogin && email == "" {
+		http.Error(w, "enter an email address to give this person their own login, or untick that box — "+
+			"without one they're reached through the family's shared login", http.StatusBadRequest)
+		return
+	}
+
 	memberID, err := roster.AddMember(r.Context(), h.Pool, familyID,
-		strings.TrimSpace(r.FormValue("first_name")), strings.TrimSpace(r.FormValue("last_name")), memberType,
-		strings.TrimSpace(r.FormValue("email")), strings.TrimSpace(r.FormValue("address")), actor.ID)
+		firstName, strings.TrimSpace(r.FormValue("last_name")), memberType,
+		email, strings.TrimSpace(r.FormValue("address")), actor.ID)
 	if err != nil {
 		log.Printf("web: adding member: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -322,7 +345,30 @@ func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) 
 		log.Printf("web: assigning role to new member: %v", err)
 	}
 
-	http.Redirect(w, r, "/admin/roster", http.StatusSeeOther)
+	if !wantsLogin {
+		http.Redirect(w, r, "/admin/roster", http.StatusSeeOther)
+		return
+	}
+
+	tempPassword, err := roster.CreateMemberLogin(r.Context(), h.Pool, memberID, familyID, email, actor.ID)
+	if err != nil {
+		// The member is on the roster at this point and staying there —
+		// rolling that back would throw away good work over a duplicate
+		// email. Say exactly what happened and where to finish the job,
+		// rather than a generic failure that leaves the leader unsure
+		// whether the person was added at all.
+		log.Printf("web: creating individual login for new member: %v", err)
+		http.Error(w, firstName+" was added to the roster, but their login wasn't created: "+err.Error()+
+			". Open them from the roster to try again with a different email.", http.StatusBadRequest)
+		return
+	}
+
+	wantsWelcomeEmail := r.FormValue("send_welcome_email") == "1"
+	welcomeEmailSent := false
+	if wantsWelcomeEmail {
+		welcomeEmailSent = h.sendWelcomeEmail(r, firstName, email, tempPassword, false)
+	}
+	h.renderCredentials(w, r, "Member added", email, tempPassword, wantsWelcomeEmail, welcomeEmailSent)
 }
 
 // AdminRosterCreateSubGroup adds a new den/patrol. Unit-wide leaders only —

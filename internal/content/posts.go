@@ -47,6 +47,25 @@ type Post struct {
 	Status     string // "draft" or "published"
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+
+	// PhotoDate is the date the album's photos were actually taken, when
+	// a leader has set one — nil when they haven't. Distinct from
+	// CreatedAt, which is when the album was typed into the site: an
+	// album of last spring's campout uploaded today should file under
+	// last spring, not above this month's. Use DisplayDate rather than
+	// reading this directly.
+	PhotoDate *time.Time
+}
+
+// DisplayDate is the date to show and sort by: the leader-set PhotoDate
+// when there is one, otherwise the creation time. Every read path uses
+// this, so an album with no date set behaves exactly as it did before
+// the field existed.
+func (p Post) DisplayDate() time.Time {
+	if p.PhotoDate != nil {
+		return *p.PhotoDate
+	}
+	return p.CreatedAt
 }
 
 // GalleryPhoto is one photo (or video) in a gallery, parsed from a Post's
@@ -118,11 +137,17 @@ func randomSlug(pageType string) (string, error) {
 	return pageType + "-" + hex.EncodeToString(b), nil
 }
 
-const postColumns = `id, unit_id, COALESCE(sub_group_id::text, ''), slug, title, body, page_type::text, visibility::text, status::text, created_at, updated_at`
+// displayDateOrder sorts by the leader-set photo date where there is one
+// and the creation time otherwise — the SQL mirror of Post.DisplayDate,
+// so what the page shows and what it sorts by can't disagree. created_at
+// breaks ties so two albums given the same date keep a stable order.
+const displayDateOrder = `COALESCE(photo_date::timestamptz, created_at) DESC, created_at DESC`
+
+const postColumns = `id, unit_id, COALESCE(sub_group_id::text, ''), slug, title, body, page_type::text, visibility::text, status::text, created_at, updated_at, photo_date`
 
 func scanPost(row interface{ Scan(dest ...any) error }) (Post, error) {
 	var p Post
-	err := row.Scan(&p.ID, &p.UnitID, &p.SubGroupID, &p.Slug, &p.Title, &p.Body, &p.PageType, &p.Visibility, &p.Status, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &p.UnitID, &p.SubGroupID, &p.Slug, &p.Title, &p.Body, &p.PageType, &p.Visibility, &p.Status, &p.CreatedAt, &p.UpdatedAt, &p.PhotoDate)
 	return p, err
 }
 
@@ -166,17 +191,20 @@ func CreatePost(ctx context.Context, pool *pgxpool.Pool, unitID, pageType, title
 // (draft/published) is untouched — editing a live announcement to fix a
 // typo shouldn't silently pull it back to draft; use SetPublished for
 // that.
-func UpdatePost(ctx context.Context, pool *pgxpool.Pool, id, unitID, title, body, visibility, actorID string) (Post, error) {
+// UpdatePost edits a post/gallery. photoDate is the leader-set date the
+// content is about (nil clears it, falling display and ordering back to
+// created_at — see Post.DisplayDate).
+func UpdatePost(ctx context.Context, pool *pgxpool.Pool, id, unitID, title, body, visibility string, photoDate *time.Time, actorID string) (Post, error) {
 	before, _, err := GetPostAnyType(ctx, pool, id, unitID)
 	if err != nil {
 		return Post{}, err
 	}
 
 	p, err := scanPost(pool.QueryRow(ctx, `
-		UPDATE content_pages SET title = $1, body = $2, visibility = $3, updated_at = now()
+		UPDATE content_pages SET title = $1, body = $2, visibility = $3, photo_date = $6, updated_at = now()
 		WHERE id = $4 AND unit_id = $5
 		RETURNING `+postColumns,
-		title, body, visibility, id, unitID))
+		title, body, visibility, id, unitID, photoDate))
 	if err != nil {
 		return Post{}, err
 	}
@@ -278,7 +306,7 @@ func ListAllForUnit(ctx context.Context, pool *pgxpool.Pool, unitID, pageType st
 		SELECT `+postColumns+`
 		FROM content_pages
 		WHERE unit_id = $1 AND page_type = $2 AND sub_group_id IS NULL
-		ORDER BY created_at DESC
+		ORDER BY `+displayDateOrder+`
 	`, unitID, pageType)
 }
 
@@ -290,7 +318,7 @@ func ListPublishedForUnit(ctx context.Context, pool *pgxpool.Pool, unitID, pageT
 		SELECT `+postColumns+`
 		FROM content_pages
 		WHERE unit_id = $1 AND page_type = $2 AND status = 'published' AND sub_group_id IS NULL
-		ORDER BY created_at DESC
+		ORDER BY `+displayDateOrder+`
 	`, unitID, pageType)
 }
 
@@ -304,7 +332,7 @@ func ListPublishedPublicForUnit(ctx context.Context, pool *pgxpool.Pool, unitID,
 		SELECT `+postColumns+`
 		FROM content_pages
 		WHERE unit_id = $1 AND page_type = $2 AND status = 'published' AND visibility = 'public' AND sub_group_id IS NULL
-		ORDER BY created_at DESC
+		ORDER BY `+displayDateOrder+`
 	`, unitID, pageType)
 }
 
