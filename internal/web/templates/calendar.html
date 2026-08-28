@@ -218,7 +218,7 @@
                   <button type="submit" class="rounded-md px-3 py-1.5 text-xs btn-accent">Save changes</button>
                 </form>
               </details>
-              <form method="post" action="/calendar/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Title}}? This can\'t be undone — RSVPs and its permission slip go with it.');">
+              <form method="post" action="/calendar/{{.ID}}/delete" data-confirm="Delete {{.Title}}? This can't be undone — RSVPs and its permission slip go with it.">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
               </form>

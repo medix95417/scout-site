@@ -34,6 +34,9 @@ placeholder. This document reflects those choices.
   authentication (TOTP)" below).
 - QR code enrollment for TOTP, alongside the original manual setup-key
   entry — see "Two-factor authentication (TOTP)" below.
+- Monthly bank reconciliation (`/treasury/reconciliations`) — tick the
+  unit's own entries off against the bank statement, with sign-off gated
+  on the difference reaching zero. See "Bank reconciliation" below.
 - A `/admin/settings` page (super_admin only) for site-wide toggles —
   configuration that affects the whole install rather than one unit's
   content or books, editable without touching code. See "Site settings
@@ -249,6 +252,61 @@ pages, since a site-wide change is relevant to Troop and Pack alike —
 
 To try it: log in as the seeded Super Admin (Alex — see `DEMO_DATA.md`),
 click "Site Settings" in the nav, and flip `require_two_factor_for_all`.
+
+## Bank reconciliation
+
+Everything else in the treasury is about money moving correctly *within*
+the books. Reconciliation is the one place the books get checked against
+an outside source of truth, which is what actually catches a deposit that
+was never recorded, an entry keyed twice, or a check nobody ever cashed.
+For a small non-profit it's also the single most useful control available,
+because it needs no extra staff — just someone doing it every month when
+the statement arrives.
+
+The model is the standard one a bookkeeper already knows:
+
+    opening balance      (last statement's closing balance)
+    + cleared postings   (the entries ticked off as on this statement)
+    = cleared balance
+
+    statement closing balance − cleared balance = difference
+
+and a reconciliation **cannot be marked complete until that difference is
+exactly zero**. That refusal is the entire point: a non-zero difference
+means the books and the bank disagree and somebody has to find out why
+before signing off. Entries left unticked are outstanding checks and
+deposits in transit — normal, not errors — and they carry over to next
+month automatically.
+
+A few decisions worth knowing about:
+
+- **Reconciling never changes the books.** The only effect on the ledger
+  is stamping postings with the reconciliation that cleared them. If a
+  reconciliation won't balance because the books are actually wrong, the
+  fix is an ordinary correcting transaction on `/treasury`, which leaves
+  both the error and the correction visible — never an edit made quietly
+  in the course of reconciling.
+- **A completed reconciliation is immutable and undeletable.** It's the
+  record that the books were checked against the bank on a given date,
+  which is exactly what a reviewer asks to see. An unfinished one can be
+  discarded, which releases everything it had ticked.
+- **The opening balance is frozen when the reconciliation starts**, taken
+  from the previous completed one, so a later change elsewhere can't
+  silently shift this period's starting point.
+- **One open reconciliation per account at a time**, enforced by a partial
+  unique index rather than a check-then-insert, so two treasurers starting
+  one at the same moment can't both succeed.
+- **Only posted transactions can be ticked.** An expense still waiting on
+  the Cubmaster's authorization hasn't hit the books, so it can't have hit
+  the bank either.
+- **Only the unit's general fund is offered.** Individual Scout accounts
+  and trip funds are subdivisions of the same real-world money, and
+  `external` is the offsetting side of every deposit rather than an
+  account anyone banks.
+
+The rules live in `internal/ledger/reconciliation.go` with no HTTP code,
+same separation as the rest of the package; `internal/web/treasury_reconciliation.go`
+is only the UI. Both are Treasurer/super_admin only.
 
 ## What's deliberately not here yet
 

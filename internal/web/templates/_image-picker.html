@@ -306,7 +306,7 @@
 {{end}}
 
 {{define "photoCarouselScript"}}
-  <script>
+  <script nonce="{{.CSPNonce}}">
     document.querySelectorAll('[data-carousel]').forEach(function (car) {
       var wrap = car.closest('.relative');
       var prev = wrap.querySelector('[data-carousel-prev]');
@@ -452,7 +452,7 @@
      so the "active" highlight is cleared/set across every group with
      that slug, not just the one the click happened in. */}}
 {{define "imagePickerScript"}}
-  <script>
+  <script nonce="{{.CSPNonce}}">
     document.querySelectorAll('[data-image-picker]').forEach(function (picker) {
       var slug = picker.getAttribute('data-image-picker');
       var append = picker.getAttribute('data-image-picker-mode') === 'append';

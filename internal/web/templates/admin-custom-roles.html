@@ -40,7 +40,7 @@
               <p class="text-xs text-gray-400 mt-1">No special capabilities — descriptive label only</p>
             {{end}}
           </div>
-          <form method="post" action="/admin/custom-roles/{{.ID}}/delete" onsubmit="return confirm('Delete the {{.Label}} role? Anyone currently holding it keeps their other roles but loses this one\'s capabilities.');" class="flex-shrink-0">
+          <form method="post" action="/admin/custom-roles/{{.ID}}/delete" data-confirm="Delete the {{.Label}} role? Anyone currently holding it keeps their other roles but loses this one's capabilities." class="flex-shrink-0">
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
           </form>

@@ -85,7 +85,7 @@
               </div>
               {{if $.Scope.CanManageSubGroup $.Group.ID}}
                 <form method="post" action="/admin/groups/{{$.Group.ID}}/news/{{.ID}}/delete" class="flex-shrink-0"
-                      onsubmit="return confirm('Remove this update?');">
+                      data-confirm="Remove this update?">
                   <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                   <button type="submit" class="text-xs text-red-600 hover:underline">Remove</button>
                 </form>

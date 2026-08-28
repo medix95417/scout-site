@@ -129,7 +129,7 @@
             <td class="px-4 py-2 text-gray-500">{{.CreatedAt.Format "Jan 2, 2006"}}</td>
             <td class="px-4 py-2 text-right whitespace-nowrap">
               <a href="/treasury/reports/saved/{{.ID}}/run" class="text-xs underline" style="color: var(--unit-color);">Run</a>
-              <form method="post" action="/treasury/reports/saved/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete the saved report &quot;{{.Name}}&quot;?');">
+              <form method="post" action="/treasury/reports/saved/{{.ID}}/delete" class="inline" data-confirm="Delete the saved report &quot;{{.Name}}&quot;?">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button type="submit" class="text-xs text-red-600 hover:underline ml-3">Delete</button>
               </form>

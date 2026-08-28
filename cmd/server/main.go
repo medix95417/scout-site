@@ -27,6 +27,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/bootstrap"
 	"github.com/47-yonkers/scout-site/internal/config"
+	"github.com/47-yonkers/scout-site/internal/csp"
 	"github.com/47-yonkers/scout-site/internal/csrf"
 	"github.com/47-yonkers/scout-site/internal/db"
 	"github.com/47-yonkers/scout-site/internal/demoseed"
@@ -225,6 +226,10 @@ func main() {
 	handler = auth.WithUser(pool)(handler)
 	handler = units.Middleware(pool)(handler)
 	handler = csrf.Middleware(secureCookie)(handler)
+	// Before securityHeaders only by convention — they touch different
+	// headers. Must be outside every template-rendering handler, since
+	// those read the nonce it puts in the request context.
+	handler = csp.Middleware(handler)
 	handler = securityHeaders(handler)
 	handler = requestLogger(handler)
 
@@ -273,12 +278,9 @@ func requestLogger(next http.Handler) http.Handler {
 }
 
 // securityHeaders sets defense-in-depth response headers on every request.
-// Deliberately conservative about scripts: this app loads htmx/Tailwind/
-// Quill from CDNs and uses inline <script> blocks and inline event
-// handlers throughout its templates, so a script-src Content-Security-
-// Policy would break the site — the CSP here only locks down the things
-// that don't touch script (framing, plugins, and <base>), which are pure
-// wins with no compatibility cost. HSTS is intentionally left to Caddy,
+// The Content-Security-Policy is NOT here — it needs a per-request nonce,
+// so it's set by internal/csp.Middleware instead. HSTS is intentionally
+// left to Caddy,
 // which adds it automatically when it terminates TLS (see Caddyfile);
 // setting it here too would risk sending it over plain http:// in local
 // development.
@@ -288,7 +290,6 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		h.Set("Content-Security-Policy", "frame-ancestors 'none'; object-src 'none'; base-uri 'self'")
 		next.ServeHTTP(w, r)
 	})
 }

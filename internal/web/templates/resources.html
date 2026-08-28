@@ -73,7 +73,7 @@
                     use as a homepage picture or an event photo, so nothing is un-published behind your back.
                   </p>
                   <form method="post" action="/resources/{{.ID}}/hide-file" class="mt-2"
-                        onsubmit="return confirm('Make this document members-only in the file library too? If it is also used as a homepage picture or an event photo, it will stop showing there for logged-out visitors.');">
+                        data-confirm="Make this document members-only in the file library too? If it is also used as a homepage picture or an event photo, it will stop showing there for logged-out visitors.">
                     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                     <button type="submit" class="rounded-md px-3 py-1.5 text-xs btn-accent">
                       Make the document members-only too
@@ -88,7 +88,7 @@
                     {{if .IsPublic}}Make members-only{{else}}Make public{{end}}
                   </button>
                 </form>
-                <form method="post" action="/resources/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Title}}? This can\'t be undone.');">
+                <form method="post" action="/resources/{{.ID}}/delete" data-confirm="Delete {{.Title}}? This can't be undone.">
                   <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                   <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
                 </form>
@@ -106,7 +106,7 @@
     <p class="text-sm text-gray-500">No resources yet.</p>
   {{end}}
 
-  <script>
+  <script nonce="{{.CSPNonce}}">
     // Toggles the "document from library" vs "link" panels on the add-
     // resource form — a plain radio-driven show/hide, no framework needed.
     (function () {

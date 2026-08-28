@@ -155,7 +155,7 @@
               <li class="flex items-center justify-between gap-2 rounded-md bg-gray-50 pl-3 pr-1 py-1">
                 <a href="/admin/groups/{{.ID}}" class="text-sm underline" style="color: var(--unit-color);">{{.Name}}</a>
                 <form method="post" action="/admin/roster/sub-groups/{{.ID}}/deactivate"
-                      onsubmit="return confirm('Archive {{.Name}}? It will no longer show up in dropdowns, the members-only group page, or event scoping — its members, history, and photos are all kept, and you can reactivate it anytime.');">
+                      data-confirm="Archive {{.Name}}? It will no longer show up in dropdowns, the members-only group page, or event scoping — its members, history, and photos are all kept, and you can reactivate it anytime.">
                   <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                   <button type="submit" class="text-xs text-red-600 hover:underline whitespace-nowrap px-2 py-1">Archive</button>
                 </form>
@@ -198,7 +198,7 @@
     <h2 class="text-lg font-semibold">Current Roster</h2>
     <input aria-label="Search roster by name" id="roster-search" type="text" placeholder="Search by name…"
            class="w-56 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-           oninput="filterRoster(this.value)">
+           data-roster-filter>
   </div>
   {{if .Roster}}
     <table id="roster-table" class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -235,7 +235,15 @@
       </tbody>
     </table>
     <p id="roster-no-matches" class="hidden text-sm text-gray-500 mt-3">No members match "<span id="roster-no-matches-query"></span>".</p>
-    <script>
+    <script nonce="{{.CSPNonce}}">
+      // Wired up here rather than with an inline oninput= attribute, which
+      // the Content-Security-Policy blocks (see base.html's data-confirm
+      // listener for the same reasoning).
+      document.addEventListener('DOMContentLoaded', function () {
+        var box = document.querySelector('[data-roster-filter]');
+        if (box) box.addEventListener('input', function () { filterRoster(box.value); });
+      });
+
       function filterRoster(query) {
         var q = query.trim().toLowerCase();
         var rows = document.querySelectorAll('#roster-table tbody tr');

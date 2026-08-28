@@ -27,13 +27,13 @@
           {{else}}
             <div class="flex gap-2 mt-3">
               <form method="post" action="/expense-approvals/{{.ApprovalRequestID}}/decide"
-                    onsubmit="return confirm('Authorize {{.AmountDisplay}} for &quot;{{.Description}}&quot;? This records it against the unit&#39;s books.');">
+                    data-confirm="Authorize {{.AmountDisplay}} for &quot;{{.Description}}&quot;? This records it against the unit&#39;s books.">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="decision" value="approve">
                 <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Authorize</button>
               </form>
               <form method="post" action="/expense-approvals/{{.ApprovalRequestID}}/decide"
-                    onsubmit="return confirm('Decline this expense? The Treasurer will need to re-enter it if that was a mistake.');">
+                    data-confirm="Decline this expense? The Treasurer will need to re-enter it if that was a mistake.">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <input type="hidden" name="decision" value="decline">
                 <button type="submit" class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm hover:bg-gray-50">Decline</button>

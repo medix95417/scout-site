@@ -26,6 +26,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/calendar"
 	"github.com/47-yonkers/scout-site/internal/content"
+	"github.com/47-yonkers/scout-site/internal/csp"
 	"github.com/47-yonkers/scout-site/internal/csrf"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/files"
@@ -142,6 +143,9 @@ type Handlers struct {
 
 	treasuryReports    *template.Template
 	treasuryReportView *template.Template
+
+	treasuryReconciliations *template.Template
+	treasuryReconciliation  *template.Template
 
 	leadersList          *template.Template
 	adminLeadersList     *template.Template
@@ -460,6 +464,12 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.treasuryReportView, err = parse("treasury-report-view.html"); err != nil {
 		return nil, err
 	}
+	if h.treasuryReconciliations, err = parse("treasury-reconciliations.html"); err != nil {
+		return nil, err
+	}
+	if h.treasuryReconciliation, err = parse("treasury-reconciliation.html"); err != nil {
+		return nil, err
+	}
 	if h.leadersList, err = parse("leaders.html"); err != nil {
 		return nil, err
 	}
@@ -562,6 +572,12 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /treasury/reports/save", h.TreasuryReportSave)
 	mux.HandleFunc("GET /treasury/reports/saved/{id}/run", h.TreasuryReportRunSaved)
 	mux.HandleFunc("POST /treasury/reports/saved/{id}/delete", h.TreasuryReportDeleteSaved)
+	mux.HandleFunc("GET /treasury/reconciliations", h.TreasuryReconciliations)
+	mux.HandleFunc("POST /treasury/reconciliations", h.TreasuryStartReconciliation)
+	mux.HandleFunc("GET /treasury/reconciliations/{id}", h.TreasuryReconciliationView)
+	mux.HandleFunc("POST /treasury/reconciliations/{id}/items/{postingID}", h.TreasuryReconciliationToggleItem)
+	mux.HandleFunc("POST /treasury/reconciliations/{id}/complete", h.TreasuryCompleteReconciliation)
+	mux.HandleFunc("POST /treasury/reconciliations/{id}/delete", h.TreasuryDeleteReconciliation)
 	mux.HandleFunc("GET /expense-approvals", h.ExpenseApprovalsList)
 	mux.HandleFunc("POST /expense-approvals/{id}/decide", h.ExpenseApprovalDecide)
 	mux.HandleFunc("POST /treasury/transactions", h.TreasuryPostTransaction)
@@ -699,6 +715,7 @@ type baseData struct {
 	FooterYear               int // current year, for the footer's copyright line
 	PageTitle                string
 	Flash                    string
+	CSPNonce                 string // per-request Content-Security-Policy nonce — every inline <script> in a template must carry it or the browser won't run it (see internal/csp)
 	CSRFToken                string // embedded as a hidden field in every <form method="post"> — see internal/csrf
 	Version                  string // this build's release version — see internal/version, shown in base.html's footer
 }
@@ -855,7 +872,7 @@ func (h *Handlers) socialLinks(ctx context.Context, unitID string) (facebook, in
 func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
-	data := baseData{Unit: unit, LoggedIn: loggedIn, PageTitle: pageTitle, CSRFToken: csrf.TokenFromContext(r.Context()), Version: version.Version, FooterYear: time.Now().Year()}
+	data := baseData{Unit: unit, LoggedIn: loggedIn, PageTitle: pageTitle, CSRFToken: csrf.TokenFromContext(r.Context()), CSPNonce: csp.NonceFromContext(r.Context()), Version: version.Version, FooterYear: time.Now().Year()}
 
 	if facebook, instagram, tiktok, err := h.socialLinks(r.Context(), unit.ID); err != nil {
 		log.Printf("web: loading social links for footer: %v", err)

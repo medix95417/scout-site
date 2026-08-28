@@ -67,7 +67,7 @@
   {{if .IsEdit}}
     {{if eq .Newsletter.Status "draft"}}
       <form method="post" action="/admin/newsletters/{{.Newsletter.ID}}/send" class="mt-6 max-w-2xl"
-            onsubmit="return confirm('Send this newsletter to every family on the roster now? This can\'t be undone.');">
+            data-confirm="Send this newsletter to every family on the roster now? This can't be undone.">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: #b91c1c;">
           Send Now
@@ -77,7 +77,7 @@
     {{end}}
   {{end}}
 
-  <script>
+  <script nonce="{{.CSPNonce}}">
     document.addEventListener('DOMContentLoaded', function () {
       var quill = new Quill('#quill-editor', {
         theme: 'snow',

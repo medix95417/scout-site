@@ -75,7 +75,7 @@
       </p>
 
       <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
-      <script>
+      <script nonce="{{.CSPNonce}}">
         // ProvisioningURI is server-generated (issuer + account email +
         // this login's own TOTP secret) and html/template JS-escapes it
         // automatically since it's inside a script-context string

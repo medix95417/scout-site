@@ -56,7 +56,7 @@
               <input aria-label="Item price" class="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm" type="text" name="price" value="{{.PriceDisplay}}" required>
               <button type="submit" class="rounded-md px-3 py-1 text-xs btn-accent whitespace-nowrap">Save</button>
             </form>
-            <form method="post" action="/treasury/fundraisers/{{$.Fundraiser.ID}}/items/{{.ID}}/delete" onsubmit="return confirm('Remove this item?');">
+            <form method="post" action="/treasury/fundraisers/{{$.Fundraiser.ID}}/items/{{.ID}}/delete" data-confirm="Remove this item?">
               <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
               <button type="submit" class="rounded-md px-3 py-1 text-xs bg-red-50 text-red-900 hover:bg-red-100">Remove</button>
             </form>
@@ -195,7 +195,7 @@
                   </form>
                 {{end}}
                 {{if or (eq .Status "pending") (eq .Status "paid")}}
-                  <form method="post" action="/treasury/fundraisers/{{$.Fundraiser.ID}}/orders/{{.ID}}/cancel" class="inline" onsubmit="return confirm('Cancel this order?');">
+                  <form method="post" action="/treasury/fundraisers/{{$.Fundraiser.ID}}/orders/{{.ID}}/cancel" class="inline" data-confirm="Cancel this order?">
                     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                     <button type="submit" class="rounded-md px-2 py-1 text-xs bg-red-50 text-red-900 hover:bg-red-100 whitespace-nowrap">Cancel</button>
                   </form>
