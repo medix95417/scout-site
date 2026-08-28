@@ -8,6 +8,7 @@ package approval
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -68,6 +69,23 @@ var ErrNotFound = errors.New("approval: no pending request with that id in this 
 // error — nothing is decided — so the Treasurer can ask the family to
 // resubmit for a smaller amount, or reject it outright.
 var ErrInsufficientFunds = errors.New("approval: insufficient balance to approve this transfer")
+
+// ErrAccountClosed is returned by Decide when approving a transfer whose
+// source account was closed while the request sat pending — a settled
+// trip fund shouldn't start taking postings again just because an old
+// request is finally being looked at.
+var ErrAccountClosed = errors.New("approval: that account has been closed")
+
+// sortedKeys returns m's keys in ascending order, so callers that lock
+// rows in a loop always do so in a consistent order.
+func sortedKeys(m map[string]int64) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 // Decide approves or rejects a pending request. approverID must hold an
 // approver role in unitID — callers are expected to have already checked
@@ -133,21 +151,75 @@ func Decide(ctx context.Context, pool *pgxpool.Pool, requestID, unitID, approver
 		// excluded from every balance calculation while status stays
 		// 'pending_approval'. Approving it is what makes it count.
 		if approve {
-			var sufficient bool
-			if err := tx.QueryRow(ctx, `
-				SELECT COALESCE((
-					SELECT SUM(other.amount_cents)
-					FROM ledger_postings other
-					JOIN ledger_transactions ot ON ot.id = other.transaction_id
-					WHERE other.account_id = debit.account_id AND ot.status = 'posted'
-				), 0) + debit.amount_cents >= 0
-				FROM ledger_postings debit
-				WHERE debit.transaction_id = $1 AND debit.amount_cents < 0
-			`, entityID).Scan(&sufficient); err != nil {
+			// Re-check every account this transaction debits, and do it
+			// under a row lock.
+			//
+			// Locking matters because the check and the status flip are
+			// two statements: without it, two pending transfers out of the
+			// same Scout account could each read a sufficient balance and
+			// both post, overdrawing it. SELECT ... FOR UPDATE on the
+			// account rows serializes concurrent approvals of transactions
+			// touching the same account.
+			//
+			// Aggregating matters because this used to read a single row
+			// from a query that returns one per debited account, silently
+			// validating only the first. Every trip-fund transfer has
+			// exactly one debit today, so nothing was wrong in practice —
+			// but a two-debit transaction would have had its second debit
+			// approved unchecked.
+			rows, err := tx.Query(ctx, `
+				SELECT account_id, SUM(amount_cents)
+				FROM ledger_postings
+				WHERE transaction_id = $1 AND amount_cents < 0
+				GROUP BY account_id
+				ORDER BY account_id
+			`, entityID)
+			if err != nil {
 				return err
 			}
-			if !sufficient {
-				return ErrInsufficientFunds
+			debits := map[string]int64{}
+			for rows.Next() {
+				var accountID string
+				var amount int64
+				if err := rows.Scan(&accountID, &amount); err != nil {
+					rows.Close()
+					return err
+				}
+				debits[accountID] = amount
+			}
+			rows.Close()
+			if err := rows.Err(); err != nil {
+				return err
+			}
+
+			// Sorted by account_id above and iterated in that order here,
+			// so two concurrent approvals always take locks in the same
+			// order and can't deadlock against each other.
+			for _, accountID := range sortedKeys(debits) {
+				var accountStatus string
+				if err := tx.QueryRow(ctx,
+					`SELECT status::text FROM ledger_accounts WHERE id = $1 FOR UPDATE`, accountID,
+				).Scan(&accountStatus); err != nil {
+					return err
+				}
+				// An account closed while this sat pending shouldn't
+				// receive postings now.
+				if accountStatus != "open" {
+					return ErrAccountClosed
+				}
+
+				var balance int64
+				if err := tx.QueryRow(ctx, `
+					SELECT COALESCE(SUM(p.amount_cents), 0)
+					FROM ledger_postings p
+					JOIN ledger_transactions t ON t.id = p.transaction_id
+					WHERE p.account_id = $1 AND t.status = 'posted'
+				`, accountID).Scan(&balance); err != nil {
+					return err
+				}
+				if balance+debits[accountID] < 0 {
+					return ErrInsufficientFunds
+				}
 			}
 			if _, err := tx.Exec(ctx, `UPDATE ledger_transactions SET status = 'posted' WHERE id = $1`, entityID); err != nil {
 				return err

@@ -9,7 +9,9 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -403,7 +405,7 @@ func CreateResetToken(ctx context.Context, pool *pgxpool.Pool, userID string) (t
 
 	_, err = pool.Exec(ctx,
 		`INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)`,
-		token, userID, expiresAt,
+		hashToken(token), userID, expiresAt,
 	)
 	if err != nil {
 		return "", time.Time{}, err
@@ -430,13 +432,13 @@ func ConsumeResetToken(ctx context.Context, pool *pgxpool.Pool, token, newPasswo
 		SELECT user_id FROM password_reset_tokens
 		WHERE token = $1 AND used_at IS NULL AND expires_at > now()
 		FOR UPDATE
-	`, token).Scan(&userID)
+	`, hashToken(token)).Scan(&userID)
 	if err != nil {
 		return "", ErrInvalidResetToken
 	}
 
 	if _, err := tx.Exec(ctx,
-		`UPDATE password_reset_tokens SET used_at = now() WHERE token = $1`, token,
+		`UPDATE password_reset_tokens SET used_at = now() WHERE token = $1`, hashToken(token),
 	); err != nil {
 		return "", err
 	}
@@ -508,7 +510,7 @@ func CreatePendingPasswordChange(ctx context.Context, pool *pgxpool.Pool, userID
 
 	_, err = pool.Exec(ctx,
 		`INSERT INTO pending_password_changes (token, user_id, next, expires_at) VALUES ($1, $2, $3, $4)`,
-		token, userID, next, expiresAt,
+		hashToken(token), userID, next, expiresAt,
 	)
 	if err != nil {
 		return "", time.Time{}, err
@@ -525,7 +527,7 @@ func PendingPasswordChangeExists(ctx context.Context, pool *pgxpool.Pool, token 
 	var exists bool
 	err := pool.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM pending_password_changes WHERE token = $1 AND expires_at > now())`,
-		token,
+		hashToken(token),
 	).Scan(&exists)
 	return exists, err
 }
@@ -549,12 +551,12 @@ func ConsumePendingPasswordChange(ctx context.Context, pool *pgxpool.Pool, token
 		SELECT user_id, next FROM pending_password_changes
 		WHERE token = $1 AND expires_at > now()
 		FOR UPDATE
-	`, token).Scan(&userID, &next)
+	`, hashToken(token)).Scan(&userID, &next)
 	if err != nil {
 		return "", "", ErrInvalidPendingPasswordChange
 	}
 
-	if _, err := tx.Exec(ctx, `DELETE FROM pending_password_changes WHERE token = $1`, token); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM pending_password_changes WHERE token = $1`, hashToken(token)); err != nil {
 		return "", "", err
 	}
 	if _, err := tx.Exec(ctx,
@@ -579,7 +581,7 @@ func CreateSession(ctx context.Context, pool *pgxpool.Pool, userID string) (toke
 
 	_, err = pool.Exec(ctx,
 		`INSERT INTO sessions (token, user_id, expires_at) VALUES ($1, $2, $3)`,
-		token, userID, expiresAt,
+		hashToken(token), userID, expiresAt,
 	)
 	if err != nil {
 		return "", time.Time{}, err
@@ -589,7 +591,7 @@ func CreateSession(ctx context.Context, pool *pgxpool.Pool, userID string) (toke
 
 // DestroySession deletes a session (used on logout).
 func DestroySession(ctx context.Context, pool *pgxpool.Pool, token string) error {
-	_, err := pool.Exec(ctx, `DELETE FROM sessions WHERE token = $1`, token)
+	_, err := pool.Exec(ctx, `DELETE FROM sessions WHERE token = $1`, hashToken(token))
 	return err
 }
 
@@ -639,7 +641,7 @@ func UserForSession(ctx context.Context, pool *pgxpool.Pool, token string) (User
 		FROM sessions
 		JOIN users ON users.id = sessions.user_id
 		WHERE sessions.token = $1 AND sessions.expires_at > now()
-	`, token).Scan(&u.ID, &u.FamilyID, &u.MemberID, &u.Email, &u.PasswordHash, &u.MustChangePassword)
+	`, hashToken(token)).Scan(&u.ID, &u.FamilyID, &u.MemberID, &u.Email, &u.PasswordHash, &u.MustChangePassword)
 
 	if err != nil {
 		return User{}, false, nil //nolint:nilerr // "not found" is not an error case here
@@ -754,6 +756,25 @@ func ClearPendingPasswordChangeCookie(w http.ResponseWriter, cookieDomain string
 // numBytes of entropy from crypto/rand, base64-encoded. Exported so other
 // packages that need the same "unguessable opaque value" property (e.g.
 // internal/csrf's CSRF cookie) don't need their own copy of this logic.
+// hashToken is what actually goes in the database for a session or
+// password-reset token. The token itself only ever exists in the user's
+// cookie or in the reset link emailed to them.
+//
+// Without this, anyone who could read the database — a leaked backup, a
+// dump handed to someone for debugging, a restored snapshot — got live,
+// replayable sessions and working account-takeover links for as long as
+// they hadn't expired. Hashing means a stolen copy of the table is inert.
+//
+// Plain SHA-256 rather than bcrypt is the right call here, unlike for
+// passwords: these tokens are 32 bytes straight from crypto/rand, so
+// there's no guessable input to slow an attacker down against. What's
+// wanted is a one-way function, and a fast one keeps session lookup cheap
+// on every single request.
+func hashToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
 func RandomToken(numBytes int) (string, error) {
 	b := make([]byte, numBytes)
 	if _, err := rand.Read(b); err != nil {

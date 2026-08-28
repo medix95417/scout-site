@@ -67,6 +67,14 @@ type Transaction struct {
 	Status            string // "posted" | "pending_approval" | "rejected"
 	CreatedBy         string
 	ApprovalRequestID string // set only for a transaction that went through Treasurer approval, else ""
+
+	// ReversesTransactionID is set only on a reversal — the id of the
+	// transaction it undoes (see ReverseTransaction). ReversedByTransactionID
+	// is its mirror, set on the transaction that HAS been reversed. Both are
+	// "" otherwise; together they let a statement show a correction and its
+	// original as a matched pair rather than two unexplained movements.
+	ReversesTransactionID   string
+	ReversedByTransactionID string
 }
 
 // Posting is one line of a Transaction: a signed cents amount against one
@@ -484,10 +492,13 @@ func BalanceForAccount(ctx context.Context, pool *pgxpool.Pool, accountID string
 // ErrAccountNotFound / ErrAccountClosed rather than silently posting
 // across unit boundaries.
 func PostTransaction(ctx context.Context, pool *pgxpool.Pool, unitID, transactionType, description, createdBy string, postings []Posting) (Transaction, error) {
-	return insertTransaction(ctx, pool, unitID, transactionType, description, createdBy, "posted", postings)
+	return insertTransaction(ctx, pool, unitID, transactionType, description, createdBy, "posted", "", postings)
 }
 
-func insertTransaction(ctx context.Context, pool *pgxpool.Pool, unitID, transactionType, description, createdBy, status string, postings []Posting) (Transaction, error) {
+// reversesID links this transaction to the one it reverses, or "" for an
+// ordinary entry. Set in the same INSERT rather than a follow-up UPDATE so
+// a reversal can never end up posted but unlinked.
+func insertTransaction(ctx context.Context, pool *pgxpool.Pool, unitID, transactionType, description, createdBy, status, reversesID string, postings []Posting) (Transaction, error) {
 	if len(postings) < 2 {
 		return Transaction{}, fmt.Errorf("ledger: a transaction needs at least two postings, got %d", len(postings))
 	}
@@ -543,13 +554,18 @@ func insertTransaction(ctx context.Context, pool *pgxpool.Pool, unitID, transact
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // no-op if already committed
 
+	var reversesArg any
+	if reversesID != "" {
+		reversesArg = reversesID
+	}
+
 	var t Transaction
 	err = tx.QueryRow(ctx, `
-		INSERT INTO ledger_transactions (unit_id, transaction_type, description, status, created_by)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, unit_id, transaction_type, description, status::text, created_by, COALESCE(approval_request_id::text, '')
-	`, unitID, transactionType, description, status, createdBy).Scan(
-		&t.ID, &t.UnitID, &t.TransactionType, &t.Description, &t.Status, &t.CreatedBy, &t.ApprovalRequestID,
+		INSERT INTO ledger_transactions (unit_id, transaction_type, description, status, created_by, reverses_transaction_id)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, unit_id, transaction_type, description, status::text, created_by, COALESCE(approval_request_id::text, ''), COALESCE(reverses_transaction_id::text, '')
+	`, unitID, transactionType, description, status, createdBy, reversesArg).Scan(
+		&t.ID, &t.UnitID, &t.TransactionType, &t.Description, &t.Status, &t.CreatedBy, &t.ApprovalRequestID, &t.ReversesTransactionID,
 	)
 	if err != nil {
 		return Transaction{}, err
@@ -576,6 +592,82 @@ func insertTransaction(ctx context.Context, pool *pgxpool.Pool, unitID, transact
 		After:      t,
 	})
 
+	return t, nil
+}
+
+// ErrNotReversible is returned by ReverseTransaction when a transaction
+// can't be reversed: it isn't posted (a pending or rejected one never
+// moved money, so there's nothing to undo — reject it instead), it has
+// already been reversed, or it is itself a reversal.
+var ErrNotReversible = errors.New("ledger: this transaction can't be reversed")
+
+// ReverseTransaction corrects a mistaken entry by posting its exact
+// opposite and recording which transaction it undoes.
+//
+// Deliberately NOT an edit or a delete. A posted transaction is immutable
+// here — nothing in this package updates or deletes a posting — because
+// books you can quietly rewrite aren't books anyone should trust. The
+// correction is therefore a second, ordinary transaction that leaves the
+// original exactly where it was, which is also what an auditor expects to
+// see: the mistake and its correction, both visible, linked to each other.
+//
+// Reversing a reversal is refused rather than supported. Re-posting the
+// original entry is the same thing and reads far more clearly on a
+// statement than a chain of undos.
+func ReverseTransaction(ctx context.Context, pool *pgxpool.Pool, unitID, transactionID, actorID string) (Transaction, error) {
+	var status, description string
+	var reverses *string
+	err := pool.QueryRow(ctx, `
+		SELECT status::text, description, reverses_transaction_id::text
+		FROM ledger_transactions WHERE id = $1 AND unit_id = $2
+	`, transactionID, unitID).Scan(&status, &description, &reverses)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Transaction{}, ErrAccountNotFound
+		}
+		return Transaction{}, err
+	}
+	if status != "posted" || reverses != nil {
+		return Transaction{}, ErrNotReversible
+	}
+
+	var alreadyReversed bool
+	if err := pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM ledger_transactions WHERE reverses_transaction_id = $1)`, transactionID,
+	).Scan(&alreadyReversed); err != nil {
+		return Transaction{}, err
+	}
+	if alreadyReversed {
+		return Transaction{}, ErrNotReversible
+	}
+
+	rows, err := pool.Query(ctx,
+		`SELECT account_id, amount_cents FROM ledger_postings WHERE transaction_id = $1`, transactionID)
+	if err != nil {
+		return Transaction{}, err
+	}
+	var reversal []Posting
+	for rows.Next() {
+		var p Posting
+		if err := rows.Scan(&p.AccountID, &p.AmountCents); err != nil {
+			rows.Close()
+			return Transaction{}, err
+		}
+		p.AmountCents = -p.AmountCents
+		reversal = append(reversal, p)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return Transaction{}, err
+	}
+
+	// insertTransaction re-validates that every account still belongs to
+	// this unit and is still open, so reversing into a closed trip fund
+	// fails loudly rather than reopening it by the back door.
+	t, err := insertTransaction(ctx, pool, unitID, "reversal", "Reversal of: "+description, actorID, "posted", transactionID, reversal)
+	if err != nil {
+		return Transaction{}, err
+	}
 	return t, nil
 }
 
@@ -607,7 +699,7 @@ func RequestTripFundTransfer(ctx context.Context, pool *pgxpool.Pool, unitID, sc
 		return Transaction{}, approval.Request{}, ErrInsufficientFunds
 	}
 
-	t, err := insertTransaction(ctx, pool, unitID, "trip_fund_transfer", description, requestedBy, "pending_approval", []Posting{
+	t, err := insertTransaction(ctx, pool, unitID, "trip_fund_transfer", description, requestedBy, "pending_approval", "", []Posting{
 		{AccountID: scoutAccountID, AmountCents: -amountCents},
 		{AccountID: tripFundAccountID, AmountCents: amountCents},
 	})
@@ -637,6 +729,8 @@ func RequestTripFundTransfer(ctx context.Context, pool *pgxpool.Pool, unitID, sc
 func transactionsQuery(ctx context.Context, pool *pgxpool.Pool, whereAndOrder string, args ...any) ([]TransactionDetail, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT t.id, t.unit_id, t.transaction_type, t.description, t.status::text, t.created_by, COALESCE(t.approval_request_id::text, ''), t.occurred_at,
+		       COALESCE(t.reverses_transaction_id::text, ''),
+		       COALESCE((SELECT r.id::text FROM ledger_transactions r WHERE r.reverses_transaction_id = t.id), ''),
 		       p.account_id, a.name, p.amount_cents
 		FROM ledger_transactions t
 		JOIN ledger_postings p ON p.transaction_id = t.id
@@ -651,16 +745,21 @@ func transactionsQuery(ctx context.Context, pool *pgxpool.Pool, whereAndOrder st
 	byID := map[string]*TransactionDetail{}
 	for rows.Next() {
 		var id, unitID, txType, description, status, createdBy, approvalReqID string
+		var reverses, reversedBy string
 		var occurredAt time.Time
 		var pd PostingDetail
-		if err := rows.Scan(&id, &unitID, &txType, &description, &status, &createdBy, &approvalReqID, &occurredAt, &pd.AccountID, &pd.AccountName, &pd.AmountCents); err != nil {
+		if err := rows.Scan(&id, &unitID, &txType, &description, &status, &createdBy, &approvalReqID, &occurredAt, &reverses, &reversedBy, &pd.AccountID, &pd.AccountName, &pd.AmountCents); err != nil {
 			return nil, err
 		}
 		td, ok := byID[id]
 		if !ok {
 			td = &TransactionDetail{
-				Transaction: Transaction{ID: id, UnitID: unitID, TransactionType: txType, Description: description, Status: status, CreatedBy: createdBy, ApprovalRequestID: approvalReqID},
-				OccurredAt:  occurredAt,
+				Transaction: Transaction{
+					ID: id, UnitID: unitID, TransactionType: txType, Description: description,
+					Status: status, CreatedBy: createdBy, ApprovalRequestID: approvalReqID,
+					ReversesTransactionID: reverses, ReversedByTransactionID: reversedBy,
+				},
+				OccurredAt: occurredAt,
 			}
 			byID[id] = td
 			order = append(order, id)
