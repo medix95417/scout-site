@@ -649,6 +649,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /resources", h.ResourcesList)
 	mux.HandleFunc("POST /resources", h.ResourceCreate)
 	mux.HandleFunc("GET /resources/{id}/download", h.ResourceDownload)
+	mux.HandleFunc("POST /resources/{id}/hide-file", h.ResourceHideUnderlyingFile)
 	mux.HandleFunc("POST /resources/{id}/delete", h.ResourceDelete)
 	mux.HandleFunc("POST /resources/{id}/public", h.ResourceSetPublic)
 

@@ -27,6 +27,20 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+**The Resources page now warns when a members-only document is still
+public.** A document on the Resources page has two separate on/off
+switches without it being obvious: one for the entry itself, and one for
+the underlying file in the library. Marking a resource members-only
+didn't touch the second, so a document could look protected while still
+being downloadable by anyone with the link.
+
+Those two switches are deliberately still separate — the same file might
+also be your homepage picture or an event photo, and flipping it from the
+Resources page would quietly remove it from those places too. So instead
+of changing anything behind your back, the page now tells you when a
+members-only resource's document is still public, and gives you a button
+to make the document members-only as well if that's what you meant.
+
 ## [2.1.1] — 2026-08-28
 
 **Fixed: the Resources page could serve an uploaded file as a web page.**

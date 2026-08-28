@@ -63,17 +63,36 @@
                 <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
             </summary>
-            <div class="border-t border-gray-100 bg-gray-50 p-4 flex items-center gap-3">
-              <form method="post" action="/resources/{{.ID}}/public">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button type="submit" class="text-xs hover:underline" style="color: var(--unit-color);">
-                  {{if .IsPublic}}Make members-only{{else}}Make public{{end}}
-                </button>
-              </form>
-              <form method="post" action="/resources/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Title}}? This can\'t be undone.');">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
-              </form>
+            <div class="border-t border-gray-100 bg-gray-50 p-4">
+              {{if .PubliclyReachableButPrivate}}
+                <div class="rounded-md border border-amber-300 bg-amber-50 p-3 mb-3">
+                  <p class="text-sm">
+                    <span class="font-semibold">This one is members-only here, but the document itself is still public.</span>
+                    It was also published to the file library, so anyone with the link can download it without signing
+                    in. Marking it members-only on this page doesn't change that on its own — the same file might be in
+                    use as a homepage picture or an event photo, so nothing is un-published behind your back.
+                  </p>
+                  <form method="post" action="/resources/{{.ID}}/hide-file" class="mt-2"
+                        onsubmit="return confirm('Make this document members-only in the file library too? If it is also used as a homepage picture or an event photo, it will stop showing there for logged-out visitors.');">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <button type="submit" class="rounded-md px-3 py-1.5 text-xs btn-accent">
+                      Make the document members-only too
+                    </button>
+                  </form>
+                </div>
+              {{end}}
+              <div class="flex items-center gap-3">
+                <form method="post" action="/resources/{{.ID}}/public">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <button type="submit" class="text-xs hover:underline" style="color: var(--unit-color);">
+                    {{if .IsPublic}}Make members-only{{else}}Make public{{end}}
+                  </button>
+                </form>
+                <form method="post" action="/resources/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Title}}? This can\'t be undone.');">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
+                </form>
+              </div>
             </div>
           </details>
         {{else}}

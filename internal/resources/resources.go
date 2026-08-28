@@ -33,6 +33,31 @@ type Resource struct {
 	FileFilename    string
 	FileDisplayName string
 	FileSizeBytes   int64
+
+	// FileIsPublic is the underlying file's OWN public flag, which is a
+	// separate thing from IsPublic above and can disagree with it.
+	//
+	// IsPublic controls this entry: whether it's listed on the public
+	// resources page and downloadable at /resources/{id}/download by a
+	// logged-out visitor. files.is_public controls the file itself, at
+	// /files/{id}/download. A leader who marks a resource private can
+	// therefore still be leaving the document downloadable by anyone, if
+	// that file was also published to the library — which is not what
+	// "private" looks like it means.
+	//
+	// The two are deliberately NOT synced: one file can be a resource, a
+	// homepage hero, and an event photo at once, so flipping the library
+	// flag from here would silently un-publish it elsewhere. Instead the
+	// admin page surfaces the mismatch and offers to fix it — see
+	// PubliclyReachableButPrivate.
+	FileIsPublic bool
+}
+
+// PubliclyReachableButPrivate reports the case worth warning about: a
+// resource its leader has marked private, whose document anybody can
+// still download through the file library.
+func (r Resource) PubliclyReachableButPrivate() bool {
+	return r.FileID != nil && !r.IsPublic && r.FileIsPublic
 }
 
 // FileDisplayLabel is what to show for this resource's underlying file —
@@ -48,12 +73,13 @@ func (r Resource) FileDisplayLabel() string {
 const selectColumns = `
 	resources.id, resources.unit_id, resources.title, resources.description,
 	resources.file_id, resources.url, resources.is_public, resources.created_by, resources.created_at,
-	COALESCE(files.filename, ''), COALESCE(files.display_name, ''), COALESCE(files.size_bytes, 0)
+	COALESCE(files.filename, ''), COALESCE(files.display_name, ''), COALESCE(files.size_bytes, 0),
+	COALESCE(files.is_public, false)
 `
 
 func scanResource(row interface{ Scan(...any) error }) (Resource, error) {
 	var r Resource
-	err := row.Scan(&r.ID, &r.UnitID, &r.Title, &r.Description, &r.FileID, &r.URL, &r.IsPublic, &r.CreatedBy, &r.CreatedAt, &r.FileFilename, &r.FileDisplayName, &r.FileSizeBytes)
+	err := row.Scan(&r.ID, &r.UnitID, &r.Title, &r.Description, &r.FileID, &r.URL, &r.IsPublic, &r.CreatedBy, &r.CreatedAt, &r.FileFilename, &r.FileDisplayName, &r.FileSizeBytes, &r.FileIsPublic)
 	return r, err
 }
 
