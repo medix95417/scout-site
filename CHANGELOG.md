@@ -27,6 +27,66 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **An Admin can permanently delete a member** from their roster page.
+  Distinct from Deactivate, which stays available to every roster editor
+  and remains the right answer for someone who has left: it is
+  reversible and keeps their history. Delete is for a record that
+  shouldn't exist — a typo, a duplicate, a family that never joined — so
+  it is Admin-only and sits in its own section away from Deactivate.
+  It refuses, naming what is holding it, whenever the member is
+  referenced by anything that must keep its attribution: an entry in the
+  Activity Log, a Scout account with money against it, or anything they
+  authored. That refusal is the feature — an audit log whose entries can
+  be orphaned isn't an audit log, and a Scout account can't lose its
+  owner without unbalancing books that are meant to balance forever.
+- **Photo albums can carry the date the photos were taken**, separate
+  from when the album was uploaded, and the Photos page now shows and
+  sorts by it (newest first). An album of last spring's campout uploaded
+  today files under last spring instead of jumping above this month's.
+  Optional — an album with no date set keeps exactly the date and
+  position it has now, since every read falls back to the creation time.
+- **The "Add a Member to an Existing Family" form can now create that
+  person's own login**, with the option to email them the details. The
+  form already took an email described as "this person's own — separate
+  from the family login" and then only stored it as a contact detail,
+  which read as though a login had been set up when none had.
+
+### Changed
+
+- Removed the homepage's closing "Ready to join the adventure?" band.
+  The hero already offers Family Log In and How to Join to a logged-out
+  visitor, so it was a second copy of the same two actions.
+
+### Fixed
+
+- **Keyboard focus is now visible in every browser.** Focus was styled
+  only with `:focus-visible`, so anywhere that selector doesn't match on
+  keyboard focus the ring never painted — and invisible focus is
+  indistinguishable from "Tab isn't working", which is how it was
+  reported on an iPad. A plain `:focus` rule now always paints the ring,
+  suppressed via `:focus:not(:focus-visible)` on browsers that support
+  it so mouse clicks stay clean.
+
+### Fixed
+
+- **The help page's expense-approval topic said the requirement could be
+  turned off. It can't.** There is no off switch — the threshold is a
+  dollar amount, and setting it to `0` does the *opposite* of what a
+  reader following that sentence would expect, sending every expense for
+  authorization. Now says to set it very high instead, matching what the
+  setting's own description on the Site Settings page has always said.
+
+### Changed
+
+- Help's treasury topics also now name the Admin among those who can
+  authorize spending (they hold the capability, and the app's own error
+  message already said so), list the fundraiser-proceeds report that was
+  missing from the five, explain that an over-threshold expense is
+  refused outright when nobody else can authorize it, and say that only
+  the unit's general fund is reconcilable against a bank statement.
+
 ## [2.3.0] — 2026-08-28
 
 ### Added

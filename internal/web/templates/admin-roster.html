@@ -119,6 +119,22 @@
               <label class="flex items-center gap-1"><input type="radio" name="member_type" value="adult"> Adult</label>
             </div>
             <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Email (optional, this person's own — separate from the family login)">
+            <div class="rounded-md bg-gray-50 px-3 py-2 space-y-1">
+              <label class="flex items-start gap-2 text-sm text-gray-700">
+                <input type="checkbox" name="create_login" value="1" class="mt-0.5">
+                <span>
+                  Give this person their own login
+                  <span class="block text-xs text-gray-500">
+                    Uses the email above. Without this they're reached through the family's shared login, which is
+                    usually what you want for a younger Scout.
+                  </span>
+                </span>
+              </label>
+              <label class="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" name="send_welcome_email" value="1" checked>
+                Email the login details to them
+              </label>
+            </div>
             <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="address" rows="2" placeholder="Household address (optional — leave blank to keep the family's existing address)"></textarea>
             <div class="flex gap-2">
               <select name="sub_group_id" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm">

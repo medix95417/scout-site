@@ -279,6 +279,15 @@ func (h *Handlers) AdminRosterCreateFamily(w http.ResponseWriter, r *http.Reques
 
 // AdminRosterAddMember handles "Add a Member to an Existing Family" —
 // e.g. a second Scout joining a family already in the system.
+//
+// The new member is normally covered by the family's existing shared
+// login, so no new login is created by default. When the leader ticks
+// "give this person their own login", the same individual-login path the
+// member page uses (roster.CreateMemberLogin) runs here too, and the
+// temporary password is shown once on the credentials page — previously
+// the form took an email address described as "this person's own" and
+// then did nothing with it but store it as contact detail, which read as
+// though a login had been set up when none had.
 func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) {
 	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
@@ -310,9 +319,23 @@ func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	firstName := strings.TrimSpace(r.FormValue("first_name"))
+	email := strings.TrimSpace(r.FormValue("email"))
+	wantsLogin := r.FormValue("create_login") == "1"
+
+	// Checked before the member is created, not after: a login with no
+	// address to send it to is the one failure worth catching while
+	// nothing has been written yet, so the leader can correct the form
+	// rather than find a half-finished person on the roster.
+	if wantsLogin && email == "" {
+		http.Error(w, "enter an email address to give this person their own login, or untick that box — "+
+			"without one they're reached through the family's shared login", http.StatusBadRequest)
+		return
+	}
+
 	memberID, err := roster.AddMember(r.Context(), h.Pool, familyID,
-		strings.TrimSpace(r.FormValue("first_name")), strings.TrimSpace(r.FormValue("last_name")), memberType,
-		strings.TrimSpace(r.FormValue("email")), strings.TrimSpace(r.FormValue("address")), actor.ID)
+		firstName, strings.TrimSpace(r.FormValue("last_name")), memberType,
+		email, strings.TrimSpace(r.FormValue("address")), actor.ID)
 	if err != nil {
 		log.Printf("web: adding member: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -322,7 +345,30 @@ func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) 
 		log.Printf("web: assigning role to new member: %v", err)
 	}
 
-	http.Redirect(w, r, "/admin/roster", http.StatusSeeOther)
+	if !wantsLogin {
+		http.Redirect(w, r, "/admin/roster", http.StatusSeeOther)
+		return
+	}
+
+	tempPassword, err := roster.CreateMemberLogin(r.Context(), h.Pool, memberID, familyID, email, actor.ID)
+	if err != nil {
+		// The member is on the roster at this point and staying there —
+		// rolling that back would throw away good work over a duplicate
+		// email. Say exactly what happened and where to finish the job,
+		// rather than a generic failure that leaves the leader unsure
+		// whether the person was added at all.
+		log.Printf("web: creating individual login for new member: %v", err)
+		http.Error(w, firstName+" was added to the roster, but their login wasn't created: "+err.Error()+
+			". Open them from the roster to try again with a different email.", http.StatusBadRequest)
+		return
+	}
+
+	wantsWelcomeEmail := r.FormValue("send_welcome_email") == "1"
+	welcomeEmailSent := false
+	if wantsWelcomeEmail {
+		welcomeEmailSent = h.sendWelcomeEmail(r, firstName, email, tempPassword, false)
+	}
+	h.renderCredentials(w, r, "Member added", email, tempPassword, wantsWelcomeEmail, welcomeEmailSent)
 }
 
 // AdminRosterCreateSubGroup adds a new den/patrol. Unit-wide leaders only —
@@ -740,6 +786,68 @@ func (h *Handlers) AdminRosterMemberDeactivate(w http.ResponseWriter, r *http.Re
 		return
 	}
 	http.Redirect(w, r, "/admin/roster/members/"+memberID, http.StatusSeeOther)
+}
+
+// AdminRosterMemberDelete permanently removes a member — super_admin
+// only, unlike deactivate, which any roster editor can do.
+//
+// The split is deliberate. Deactivating is reversible and is the right
+// answer for someone who has left: their history stays, and they can be
+// brought back. Deleting cannot be undone and exists for the narrower
+// case of a person who should never have been on the roster — a typo, a
+// duplicate, a family that enquired and never joined. Handing an
+// irreversible action to every Den Leader to sit one button away from
+// "Deactivate" invites the mistake it can't recover from.
+//
+// roster.DeleteMember refuses whenever the member is referenced by
+// anything that must keep its attribution, and says which kind of record
+// is holding them — see its doc comment.
+func (h *Handlers) AdminRosterMemberDelete(w http.ResponseWriter, r *http.Request) {
+	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	if !ok {
+		return
+	}
+
+	// requireRosterEditor already established there's a logged-in user;
+	// this re-reads it to check the narrower super_admin capability.
+	user, _ := auth.UserFromContext(r.Context())
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil {
+		log.Printf("web: loading capabilities for member delete: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !units.IsSuperAdmin(caps) {
+		http.Error(w, "only an Admin can permanently delete a member — you can deactivate them instead, "+
+			"which keeps their record and can be undone", http.StatusForbidden)
+		return
+	}
+
+	memberID := r.PathValue("id")
+	manageable, err := scope.CanManageMember(r.Context(), h.Pool, memberID, unit.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !manageable {
+		http.Error(w, "this member is outside your "+subGroupNoun(unit.UnitType), http.StatusForbidden)
+		return
+	}
+
+	if err := roster.DeleteMember(r.Context(), h.Pool, memberID, actor.ID); err != nil {
+		var hist roster.MemberHasHistoryError
+		if errors.As(err, &hist) {
+			http.Error(w, "This member can't be deleted because "+hist.Reason+". "+
+				"Deleting them would leave those records pointing at somebody who no longer exists. "+
+				"Deactivate them instead — that removes them from the roster and every listing, "+
+				"keeps the history intact, and can be undone later.", http.StatusBadRequest)
+			return
+		}
+		log.Printf("web: deleting member: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin/roster", http.StatusSeeOther)
 }
 
 // AdminRosterMemberReactivate restores a previously deactivated member to

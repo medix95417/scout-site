@@ -13,11 +13,13 @@ package roster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/47-yonkers/scout-site/internal/audit"
@@ -1557,4 +1559,101 @@ func MembersWithCapability(ctx context.Context, pool *pgxpool.Pool, unitID, capa
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// --- Deleting a member -----------------------------------------------------
+
+// MemberHasHistoryError is returned by DeleteMember when a member can't be
+// removed because other records point at them. Reason is written for the
+// leader reading it, not for a log.
+type MemberHasHistoryError struct {
+	Reason string
+}
+
+func (e MemberHasHistoryError) Error() string { return "member has history: " + e.Reason }
+
+// deleteBlockReasons maps a foreign-key constraint name to what it means
+// in the language of the person who clicked Delete.
+//
+// Deliberately keyed on the constraint rather than on a hand-written list
+// of things to check first: the database already knows exactly what
+// references a member, and encoding that knowledge twice guarantees the
+// copy drifts. A table added later still blocks the delete safely and
+// gets the generic message below, which is the right failure — a delete
+// that quietly succeeds because nobody remembered to check a new table is
+// the one outcome there's no recovering from.
+var deleteBlockReasons = map[string]string{
+	"audit_log_actor_id_fkey":                             "their actions are recorded in the Activity Log",
+	"ledger_postings_account_id_fkey":                     "their Scout account has money recorded against it",
+	"ledger_transactions_created_by_fkey":                 "they recorded treasury transactions",
+	"ledger_accounts_created_by_fkey":                     "they opened a treasury account",
+	"fundraiser_allocations_member_id_fkey":               "they have fundraiser earnings recorded",
+	"fundraiser_allocations_created_by_fkey":              "they recorded fundraiser earnings",
+	"fundraisers_created_by_fkey":                         "they created a fundraiser",
+	"bank_reconciliations_created_by_fkey":                "they started a bank reconciliation",
+	"bank_reconciliations_completed_by_fkey":              "they signed off a bank reconciliation",
+	"saved_treasury_reports_created_by_fkey":              "they saved a treasury report",
+	"events_created_by_fkey":                              "they created calendar events",
+	"content_pages_created_by_fkey":                       "they wrote news posts or photo albums",
+	"newsletters_created_by_fkey":                         "they wrote newsletters",
+	"permission_slips_created_by_fkey":                    "they created permission slips",
+	"permission_slip_signatures_signed_by_member_id_fkey": "they signed a permission slip",
+	"approval_requests_submitted_by_fkey":                 "they submitted something for approval",
+	"approval_requests_decided_by_fkey":                   "they approved or declined a submission",
+	"custom_roles_created_by_fkey":                        "they created a custom role",
+	"system_settings_updated_by_fkey":                     "they changed a site setting",
+	"unit_settings_updated_by_fkey":                       "they changed a unit setting",
+}
+
+// DeleteMember permanently removes a member and the records that belong
+// only to them — their roles, RSVPs, event reminders, advancement records,
+// any permission slips signed *for* them, and their own individual login
+// if they had one (all by ON DELETE CASCADE; see migration 0001 and
+// friends).
+//
+// It refuses, with an explanation, whenever the member is referenced by a
+// record that has to keep its attribution: anything in the Activity Log,
+// anything financial, and anything they authored. That refusal is the
+// point rather than a limitation. An audit log whose entries can be
+// orphaned by deleting the person who acted is not an audit log, and a
+// Scout account with postings can't lose its owner without unbalancing
+// books that are supposed to balance forever.
+//
+// So this is the tool for "I typed this person in by mistake" or "they
+// never actually joined". For anyone who has been part of the unit,
+// SetMemberActive is the correct answer and the error says so.
+func DeleteMember(ctx context.Context, pool *pgxpool.Pool, memberID, actorID string) error {
+	// Snapshot first: once the row is gone the audit entry is the only
+	// record that this person was ever on the roster, so it has to carry
+	// enough to say who was removed.
+	before, found, err := GetMember(ctx, pool, memberID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("member not found")
+	}
+
+	if _, err := pool.Exec(ctx, `DELETE FROM members WHERE id = $1`, memberID); err != nil {
+		var pgErr *pgconn.PgError
+		// 23503 = foreign_key_violation. Everything that must outlive a
+		// member is enforced by one, so this is the whole refusal path.
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			reason, known := deleteBlockReasons[pgErr.ConstraintName]
+			if !known {
+				reason = "other records still refer to them"
+			}
+			return MemberHasHistoryError{Reason: reason}
+		}
+		return err
+	}
+
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "member",
+		EntityID:   memberID,
+		ActorID:    &actorID,
+		Action:     "delete",
+		Before:     before,
+	})
+	return nil
 }

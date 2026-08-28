@@ -29,13 +29,28 @@
     .btn-accent { background-color: var(--accent-color); color: var(--accent-text-color); }
 
     /* A single, deliberate keyboard-focus style, applied consistently to
-       every interactive element site-wide — :focus-visible only fires for
-       keyboard/assistive-tech focus, not a mouse click, so this doesn't
-       change anything for mouse users. */
-    a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible,
-    select:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+       every interactive element site-wide.
+       
+       Written as :focus first and then suppressed for mouse users, rather
+       than :focus-visible alone, because the previous :focus-visible-only
+       version left focus completely invisible on any browser that doesn't
+       match that selector the way desktop Chrome does — and invisible
+       focus is indistinguishable from "Tab isn't working" for the person
+       using it. iPadOS Safari with an external keyboard was the report.
+       The :not(:focus-visible) rule below is ignored by browsers that
+       don't support :focus-visible, which is exactly the fallback we
+       want: they keep the always-on ring. Browsers that do support it get
+       the old behavior, with no ring on a mouse click. */
+    a:focus, button:focus, input:focus, textarea:focus,
+    select:focus, summary:focus, [tabindex]:focus {
       outline: 2px solid var(--accent-color);
       outline-offset: 2px;
+    }
+    a:focus:not(:focus-visible), button:focus:not(:focus-visible),
+    input:focus:not(:focus-visible), textarea:focus:not(:focus-visible),
+    select:focus:not(:focus-visible), summary:focus:not(:focus-visible),
+    [tabindex]:focus:not(:focus-visible) {
+      outline: none;
     }
 
     /* Respect a visitor's OS-level "reduce motion" setting by collapsing

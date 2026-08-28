@@ -168,15 +168,10 @@
     </div>
   {{end}}
 
-  <!-- 6. Closing invitation — logged-out only. A signed-in family has
-       already joined; the old band told them "Glad to have you as part
-       of ..." and cost a full-bleed section to say nothing actionable. -->
-  {{if not .LoggedIn}}
-    <section class="relative left-1/2 right-1/2 -mx-[50vw] w-screen mb-2 px-4 py-12 text-center text-white" style="background-color: var(--unit-color);">
-      <p class="text-lg font-medium mb-4">Ready to join the adventure?</p>
-      <a href="/login" class="rounded-md bg-white px-6 py-2.5 font-medium" style="color: var(--unit-color);">Family Log In</a>
-    </section>
-  {{end}}
+  {{/* No closing CTA band. The hero already offers Family Log In and How
+       to Join to a logged-out visitor, and a second copy of the same two
+       actions at the foot of the page added a full-bleed section without
+       adding a choice. Signed-in families never had a use for it at all. */}}
 
   {{/* Facebook/Instagram/TikTok links show once, in the site-wide footer
        (see base.html) — not duplicated here. */}}
