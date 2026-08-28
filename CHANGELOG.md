@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.1.2] — 2026-08-28
+
 **The Resources page now warns when a members-only document is still
 public.** A document on the Resources page has two separate on/off
 switches without it being obvious: one for the entry itself, and one for
