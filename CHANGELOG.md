@@ -27,6 +27,36 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **Monthly bank reconciliation** (`/treasury/reconciliations`,
+  Treasurer/super_admin). Enter the statement date and closing balance
+  from the bank statement, tick off the entries that appear on it, and
+  sign off — sign-off is refused until the difference reaches exactly
+  zero. Unticked entries are outstanding checks and deposits in transit
+  and carry over to the next month automatically; the opening balance is
+  frozen from the previous completed reconciliation. Reconciling never
+  alters the books: its only effect is stamping postings as cleared, and
+  a completed reconciliation is immutable. See "Bank reconciliation" in
+  `PHASE2_TREASURY.md`.
+- A structural test asserting that every route under `/treasury` and
+  `/expense-approvals` calls one of the four permission checks the
+  treasury actually uses, so a new route can't ship without one.
+
+### Changed
+
+- **The Content-Security-Policy now has a real `script-src`**, built
+  around a fresh per-request nonce (`internal/csp`) instead of relying on
+  `default-src` plus `'unsafe-inline'`. Inline `<script>` blocks carry
+  the nonce; the 19 inline `on*=` handler attributes CSP blocks
+  regardless were converted to delegated `data-confirm` /
+  `data-submit-on-change` / `data-roster-filter` listeners. An injected
+  inline script no longer executes. `style-src` deliberately keeps
+  `'unsafe-inline'` — Tailwind's play CDN injects `<style>` at runtime
+  and can't be nonced. See the new section in `SECURITY_AUDIT.md` for
+  what was verified in a live browser and what the sandbox couldn't
+  verify.
+
 ## [2.1.2] — 2026-08-28
 
 **The Resources page now warns when a members-only document is still

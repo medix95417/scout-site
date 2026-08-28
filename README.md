@@ -271,7 +271,10 @@ writeup):** a double-entry ledger (`internal/ledger`) with unit general
 funds, per-Scout individual accounts, and per-event trip funds; a
 Treasurer role (`/treasury`) that can record deposits/expenses/transfers
 and approve trip-fund push transfers families request from their Scout's
-account; fundraiser tracking with a configurable proceeds-allocation rule
+account; monthly bank reconciliation (`/treasury/reconciliations`), where
+the Treasurer ticks the unit's own entries off against the bank statement
+and can only sign off once the difference reaches zero; fundraiser
+tracking with a configurable proceeds-allocation rule
 that starts out flagged "needs council confirmation" until a Treasurer
 sets the real, council-approved rule; and mandatory TOTP two-factor login
 (`internal/twofactor`, `/settings/2fa`, QR code enrollment via a

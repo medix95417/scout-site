@@ -369,3 +369,68 @@ page, `/admin/groups/{id}`, `/admin/roster` and `/calendar` all still returned
   are deliberately static (they parse migrations and SQL constants) rather than
   round-tripping real rows. They catch the specific defects found, not every
   possible NULL-handling or audit-scope mistake.
+
+---
+
+# Pass: Content-Security-Policy hardening (nonce-based `script-src`)
+
+The global CSP had no `script-src` at all. `default-src 'self'` covered
+scripts, so nothing external could load — except the policy also had to
+permit the CDNs the site genuinely uses (Tailwind, htmx, Quill, QRious),
+and permitting them via `'unsafe-inline'` meant the policy stopped
+constraining scripts in any way that mattered: an injected `<script>`
+would have run.
+
+## What changed
+
+`internal/csp` generates a fresh 128-bit random nonce per request, puts
+it in the request context, and sets:
+
+    script-src 'nonce-<per-request>' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com
+
+Every inline `<script>` in the templates carries `nonce="{{.CSPNonce}}"`.
+The 19 inline event-handler attributes (`onsubmit="return confirm(…)"`
+and friends) that a nonce cannot rescue — CSP blocks attribute handlers
+regardless — were converted to data attributes handled by delegated
+listeners in `base.html`: `data-confirm`, `data-submit-on-change`, and
+`data-roster-filter`.
+
+`style-src` deliberately keeps `'unsafe-inline'`. Tailwind's play CDN
+injects `<style>` elements at runtime that cannot be nonced. That is a
+real, accepted limitation, not an oversight: it means the policy
+constrains scripts but not styles, which is the trade this build makes in
+exchange for not having a frontend toolchain.
+
+## Verification
+
+The header alone proves nothing — a CSP that silently blocks the site's
+own scripts is worse than no CSP — so this was checked in a real browser
+(Chromium via Playwright), signed in as a super_admin through the
+mandatory TOTP step, not just on the public pages:
+
+- **22 authenticated pages** rendered with zero CSP violations and zero
+  JavaScript errors, covering every admin, treasury, roster, content and
+  settings page that exists.
+- **An injected inline `<script>` did not execute** (`window.__pwned`
+  stayed undefined) and produced a CSP refusal — which is the entire
+  point of the change.
+- **All four converted mechanisms were exercised end-to-end**, not just
+  inspected: the delegated `data-confirm` showed its prompt and *blocked
+  the POST* on Cancel while allowing it on OK; `data-submit-on-change`
+  auto-submitted and the database showed the resulting change; the roster
+  filter (formerly `oninput=`) filtered.
+- **The CDN allowlist was proven to still apply alongside the nonce.**
+  This matters because a nonce voids host allowlists when
+  `'strict-dynamic'` is present — this policy deliberately omits it. The
+  sandbox's proxy blocks the real CDNs outright
+  (`ERR_TUNNEL_CONNECTION_FAILED`), so the check was done with two local
+  origins instead: a script from an allowlisted host loaded and executed;
+  one from a non-allowlisted host was refused. Both confirmed in the same
+  browser under the real policy.
+
+One limitation worth stating: because the sandbox cannot reach
+cdnjs.cloudflare.com or cdn.tailwindcss.com, the *real* Tailwind, htmx,
+Quill and QRious loads were never observed succeeding under the policy.
+What was proven is the enforcement rule that governs them. A first deploy
+should still be spot-checked with the browser console open on
+`/admin/newsletters/new` (Quill) and `/settings/2fa` (QRious).

@@ -103,7 +103,7 @@
             <td class="px-4 py-2">{{if .EarnedOn}}{{.EarnedOn}}{{else}}<span class="text-gray-400">unknown</span>{{end}}</td>
             <td class="px-4 py-2 text-xs text-gray-500">{{.Source}}</td>
             <td class="px-4 py-2 text-right">
-              <form method="post" action="/admin/advancement/{{.ID}}/delete" onsubmit="return confirm('Delete this record?');">
+              <form method="post" action="/admin/advancement/{{.ID}}/delete" data-confirm="Delete this record?">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button type="submit" class="text-xs text-red-700 underline">Delete</button>
               </form>

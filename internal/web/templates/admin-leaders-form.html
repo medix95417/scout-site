@@ -90,7 +90,7 @@
   </form>
 
   {{template "imagePickerScript" .}}
-  <script>
+  <script nonce="{{.CSPNonce}}">
     // Keeps the "Photo position" preview box in sync with both the
     // focus select and whichever photo is currently chosen — including
     // a pick made just now via the accordion picker above (see

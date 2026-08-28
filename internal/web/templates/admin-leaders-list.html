@@ -45,7 +45,7 @@
                 <button type="submit" class="rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1.5 hover:bg-green-200">Publish</button>
               {{end}}
             </form>
-            <form method="post" action="/admin/leaders/{{.ID}}/delete" onsubmit="return confirm('Remove {{.Name}} from Our Leaders? This can\'t be undone.');">
+            <form method="post" action="/admin/leaders/{{.ID}}/delete" data-confirm="Remove {{.Name}} from Our Leaders? This can't be undone.">
               <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
               <button type="submit" class="rounded-full bg-red-100 text-red-800 text-xs font-medium px-3 py-1.5 hover:bg-red-200">Delete</button>
             </form>

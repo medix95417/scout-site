@@ -149,6 +149,7 @@
               {{if and .TreasuryEnabled .CanManageLedger}}
                 <a href="/treasury" class="block px-4 py-2 hover:bg-gray-100">Treasury</a>
                 <a href="/treasury/reports" class="block px-4 py-2 hover:bg-gray-100">Reports</a>
+                <a href="/treasury/reconciliations" class="block px-4 py-2 hover:bg-gray-100">Bank Reconciliation</a>
               {{end}}
               {{if or .CanEditContent .CanManageLedger}}
                 <a href="/audit" class="block px-4 py-2 hover:bg-gray-100">Activity Log</a>
@@ -172,7 +173,7 @@
       </details>
     </div>
   </header>
-  <script>
+  <script nonce="{{.CSPNonce}}">
     // Closes the <details> menu on an outside click or after following a
     // link/submitting a form inside it — <details> has no built-in way to
     // do either, and leaving it open until the hamburger is clicked again
@@ -187,6 +188,25 @@
         el.addEventListener('click', function () { menu.open = false; });
       });
     })();
+
+    // Confirmation prompts, previously inline onsubmit="return confirm(…)"
+    // on 17 forms. Inline handlers can't be nonced — the Content-Security-
+    // Policy blocks them outright, nonce or not — so each form now carries
+    // a data-confirm message and one delegated listener does the asking.
+    // Delegated from document so it also covers markup htmx swaps in after
+    // load.
+    document.addEventListener('submit', function (e) {
+      var message = e.target.getAttribute && e.target.getAttribute('data-confirm');
+      if (message && !window.confirm(message)) e.preventDefault();
+    });
+
+    // Selects that submit their own form on change (the file library's
+    // category picker), previously onchange="this.form.submit()".
+    document.addEventListener('change', function (e) {
+      if (e.target.hasAttribute && e.target.hasAttribute('data-submit-on-change') && e.target.form) {
+        e.target.form.submit();
+      }
+    });
   </script>
 
   {{if .PageHeroImageURL}}

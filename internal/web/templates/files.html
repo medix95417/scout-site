@@ -184,12 +184,12 @@
           {{end}}
           <form method="post" action="/files/{{$f.ID}}/category">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <select name="category" onchange="this.form.submit()" aria-label="Category" class="rounded-md border border-gray-300 px-1.5 py-1 text-xs">
+            <select name="category" data-submit-on-change aria-label="Category" class="rounded-md border border-gray-300 px-1.5 py-1 text-xs">
               <option value="general" {{if ne $f.Category "event_photo"}}selected{{end}}>General document</option>
               <option value="event_photo" {{if eq $f.Category "event_photo"}}selected{{end}}>Event photo/video</option>
             </select>
           </form>
-          <form method="post" action="/files/{{$f.ID}}/delete" onsubmit="return confirm('Delete {{$f.DisplayLabel}}? This can\'t be undone.');">
+          <form method="post" action="/files/{{$f.ID}}/delete" data-confirm="Delete {{$f.DisplayLabel}}? This can't be undone.">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
           </form>

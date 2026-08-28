@@ -1,0 +1,125 @@
+{{define "content"}}
+  <p class="mb-4"><a href="/treasury/reconciliations" class="text-sm underline" style="color: var(--unit-color);">&larr; Back to reconciliations</a></p>
+  <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+    <h1 class="text-2xl font-bold">{{.Rec.AccountName}} — {{.Rec.StatementDisplay}}</h1>
+    {{if .Rec.Completed}}
+      <span class="inline-block rounded-full bg-green-100 text-green-800 px-3 py-1 text-xs font-medium">Reconciled {{.Rec.CompletedDisplay}}</span>
+    {{end}}
+  </div>
+  <p class="text-sm text-gray-600 mb-6 max-w-2xl">
+    {{if .Rec.Completed}}
+      This statement has been signed off. It's kept as the record that the books were checked against the bank on
+      this date, so it can't be re-ticked or deleted — a mistake found later is corrected with an ordinary
+      transaction on the Treasury page, which leaves both the error and the fix visible.
+    {{else}}
+      Tick every entry that appears on the bank statement. Leave the ones that don't — an uncashed check or a
+      deposit the bank hasn't credited yet is normal, and it'll come back next month. Sign-off unlocks when the
+      difference reaches zero.
+    {{end}}
+  </p>
+
+  <section class="rounded-lg border {{if .Rec.Balanced}}border-green-300 bg-green-50{{else}}border-amber-300 bg-amber-50{{end}} p-4 mb-6">
+    <dl class="grid gap-3 sm:grid-cols-4 text-sm">
+      <div>
+        <dt class="text-xs uppercase tracking-wide text-gray-500">Opening balance</dt>
+        <dd class="text-lg font-semibold tabular-nums">{{.Rec.OpeningDisplay}}</dd>
+        <p class="text-xs text-gray-500">Last statement's closing balance</p>
+      </div>
+      <div>
+        <dt class="text-xs uppercase tracking-wide text-gray-500">Cleared balance</dt>
+        <dd class="text-lg font-semibold tabular-nums">{{.Rec.ClearedDisplay}}</dd>
+        <p class="text-xs text-gray-500">Opening plus the {{.Rec.ClearedCount}} ticked {{if eq .Rec.ClearedCount 1}}entry{{else}}entries{{end}}</p>
+      </div>
+      <div>
+        <dt class="text-xs uppercase tracking-wide text-gray-500">Statement balance</dt>
+        <dd class="text-lg font-semibold tabular-nums">{{.Rec.ClosingDisplay}}</dd>
+        <p class="text-xs text-gray-500">What the bank says</p>
+      </div>
+      <div>
+        <dt class="text-xs uppercase tracking-wide text-gray-500">Difference</dt>
+        <dd class="text-lg font-bold tabular-nums {{if .Rec.Balanced}}text-green-800{{else}}text-amber-900{{end}}">{{.Rec.DifferenceDisplay}}</dd>
+        <p class="text-xs text-gray-500">
+          {{if .Rec.Balanced}}The books agree with the bank{{else}}Still to account for{{end}}
+        </p>
+      </div>
+    </dl>
+
+    {{if not .Rec.Completed}}
+      <div class="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-black/10">
+        {{if .Rec.Balanced}}
+          <form method="post" action="/treasury/reconciliations/{{.Rec.ID}}/complete"
+                data-confirm="Sign off this reconciliation? It becomes a permanent record and the entries ticked here can't be changed afterwards.">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Mark reconciled</button>
+          </form>
+        {{else}}
+          <p class="text-sm text-amber-900">
+            Sign-off unlocks when the difference is {{"$"}}0.00. If it won't reach zero, something is genuinely missing
+            from one side — a deposit never recorded, an entry keyed twice, or a wrong amount. Fix it on the
+            <a href="/treasury" class="underline">Treasury page</a> with a correcting entry, not here.
+          </p>
+        {{end}}
+        <form method="post" action="/treasury/reconciliations/{{.Rec.ID}}/delete" class="ml-auto"
+              data-confirm="Discard this reconciliation? Everything ticked here goes back to uncleared. Nothing in the books changes.">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <button type="submit" class="text-xs text-red-600 hover:underline">Discard</button>
+        </form>
+      </div>
+    {{end}}
+  </section>
+
+  <div class="flex items-baseline justify-between mb-3">
+    <h2 class="text-lg font-semibold">Entries</h2>
+    {{if gt .Rec.UnclearedCount 0}}
+      <p class="text-xs text-gray-500">
+        {{.Rec.UnclearedCount}} unticked, totalling {{.Rec.UnclearedDisplay}}
+      </p>
+    {{end}}
+  </div>
+
+  {{if .Items}}
+    <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <thead class="bg-gray-100 text-left">
+        <tr>
+          <th class="px-4 py-2 w-24">On statement</th>
+          <th class="px-4 py-2">Date</th>
+          <th class="px-4 py-2">Description</th>
+          <th class="px-4 py-2 text-right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Items}}
+          <tr class="border-t border-gray-100 {{if .Cleared}}bg-green-50/50{{end}}">
+            <td class="px-4 py-2">
+              {{if $.Rec.Completed}}
+                {{if .Cleared}}
+                  <span class="text-green-700" aria-label="Cleared">&#10003;</span>
+                {{else}}
+                  <span class="text-gray-400" aria-label="Not cleared">&mdash;</span>
+                {{end}}
+              {{else}}
+                <form method="post" action="/treasury/reconciliations/{{$.Rec.ID}}/items/{{.PostingID}}">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="cleared" value="{{if .Cleared}}0{{else}}1{{end}}">
+                  <button type="submit" class="rounded-md border px-3 py-1 text-xs {{if .Cleared}}border-green-600 bg-green-100 text-green-800{{else}}border-gray-300 bg-white hover:bg-gray-50{{end}}">
+                    {{if .Cleared}}&#10003; Cleared{{else}}Mark cleared{{end}}
+                  </button>
+                </form>
+              {{end}}
+            </td>
+            <td class="px-4 py-2 whitespace-nowrap">{{.DateDisplay}}</td>
+            <td class="px-4 py-2">
+              {{.Description}}
+              <span class="text-xs text-gray-400">({{.TransactionType}})</span>
+            </td>
+            <td class="px-4 py-2 text-right tabular-nums {{if lt .AmountCents 0}}text-red-700{{end}}">{{.AmountDisplay}}</td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="text-sm text-gray-500">
+      Nothing to tick off — every entry on this account has already been cleared on an earlier statement.
+    </p>
+  {{end}}
+{{end}}
