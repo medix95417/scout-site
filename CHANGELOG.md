@@ -27,6 +27,24 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The help page's expense-approval topic said the requirement could be
+  turned off. It can't.** There is no off switch — the threshold is a
+  dollar amount, and setting it to `0` does the *opposite* of what a
+  reader following that sentence would expect, sending every expense for
+  authorization. Now says to set it very high instead, matching what the
+  setting's own description on the Site Settings page has always said.
+
+### Changed
+
+- Help's treasury topics also now name the Admin among those who can
+  authorize spending (they hold the capability, and the app's own error
+  message already said so), list the fundraiser-proceeds report that was
+  missing from the five, explain that an over-threshold expense is
+  refused outright when nobody else can authorize it, and say that only
+  the unit's general fund is reconcilable against a bank statement.
+
 ## [2.3.0] — 2026-08-28
 
 ### Added

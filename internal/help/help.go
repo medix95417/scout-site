@@ -363,8 +363,9 @@ var Topics = []Topic{
 		RequiredCapability: units.CapManageLedger,
 		RequiresSettings:   []string{settings.TreasuryEnabled},
 		Body: []string{
-			"Above a set amount, an expense you record waits for the Cubmaster or Scoutmaster to authorize before it hits the books, so no one person both spends the money and approves it.",
-			"An admin can change that amount, or turn the requirement off, in Site Settings. You can't authorize an expense you entered yourself.",
+			"Above a set amount, an expense you record waits for the Cubmaster or Scoutmaster — or an Admin — to authorize before it hits the books, so no one person both spends the money and approves it. You can't authorize an expense you entered yourself.",
+			"An Admin sets that amount in Site Settings; it starts at $100. There's no switch to turn the requirement off — to effectively disable it, set the threshold very high. Setting it to 0 does the opposite and sends every expense for authorization.",
+			"If nobody else on the roster can authorize, an expense over the threshold is refused outright rather than left pending forever. The message says so, and the fix is to assign a Cubmaster or Scoutmaster on the Roster page, or raise the threshold.",
 		},
 	},
 	{
@@ -375,6 +376,7 @@ var Topics = []Topic{
 		RequiresSettings:   []string{settings.TreasuryEnabled},
 		Body: []string{
 			"Once a month, when the statement arrives, enter its closing date and balance and tick off the entries that appear on it. Whatever stays unticked is a check nobody has cashed yet or a deposit still in transit — normal, and it carries to next month.",
+			"Only the unit's general fund is offered, because that's the account the bank statement actually covers. Scout accounts and trip funds are subdivisions of the same real money, so they're already included in it.",
 			"You can only sign off when the difference reaches zero. That's the point of the exercise: a difference that won't close means the books and the bank genuinely disagree, and the fix is a correcting entry in the Treasury, not a change made while reconciling.",
 			"A completed reconciliation can't be edited afterwards. It's the record that the books were checked on that date.",
 		},
@@ -397,7 +399,7 @@ var Topics = []Topic{
 		RequiredCapability: units.CapManageLedger,
 		RequiresSettings:   []string{settings.TreasuryEnabled},
 		Body: []string{
-			"Reports cover income and expense for a period, current balances, per-Scout accounts, and a full transaction detail listing. Each can be exported as a PDF for a committee meeting or an annual review.",
+			"Reports cover income and expense for a period, current balances, per-Scout accounts, fundraiser proceeds, and a full transaction detail listing. Each can be exported as a PDF for a committee meeting or an annual review.",
 			"A report you'll run repeatedly can be saved with its filters, so next month is one click.",
 		},
 	},
