@@ -29,6 +29,18 @@ tagged commit with an accurate date.
 
 ### Added
 
+- **An Admin can permanently delete a member** from their roster page.
+  Distinct from Deactivate, which stays available to every roster editor
+  and remains the right answer for someone who has left: it is
+  reversible and keeps their history. Delete is for a record that
+  shouldn't exist — a typo, a duplicate, a family that never joined — so
+  it is Admin-only and sits in its own section away from Deactivate.
+  It refuses, naming what is holding it, whenever the member is
+  referenced by anything that must keep its attribution: an entry in the
+  Activity Log, a Scout account with money against it, or anything they
+  authored. That refusal is the feature — an audit log whose entries can
+  be orphaned isn't an audit log, and a Scout account can't lose its
+  owner without unbalancing books that are meant to balance forever.
 - **Photo albums can carry the date the photos were taken**, separate
   from when the album was uploaded, and the Photos page now shows and
   sorts by it (newest first). An album of last spring's campout uploaded

@@ -563,6 +563,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/roster/sub-groups", h.AdminRosterCreateSubGroup)
 	mux.HandleFunc("POST /admin/roster/sub-groups/{id}/{action}", h.AdminRosterSetSubGroupActive)
 	mux.HandleFunc("POST /admin/roster/existing-member", h.AdminRosterAssignExistingMember)
+	mux.HandleFunc("POST /admin/roster/members/{id}/delete", h.AdminRosterMemberDelete)
 	mux.HandleFunc("GET /admin/roster/import", h.AdminRosterImportForm)
 	mux.HandleFunc("GET /admin/roster/import/template.csv", h.AdminRosterImportTemplate)
 	mux.HandleFunc("POST /admin/roster/import", h.AdminRosterImportApply)

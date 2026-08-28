@@ -157,4 +157,33 @@
       </form>
     </section>
   </div>
+
+  {{if .IsSuperAdmin}}
+    {{/* Deliberately at the foot of the page and visually separated,
+         rather than next to Deactivate at the top. The two read similarly
+         but only one can be undone, and putting an irreversible action one
+         button away from the reversible one is how the wrong button gets
+         pressed. Admin-only for the same reason. */}}
+    <section class="mt-10 rounded-lg border border-red-300 bg-red-50 p-4">
+      <h2 class="text-sm font-semibold text-red-900 mb-1">Permanently delete this member</h2>
+      <p class="text-sm text-red-900/90 mb-3 max-w-2xl">
+        Removes {{.Member.FirstName}} {{.Member.LastName}} and everything belonging only to them — their roles,
+        RSVPs, advancement records, any permission slips signed for them, and their own login if they have one.
+        This can't be undone.
+      </p>
+      <p class="text-sm text-red-900/90 mb-3 max-w-2xl">
+        For someone who has left the unit, use <strong>Deactivate</strong> at the top of this page instead: it
+        takes them off the roster and out of every listing, keeps their history, and can be reversed. Delete is
+        for a record that shouldn't exist at all — a typo, a duplicate, or a family that never joined. If they
+        have any history in this site, the delete will be refused and tell you what's holding it.
+      </p>
+      <form method="post" action="/admin/roster/members/{{.Member.ID}}/delete"
+            data-confirm="Permanently delete {{.Member.FirstName}} {{.Member.LastName}}? This cannot be undone. If you only want them off the roster, cancel and use Deactivate instead.">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="rounded-md border border-red-600 bg-white px-4 py-2 text-sm text-red-700 hover:bg-red-100">
+          Delete {{.Member.FirstName}} permanently
+        </button>
+      </form>
+    </section>
+  {{end}}
 {{end}}

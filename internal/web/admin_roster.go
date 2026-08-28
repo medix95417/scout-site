@@ -788,6 +788,68 @@ func (h *Handlers) AdminRosterMemberDeactivate(w http.ResponseWriter, r *http.Re
 	http.Redirect(w, r, "/admin/roster/members/"+memberID, http.StatusSeeOther)
 }
 
+// AdminRosterMemberDelete permanently removes a member — super_admin
+// only, unlike deactivate, which any roster editor can do.
+//
+// The split is deliberate. Deactivating is reversible and is the right
+// answer for someone who has left: their history stays, and they can be
+// brought back. Deleting cannot be undone and exists for the narrower
+// case of a person who should never have been on the roster — a typo, a
+// duplicate, a family that enquired and never joined. Handing an
+// irreversible action to every Den Leader to sit one button away from
+// "Deactivate" invites the mistake it can't recover from.
+//
+// roster.DeleteMember refuses whenever the member is referenced by
+// anything that must keep its attribution, and says which kind of record
+// is holding them — see its doc comment.
+func (h *Handlers) AdminRosterMemberDelete(w http.ResponseWriter, r *http.Request) {
+	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	if !ok {
+		return
+	}
+
+	// requireRosterEditor already established there's a logged-in user;
+	// this re-reads it to check the narrower super_admin capability.
+	user, _ := auth.UserFromContext(r.Context())
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil {
+		log.Printf("web: loading capabilities for member delete: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !units.IsSuperAdmin(caps) {
+		http.Error(w, "only an Admin can permanently delete a member — you can deactivate them instead, "+
+			"which keeps their record and can be undone", http.StatusForbidden)
+		return
+	}
+
+	memberID := r.PathValue("id")
+	manageable, err := scope.CanManageMember(r.Context(), h.Pool, memberID, unit.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !manageable {
+		http.Error(w, "this member is outside your "+subGroupNoun(unit.UnitType), http.StatusForbidden)
+		return
+	}
+
+	if err := roster.DeleteMember(r.Context(), h.Pool, memberID, actor.ID); err != nil {
+		var hist roster.MemberHasHistoryError
+		if errors.As(err, &hist) {
+			http.Error(w, "This member can't be deleted because "+hist.Reason+". "+
+				"Deleting them would leave those records pointing at somebody who no longer exists. "+
+				"Deactivate them instead — that removes them from the roster and every listing, "+
+				"keeps the history intact, and can be undone later.", http.StatusBadRequest)
+			return
+		}
+		log.Printf("web: deleting member: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin/roster", http.StatusSeeOther)
+}
+
 // AdminRosterMemberReactivate restores a previously deactivated member to
 // this unit's roster — every role assignment they held is still there, so
 // there's nothing else to reassign.

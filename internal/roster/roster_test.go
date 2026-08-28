@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/47-yonkers/scout-site/internal/db"
+	"github.com/47-yonkers/scout-site/internal/ledger"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
 
@@ -396,5 +398,134 @@ func TestMembersWithCapability_IncludesCustomRoles(t *testing.T) {
 	}
 	if !found {
 		t.Error("a member holding the capability through a custom role should be found")
+	}
+}
+
+// --- Deleting a member -----------------------------------------------------
+
+// TestDeleteMember_RemovesAMemberWithNoHistory covers what delete is
+// actually for: a person typed in by mistake, who has done nothing.
+func TestDeleteMember_RemovesAMemberWithNoHistory(t *testing.T) {
+	f := newFixture(t, "troop")
+	ctx := context.Background()
+	id := f.newMember(t, "Mistyped")
+
+	if err := AssignRole(ctx, f.pool, id, f.unitID, nil, "scout", f.memberID); err != nil {
+		t.Fatalf("assigning a role: %v", err)
+	}
+
+	if err := DeleteMember(ctx, f.pool, id, f.memberID); err != nil {
+		t.Fatalf("deleting a member with no history should succeed: %v", err)
+	}
+
+	var stillThere bool
+	if err := f.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM members WHERE id = $1)`, id).Scan(&stillThere); err != nil {
+		t.Fatalf("re-reading the member: %v", err)
+	}
+	if stillThere {
+		t.Fatal("the member should be gone")
+	}
+
+	// The role assignment goes with them (ON DELETE CASCADE), rather than
+	// being left pointing at nobody.
+	var roles int
+	if err := f.pool.QueryRow(ctx, `SELECT count(*) FROM role_assignments WHERE member_id = $1`, id).Scan(&roles); err != nil {
+		t.Fatalf("counting role assignments: %v", err)
+	}
+	if roles != 0 {
+		t.Fatalf("their role assignments should be gone too, found %d", roles)
+	}
+
+	// And the removal itself is recorded — deleting the person must not
+	// also delete the fact that somebody deleted them.
+	var logged int
+	if err := f.pool.QueryRow(ctx,
+		`SELECT count(*) FROM audit_log WHERE entity_type = 'member' AND entity_id = $1 AND action = 'delete'`, id,
+	).Scan(&logged); err != nil {
+		t.Fatalf("counting audit entries: %v", err)
+	}
+	if logged != 1 {
+		t.Fatalf("the deletion should be in the Activity Log exactly once, found %d", logged)
+	}
+}
+
+// TestDeleteMember_RefusesWhenTheyAppearInTheActivityLog is the rule that
+// keeps the audit log meaningful: an entry whose actor can be deleted is
+// an entry that can be orphaned.
+func TestDeleteMember_RefusesWhenTheyAppearInTheActivityLog(t *testing.T) {
+	f := newFixture(t, "troop")
+	ctx := context.Background()
+	id := f.newMember(t, "Busy")
+
+	if _, err := f.pool.Exec(ctx,
+		`INSERT INTO audit_log (entity_type, entity_id, actor_id, action) VALUES ('member', $1, $2, 'update')`,
+		id, id,
+	); err != nil {
+		t.Fatalf("seeding an audit entry: %v", err)
+	}
+
+	err := DeleteMember(ctx, f.pool, id, f.memberID)
+	var hist MemberHasHistoryError
+	if !errors.As(err, &hist) {
+		t.Fatalf("expected MemberHasHistoryError, got %v", err)
+	}
+	if !strings.Contains(hist.Reason, "Activity Log") {
+		t.Errorf("the reason should name the Activity Log so the leader knows what's holding it, got %q", hist.Reason)
+	}
+
+	var stillThere bool
+	if err := f.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM members WHERE id = $1)`, id).Scan(&stillThere); err != nil {
+		t.Fatalf("re-reading the member: %v", err)
+	}
+	if !stillThere {
+		t.Fatal("a refused delete must leave the member exactly where they were")
+	}
+}
+
+// TestDeleteMember_RefusesWhenTheyHaveMoney is the same rule for the
+// ledger, and the one with the worst failure mode: a Scout account with
+// postings can't lose its owner without unbalancing books that are
+// supposed to balance forever.
+func TestDeleteMember_RefusesWhenTheyHaveMoney(t *testing.T) {
+	f := newFixture(t, "troop")
+	ctx := context.Background()
+	id := f.newMember(t, "Funded")
+
+	scout, err := ledger.EnsureScoutAccount(ctx, f.pool, f.unitID, id, "Funded Member", f.memberID)
+	if err != nil {
+		t.Fatalf("opening a Scout account: %v", err)
+	}
+	external, err := ledger.EnsureExternalAccount(ctx, f.pool, f.unitID, f.memberID)
+	if err != nil {
+		t.Fatalf("opening the external account: %v", err)
+	}
+	if _, err := ledger.PostTransaction(ctx, f.pool, f.unitID, "deposit", "popcorn earnings", f.memberID, []ledger.Posting{
+		{AccountID: external.ID, AmountCents: -2500},
+		{AccountID: scout.ID, AmountCents: 2500},
+	}); err != nil {
+		t.Fatalf("posting to the Scout account: %v", err)
+	}
+
+	err = DeleteMember(ctx, f.pool, id, f.memberID)
+	var hist MemberHasHistoryError
+	if !errors.As(err, &hist) {
+		t.Fatalf("expected MemberHasHistoryError, got %v", err)
+	}
+	if !strings.Contains(hist.Reason, "Scout account") {
+		t.Errorf("the reason should name the Scout account, got %q", hist.Reason)
+	}
+
+	// The postings are the point — they must still be there and still sum
+	// to zero across the transaction.
+	var sum int64
+	if err := f.pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(p.amount_cents), 0) FROM ledger_postings p
+		JOIN ledger_transactions t ON t.id = p.transaction_id
+		WHERE t.unit_id = $1
+	`, f.unitID).Scan(&sum); err != nil {
+		t.Fatalf("summing postings: %v", err)
+	}
+	if sum != 0 {
+		t.Fatalf("the books should still balance after a refused delete, got %d", sum)
 	}
 }
