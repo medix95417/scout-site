@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-08-31
+
 ### Added
 
 - **Load an HTML file into a newsletter or the welcome-email template.**
