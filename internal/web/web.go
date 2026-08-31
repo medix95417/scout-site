@@ -321,6 +321,14 @@ func templateDict(pairs ...any) (map[string]any, error) {
 }
 
 // New parses templates and returns a ready-to-use Handlers.
+// redirectTo answers a GET on a POST-only form target by sending the
+// browser to the page that form lives on.
+func redirectTo(path string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, path, http.StatusSeeOther)
+	}
+}
+
 // parsePageTemplate parses one page template together with the shared
 // base layout and partials — the single definition of how a page is
 // assembled, so that TestEveryTemplateParses exercises the same path New
@@ -572,6 +580,13 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/roster", h.AdminRosterList)
 	mux.HandleFunc("POST /admin/roster/families", h.AdminRosterCreateFamily)
 	mux.HandleFunc("POST /admin/roster/members", h.AdminRosterAddMember)
+	// A form target that only answers POST returns 405 Method Not Allowed
+	// the moment someone reloads or goes back onto it — which is exactly
+	// what happens after an error, and reads as the site being broken
+	// rather than as "that didn't work". Send a bare GET to the page the
+	// form lives on instead.
+	mux.HandleFunc("GET /admin/roster/members", redirectTo("/admin/roster"))
+	mux.HandleFunc("GET /admin/roster/families", redirectTo("/admin/roster"))
 	mux.HandleFunc("GET /admin/roster/members/{id}", h.AdminRosterMemberEdit)
 	mux.HandleFunc("POST /admin/roster/members/{id}", h.AdminRosterMemberUpdate)
 	mux.HandleFunc("POST /admin/roster/members/{id}/roles", h.AdminRosterAssignRole)

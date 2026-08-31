@@ -41,6 +41,16 @@ tagged commit with an accurate date.
 
 ### Fixed
 
+- **"Method Not Allowed" after adding a member with a login.** When the
+  login couldn't be created — most often because that email address
+  already has one — the error was rendered at `POST /admin/roster/members`,
+  a URL that only answers POST. Reloading or going back then returned
+  405, which reads as the site being broken rather than as "that didn't
+  work". The member's page now opens instead, carrying an explanation and
+  the "Create Individual Login" form to retry with a different address.
+  A bare GET to either roster form target also redirects to the roster
+  rather than 405ing.
+
 - **The newsletter editor no longer breaks entirely if its CDN editor
   fails to load.** Everything was initialised after `new Quill(...)`, so
   an unreachable CDN — an outage, a school firewall, working offline —
