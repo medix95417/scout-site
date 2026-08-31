@@ -27,6 +27,20 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A welcome email can no longer be saved without `{{password}}`.**
+  A custom HTML template missing it sent a real family a real email with
+  no password in it, and nothing errored — the leader had no way to know.
+  Saving is now refused, with a message naming the line to paste and the
+  two ways a template built elsewhere ends up looking correct while being
+  broken (braces split by formatting, or turned into `&#123;`).
+- Placeholders now tolerate spaces inside the braces, so `{{ password }}`
+  works as well as `{{password}}`.
+- Settings save failures land back on the settings page with the reason,
+  instead of a bare "internal error" at a POST-only URL that then
+  returned 405 on reload — the same trap fixed for the roster in #94.
+
 ## [2.5.0] — 2026-08-31
 
 ### Added

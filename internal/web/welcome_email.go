@@ -4,6 +4,7 @@ import (
 	"html"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/47-yonkers/scout-site/internal/settings"
@@ -75,6 +76,29 @@ func welcomeEmailReplacer(name, email, password, loginURL, unitName string, esca
 		"{{login_url}}", esc(loginURL),
 		"{{unit_name}}", esc(unitName),
 	)
+}
+
+// placeholderPattern matches a placeholder with any whitespace inside the
+// braces, so "{{ password }}" works as well as "{{password}}".
+//
+// Worth tolerating because the failure is silent and expensive: a
+// template whose placeholder doesn't match sends a real family a real
+// email with a literal "{{ password }}" where their password should be,
+// and nobody finds out until they can't log in. Spaces inside the braces
+// are the variation people actually type.
+var placeholderPattern = regexp.MustCompile(`\{\{\s*(name|email|password|login_url|unit_name)\s*\}\}`)
+
+// canonicalizePlaceholders rewrites every recognized placeholder to its
+// exact "{{name}}" form so the replacer below can match it literally.
+func canonicalizePlaceholders(body string) string {
+	return placeholderPattern.ReplaceAllString(body, "{{$1}}")
+}
+
+// HasPasswordPlaceholder reports whether a welcome-email body will
+// actually carry the temporary password. See settings.WelcomeEmailBody's
+// validation, which refuses to save one that won't.
+func HasPasswordPlaceholder(body string) bool {
+	return strings.Contains(canonicalizePlaceholders(body), "{{password}}")
 }
 
 // looksLikeHTML reports whether a stored template is meant to be HTML.
@@ -150,7 +174,8 @@ func (h *Handlers) sendWelcomeEmail(r *http.Request, name, email, password strin
 
 	// The subject is always plain text — mail clients don't render markup
 	// in a subject line — so its values are substituted unescaped.
-	subject := welcomeEmailReplacer(name, email, password, loginURL, unit.Name, false).Replace(subjectTmpl)
+	subject := welcomeEmailReplacer(name, email, password, loginURL, unit.Name, false).
+		Replace(canonicalizePlaceholders(subjectTmpl))
 
 	// A template a leader wrote HTML into is sent as-is. One without any
 	// markup — the default, and anything customized before HTML was
@@ -159,7 +184,8 @@ func (h *Handlers) sendWelcomeEmail(r *http.Request, name, email, password strin
 	if !htmlTemplate {
 		bodyTmpl = textToHTML(bodyTmpl)
 	}
-	body := welcomeEmailReplacer(name, email, password, loginURL, unit.Name, true).Replace(bodyTmpl)
+	body := welcomeEmailReplacer(name, email, password, loginURL, unit.Name, true).
+		Replace(canonicalizePlaceholders(bodyTmpl))
 	if familyAccount {
 		body += "\n" + familyCrossUnitNoteHTML
 	}
