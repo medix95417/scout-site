@@ -52,9 +52,11 @@ tagged commit with an accurate date.
   `bgcolor`, `align`, `valign`, `colspan`, `rowspan`, `width`, `height`,
   `role`) on table elements. Without them an uploaded template arrived as
   unstyled rows. Nothing script-capable was loosened.
-- Email templates are capped at 512 KB. The global POST limit is 500 MB,
+- Email templates are capped at 5 MB. The global POST limit is 500 MB,
   sized for photo batches — far too generous for something that has to
-  survive a mail server.
+  survive a mail server, but the ceiling is deliberately roomy because a
+  template with images embedded as base64 is the normal reason a
+  legitimate one gets large.
 
 ### Added (continued)
 

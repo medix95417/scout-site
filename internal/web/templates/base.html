@@ -244,10 +244,11 @@
       if (!target || !file) {
         return;
       }
-      // Generous for an email — real templates are tens of kilobytes —
-      // while refusing something that plainly isn't one before reading it.
-      if (file.size > 1048576) {
-        window.alert('That file is ' + Math.round(file.size / 1024) + ' KB. Email templates are normally well under 1 MB \u2014 check you picked the right file.');
+      // Matches settings.MaxEmailTemplateBytes, so the browser refuses
+      // exactly what the server would rather than letting someone wait
+      // for an upload that was never going to be accepted.
+      if (file.size > 5242880) {
+        window.alert('That file is ' + Math.round(file.size / 1048576 * 10) / 10 + ' MB, over the 5 MB limit for an email template \u2014 check you picked the right file.');
         input.value = '';
         return;
       }
