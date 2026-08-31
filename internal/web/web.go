@@ -930,6 +930,33 @@ func (h *Handlers) socialLinks(ctx context.Context, unitID string) (facebook, in
 	return facebook, instagram, tiktok, nil
 }
 
+// base assembles the data every page needs: the unit, the logged-in user,
+// the nav and footer, and the feature toggles that decide which nav items
+// exist at all.
+//
+// It does that with about a dozen separate round-trips to Postgres — each
+// settings.Get/GetForUnit is its own uncached SELECT, plus the social
+// links, the page's hero, the sub-groups for the nav, and (for a logged-in
+// viewer) the two-factor nudge. A whole page render measures 39 queries
+// for a signed-out visitor and around 57 for a signed-in one, and that is
+// deliberately left alone: with Postgres in a container beside the app
+// they add up to roughly 1.3ms in total, which is far below the cost of
+// the caching layer that would replace them.
+//
+// That trade depends entirely on the database being local. If it ever
+// moves off-box — a managed Postgres, a database on another host, anything
+// reached over a real network — the arithmetic inverts: those queries
+// become that many sequential round-trips, so a 1ms network hop puts a
+// 40-60ms floor under every page on the site before a byte of HTML is
+// rendered, and a 5ms hop makes it 200-300ms. Nothing about the code
+// changes; only the distance to the database does.
+//
+// If that move ever happens, cache the feature toggles rather than
+// unpicking the handlers. They are a handful of booleans per unit that
+// change only when a leader edits the settings page, so a small in-process
+// cache invalidated on write (settings.Set and its unit equivalent are the
+// only writers) removes most of the round-trips without touching any of
+// the call sites here.
 func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
