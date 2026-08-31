@@ -277,6 +277,36 @@ docker compose up -d --build
 This rebuilds only what changed — `db` and `caddy` aren't touched unless
 you edited `docker-compose.yml` or `Caddyfile`.
 
+## If you ever move the database off this server
+
+The `docker-compose.yml` here runs Postgres in a container beside the app,
+so a query costs microseconds. The site leans on that: rendering one page
+makes 39 separate queries for a signed-out visitor and around 57 for a
+signed-in one — mostly the per-unit feature toggles (`internal/settings`),
+which are read fresh on every request rather than cached. Together they
+come to roughly 1.3ms, which is why no cache exists.
+
+Moving the database anywhere that is reached over a network — a managed
+Postgres, a second VPS, a different region — changes that arithmetic
+sharply, and not because anything in the code got slower. Those queries
+become that many network round-trips, one after another:
+
+| Round-trip to the database | Added to *every* page |
+| --- | --- |
+| ~0.03ms (container beside the app, today) | negligible |
+| ~1ms (same datacentre) | 40-60ms |
+| ~5ms (different region) | 200-300ms |
+
+That is a floor under every page on the site, before any of the page's own
+queries or rendering.
+
+So if you move it, budget for caching the feature toggles at the same
+time — they are a few booleans per unit that only change when a leader
+edits the settings page, so an in-process cache invalidated on write gets
+most of it back. See the comment on `base()` in `internal/web/web.go`,
+which is where the round-trips are actually spent. Don't do this work
+while the database is still local; it buys nothing there.
+
 ## Backups and recovery
 
 Two things need backing up, and they live in different places:

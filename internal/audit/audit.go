@@ -256,6 +256,46 @@ func ForUnitFiltered(ctx context.Context, pool *pgxpool.Pool, f Filter) ([]LogEn
 	return entries, rows.Err()
 }
 
+// A note on how the two filter-option queries below scale, because it is
+// not obvious from reading them and it has already been measured once.
+//
+// audit_log carries no unit_id. An entry points at the thing it happened
+// to, and which unit that belongs to is worked out by joining against
+// every table that has a unit_id (entityScopeSQL above). That keeps this
+// package generic — it is why the same log serves the roster, the ledger,
+// content and settings without knowing anything about them — and it is
+// worth keeping.
+//
+// The cost is that the unit filter is `entity_id IN (<big UNION>)`, which
+// no index makes selective, because in practice almost every row in the
+// table does belong to one of the units being asked about. So both
+// queries below are proportional to the size of the whole log, and the
+// log only ever grows. /audit runs both on every page load, plus the
+// listing itself.
+//
+// Measured on this schema, with entries spread across real in-scope
+// entities the way production has them:
+//
+//	200k entries (roughly 6-7 years of a busy unit):  ~150ms
+//	1M entries:                                       ~700ms, of which
+//	                                                  ~620ms is these two
+//
+// Indexes were tried and do not fix it: an index on entity_id, and
+// covering indexes on (entity_id, entity_type) / (entity_id, actor_id),
+// moved 1M from ~700ms to ~570ms at best, because the work is reading the
+// matching rows, not finding them. (An earlier measurement suggesting a
+// 30x win came from synthetic rows whose entity_ids matched nothing in
+// scope, which is not how the real table looks.)
+//
+// This is deliberately left as it is. At the volume this site will
+// plausibly reach, 150ms on a page only leaders open, occasionally, is not
+// worth the complexity of fixing. If it ever does become worth fixing, the
+// shape of the answer is to stop deriving these two lists from the fact
+// table on every request — either denormalise unit_id onto audit_log and
+// index (unit_id, entity_type) / (unit_id, actor_id), or cache the two
+// lists, which change only when a new person or a new kind of entity
+// appears in the log. Reach for that when the page feels slow, not before.
+
 // ActorOption is one entry in the activity log's "person" filter — a real
 // member who has at least one audit_log entry visible in this unit's
 // log, deduped, alphabetical by name. The synthetic "system" option
