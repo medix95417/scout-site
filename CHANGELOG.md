@@ -29,6 +29,21 @@ tagged commit with an accurate date.
 
 ### Added
 
+- **Encrypted backups and a scripted restore.** `scripts/backup.sh`
+  produces two separate encrypted artifacts — the database via the real
+  `pg_dump` inside the `db` container, and the photos via the app's new
+  `-backup-files`, since those live in object storage rather than the
+  database and a database dump alone doesn't contain them. Both are
+  AES-256 encrypted with a passphrase read from a file, never a command
+  line. `scripts/restore.sh` verifies a checksum manifest, decrypts, and
+  rebuilds the site, refusing by default to overwrite a database that
+  already has tables. See "Backups and recovery" in `DEPLOY.md`.
+- `-backup-files` and `-restore-files` on the server binary, streaming
+  the object store to and from a tar archive. The app is what holds the
+  S3 credentials, so this needs no bucket tooling on the host.
+
+### Added
+
 - **An "interested in joining" form** at `/join`, capturing a parent's
   name, email and phone plus their child's name, age, grade and school.
   Each enquiry is recorded and can be emailed to a list of addresses set

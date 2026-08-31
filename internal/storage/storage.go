@@ -116,6 +116,36 @@ func (s *Store) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	return obj, nil
 }
 
+// Object is one stored object as List reports it.
+type Object struct {
+	Key         string
+	Size        int64
+	ContentType string
+}
+
+// List enumerates every object in the bucket.
+//
+// Used by the backup export (see cmd/server's -backup-files): the file
+// library's database rows record a storage_key each, but the bucket is
+// the only authority on what is actually stored, and a backup driven by
+// the database would silently omit anything whose row was lost or that
+// was written by an older code path. Walking the bucket means the
+// archive holds every byte the site is keeping.
+//
+// Reads the whole listing into memory. A unit's library is thousands of
+// files at the outside, and the caller is a one-shot CLI export, not a
+// request handler.
+func (s *Store) List(ctx context.Context) ([]Object, error) {
+	var out []Object
+	for info := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Recursive: true}) {
+		if info.Err != nil {
+			return nil, fmt.Errorf("storage: listing bucket: %w", info.Err)
+		}
+		out = append(out, Object{Key: info.Key, Size: info.Size, ContentType: info.ContentType})
+	}
+	return out, nil
+}
+
 // Delete removes the object at key. Deleting a key that doesn't exist is
 // not an error — the caller's goal ("this key is gone") is already true.
 func (s *Store) Delete(ctx context.Context, key string) error {

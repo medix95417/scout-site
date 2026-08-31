@@ -277,25 +277,104 @@ docker compose up -d --build
 This rebuilds only what changed — `db` and `caddy` aren't touched unless
 you edited `docker-compose.yml` or `Caddyfile`.
 
-**Backups** — Postgres holds everything (roster, calendar, audit log,
-and eventually Phase 2's fund ledger), so this matters:
+## Backups and recovery
+
+Two things need backing up, and they live in different places:
+
+- **The database** — roster, calendar, content, the fund ledger, the
+  audit log, and every login. Dumped with `pg_dump` inside the `db`
+  container.
+- **The photos and documents** — these are in S3-compatible object
+  storage, *not* the database, so a database dump alone does not contain
+  them. Exported by the app itself, which already holds those
+  credentials.
+
+Everything else is reproducible: the site is the Docker image, built
+from the code in git. Nothing else on the server is worth saving.
+
+### One-time setup
+
+Create a passphrase and lock it down:
 
 ```bash
-docker compose exec -T db pg_dump -U scoutsite scoutsite > backup-$(date +%F).sql
+openssl rand -base64 48 > backup-passphrase
+chmod 600 backup-passphrase
 ```
 
-Automate this with a daily cron job, and — importantly — copy the
-resulting file *off* this VPS somewhere (another machine, cloud storage,
-etc.). A backup that only lives on the same server it's backing up
-doesn't protect you if that server is lost.
+**Copy that passphrase somewhere that is not this server** — a password
+manager, a piece of paper in a drawer, anywhere else. A backup you can't
+decrypt is not a backup, and the passphrase living only on the machine
+you're protecting against defeats the point.
 
-Uploaded files and event photos live separately, in whatever S3-compatible
-bucket you pointed `S3_ENDPOINT` at (Postgres only stores their metadata —
-see `internal/storage`). Back that bucket up the same way you'd back up
-any other data in it — how depends on what's serving it (your own MinIO
-instance, your cloud provider's own backup/versioning tools, etc.), so
-there's no one command to give here. Same rule applies regardless: don't
-rely on a single copy with no offsite backup.
+### Taking a backup
+
+```bash
+scripts/backup.sh                 # writes to ./backups
+scripts/backup.sh /mnt/backups    # or wherever you like
+```
+
+It produces two encrypted files and a checksum manifest:
+
+```
+scoutsite-db-20260831T0200Z.sql.gz.gpg
+scoutsite-photos-20260831T0200Z.tar.gpg
+scoutsite-20260831T0200Z.sha256
+```
+
+Both are AES-256 encrypted with your passphrase. The database dump in
+particular holds password hashes, home addresses, phone numbers and
+children's names — it is the most sensitive artifact this system can
+produce, which is why it is never written in the clear.
+
+Nightly, at 2am, keeping a fortnight:
+
+```
+0 2 * * * cd /usr/website/scout-site && BACKUP_KEEP=14 scripts/backup.sh /mnt/backups >> /var/log/scoutsite-backup.log 2>&1
+```
+
+Then **copy the files off this machine**. A backup on the server it is
+backing up does not survive losing that server. Any of rsync to another
+box, `rclone` to cloud storage, or a scheduled pull from elsewhere is
+fine — the files are already encrypted, so the destination doesn't have
+to be trusted.
+
+### Restoring
+
+Restore is a command you run on the box, not a page in the admin site.
+That's deliberate: an upload endpoint able to replace the database is the
+most powerful route a web application can expose, and anyone doing a real
+recovery already has shell access — the site is down. Keeping it here
+means a compromised admin account can't hand over or overwrite
+everything.
+
+Onto a clean machine — install Docker, clone the repo, write `.env`
+(see section 5) and the passphrase file, then:
+
+```bash
+scripts/restore.sh scoutsite-db-20260831T0200Z.sql.gz.gpg \
+                   scoutsite-photos-20260831T0200Z.tar.gpg
+```
+
+It checks the manifest before decrypting (so a truncated download reads
+as "this file is damaged" rather than as a wrong passphrase), stops the
+app, restores the database, puts the photos back, and starts the app
+again. Any migrations newer than the backup are applied automatically on
+startup, so a dump from an older version comes forward on its own.
+
+By default it **refuses to overwrite a database that already has
+tables**. The usual case is recovering onto a clean box or standing up a
+copy; replacing a live site is the rare one, and needs `--force`.
+
+Either half can be restored on its own — pass only the database file to
+skip the photos.
+
+### Test it before you need it
+
+An untested backup is a guess. Once, after setting this up, restore onto
+a scratch machine (or a second copy of the stack on a different port) and
+sign in. Ten minutes now versus finding out during an actual outage.
+
+## Ongoing operations, continued
 
 **Thumbnail backfill** — every new upload generates its own small resized
 thumbnail automatically at upload time. Photos uploaded before that

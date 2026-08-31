@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/47-yonkers/scout-site/internal/auth"
+	"github.com/47-yonkers/scout-site/internal/backup"
 	"github.com/47-yonkers/scout-site/internal/bootstrap"
 	"github.com/47-yonkers/scout-site/internal/config"
 	"github.com/47-yonkers/scout-site/internal/csp"
@@ -46,6 +47,8 @@ func main() {
 	sendEventReminders := flag.Bool("send-event-reminders", false, "email everyone RSVP'd yes/maybe to an event starting within REMINDER_WINDOW_HOURS (default 24), then exit — meant to be run periodically via cron, see DEPLOY.md")
 	grantRole := flag.Bool("grant-role", false, "grant an existing user (GRANT_EMAIL) a role (GRANT_ROLE) in a unit (GRANT_UNIT_SLUG) and exit — for giving an already-existing account a foothold in a unit -bootstrap-admin didn't reach, e.g. one added after -bootstrap-admin first ran")
 	backfillThumbnails := flag.Bool("backfill-thumbnails", false, "generate a cached thumbnail for every image file that doesn't already have one, then exit. The normal server already does this automatically in the background on every startup — use this flag only to run it on demand and see the result immediately instead of waiting/checking logs (safe to re-run either way)")
+	backupFiles := flag.Bool("backup-files", false, "write every stored photo and document to stdout as a tar archive, then exit — the photo half of a backup, since these live in object storage rather than the database. Meant to be piped straight into an encryption tool; see scripts/backup.sh")
+	restoreFiles := flag.Bool("restore-files", false, "read a tar archive produced by -backup-files from stdin and put every object back, then exit. Additive: it replaces objects at matching keys and never deletes anything the archive doesn't mention. See scripts/restore.sh")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -174,6 +177,31 @@ func main() {
 		store = nil
 	} else if store == nil {
 		log.Println("file storage is not configured (no S3_ENDPOINT environment variable) — the file library and event photos will report a clear error instead of failing to start")
+	}
+
+	if *backupFiles {
+		if store == nil {
+			log.Fatal("backup-files: file storage isn't configured (see S3_ENDPOINT above) — there are no photos to back up. The database dump is separate; see scripts/backup.sh")
+		}
+		// Progress goes to stderr because stdout is the archive itself.
+		res, err := backup.Export(ctx, store, os.Stdout)
+		if err != nil {
+			log.Fatalf("backup-files: %v", err)
+		}
+		log.Printf("backup-files: wrote %d objects, %d bytes", res.Objects, res.Bytes)
+		return
+	}
+
+	if *restoreFiles {
+		if store == nil {
+			log.Fatal("restore-files: file storage isn't configured (see S3_ENDPOINT above) — there's nowhere to put the photos back")
+		}
+		res, err := backup.Import(ctx, store, os.Stdin)
+		if err != nil {
+			log.Fatalf("restore-files: %v", err)
+		}
+		log.Printf("restore-files: restored %d objects, %d bytes", res.Objects, res.Bytes)
+		return
 	}
 
 	if *backfillThumbnails {
