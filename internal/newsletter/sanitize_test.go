@@ -109,3 +109,52 @@ func TestSanitize_KeepsLegitimateURLs(t *testing.T) {
 		}
 	}
 }
+
+// TestSanitize_KeepsEmailTableMarkup covers what an uploaded HTML email
+// template actually depends on. These attributes are inert — a length, a
+// colour or a keyword — and every table-based email in existence uses
+// them, so stripping them would quietly flatten a template a leader had
+// carefully built elsewhere.
+func TestSanitize_KeepsEmailTableMarkup(t *testing.T) {
+	in := `<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#f4f4f4">` +
+		`<tr><td align="center" valign="top" colspan="2" style="padding:24px;font-family:Arial">Hi</td></tr></table>`
+	out := Sanitize(in)
+
+	for _, want := range []string{
+		`role="presentation"`, `width="600"`, `cellpadding="0"`, `cellspacing="0"`,
+		`border="0"`, `bgcolor="#f4f4f4"`, `align="center"`, `valign="top"`,
+		`colspan="2"`, `padding:24px`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("email table markup %s was stripped:\n%s", want, out)
+		}
+	}
+}
+
+// TestSanitize_StillStripsTheDangerousParts is the other half of the
+// widening above: allowing presentational attributes must not have
+// loosened anything that can execute. Checked together in one test so a
+// future widening has to keep passing it.
+func TestSanitize_StillStripsTheDangerousParts(t *testing.T) {
+	in := `<!DOCTYPE html><html><head><style>body{x:y}</style></head><body>` +
+		`<table cellpadding="4" onmouseover="steal()"><tr><td background="javascript:alert(1)">` +
+		`<script>alert(1)</script><iframe src="//evil"></iframe>` +
+		`<img src="x" onerror="alert(1)"><a href="javascript:alert(1)">go</a>` +
+		`<td style="background:url(javascript:alert(1))">hi</td></tr></table></body></html>`
+	out := Sanitize(in)
+
+	for _, forbidden := range []string{
+		"<script", "<iframe", "<style", "onerror", "onmouseover", "javascript:", "DOCTYPE", "background=",
+	} {
+		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
+			t.Errorf("%q survived sanitization — this must never be reachable:\n%s", forbidden, out)
+		}
+	}
+	// The safe parts of the same input should still come through.
+	if !strings.Contains(out, `cellpadding="4"`) {
+		t.Errorf("a safe attribute alongside dangerous ones was dropped:\n%s", out)
+	}
+	if !strings.Contains(out, "hi") {
+		t.Errorf("text content was lost:\n%s", out)
+	}
+}

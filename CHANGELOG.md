@@ -29,6 +29,35 @@ tagged commit with an accurate date.
 
 ### Added
 
+- **Load an HTML file into a newsletter or the welcome-email template.**
+  Pick a `.html` file built elsewhere and its contents drop straight into
+  an editable field. Nothing is uploaded — the file is read in the
+  browser, so there's no endpoint, no stored file and nothing to clean up.
+- **A Design / HTML-source toggle on the newsletter editor.** An uploaded
+  template goes to the source view verbatim, because the rich editor only
+  models the formats in its own toolbar and would silently flatten a real
+  table-based email. Switching source → design warns first when there's
+  something that would be lost; design → source never loses anything.
+
+### Fixed
+
+- **The newsletter editor no longer breaks entirely if its CDN editor
+  fails to load.** Everything was initialised after `new Quill(...)`, so
+  an unreachable CDN — an outage, a school firewall, working offline —
+  left no editor at all *and* a form that would save an empty body. The
+  HTML source editor now works on its own, and the page says why the
+  formatting toolbar is missing instead of silently misbehaving.
+- Newsletter sanitization now keeps the inert presentational attributes
+  real HTML email depends on (`cellpadding`, `cellspacing`, `border`,
+  `bgcolor`, `align`, `valign`, `colspan`, `rowspan`, `width`, `height`,
+  `role`) on table elements. Without them an uploaded template arrived as
+  unstyled rows. Nothing script-capable was loosened.
+- Email templates are capped at 512 KB. The global POST limit is 500 MB,
+  sized for photo batches — far too generous for something that has to
+  survive a mail server.
+
+### Added (continued)
+
 - **Encrypted backups and a scripted restore.** `scripts/backup.sh`
   produces two separate encrypted artifacts — the database via the real
   `pg_dump` inside the `db` container, and the photos via the app's new

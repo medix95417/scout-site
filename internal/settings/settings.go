@@ -820,9 +820,27 @@ var ErrLiveKeyNotAccepted = errors.New(
 // validateUnitTextValue rejects values that shouldn't be stored yet. Kept
 // in SetUnitText rather than in the handler so every path that writes a
 // setting gets the same check.
+// MaxEmailTemplateBytes bounds an admin-editable email template.
+//
+// The global POST limit is 500 MB, sized so a phone's camera roll can be
+// uploaded in one go (see internal/csrf). That's the wrong bound for
+// something that ends up as an email body, and these fields now accept a
+// file the leader picked, so the ceiling matters: real HTML templates are
+// tens of kilobytes, mail servers reject megabyte-scale messages anyway,
+// and a template too large to send is worse than one refused at the point
+// of saving it.
+const MaxEmailTemplateBytes = 512 << 10 // 512 KB
+
+// ErrTemplateTooLarge is returned for an email template past that bound.
+var ErrTemplateTooLarge = errors.New(
+	"that email template is too large — HTML emails are normally well under 100 KB, and anything this big will be rejected by mail servers before it reaches anyone")
+
 func validateUnitTextValue(key, trimmed string) error {
 	if trimmed == "" {
 		return nil
+	}
+	if key == WelcomeEmailBody && len(trimmed) > MaxEmailTemplateBytes {
+		return ErrTemplateTooLarge
 	}
 	if key == ExpenseApprovalThreshold {
 		if dollars, err := strconv.ParseInt(trimmed, 10, 32); err != nil || dollars < 0 {
