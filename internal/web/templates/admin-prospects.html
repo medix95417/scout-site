@@ -1,0 +1,84 @@
+{{define "content"}}
+  <div class="flex flex-wrap items-baseline justify-between gap-3 mb-1">
+    <h1 class="text-2xl font-bold">Prospects — {{.Unit.Name}}</h1>
+    <a href="{{if .ShowAll}}/admin/prospects{{else}}/admin/prospects?all=1{{end}}"
+       class="text-sm underline" style="color: var(--unit-color);">
+      {{if .ShowAll}}Show only open enquiries{{else}}Show all, including closed{{end}}
+    </a>
+  </div>
+  <p class="text-sm text-gray-600 mb-6 max-w-2xl">
+    Families who filled in the form at <a href="/join" class="underline" style="color: var(--unit-color);">/join</a>.
+    {{if .OpenCount}}{{.OpenCount}} still {{if eq .OpenCount 1}}needs{{else}}need{{end}} a reply.{{else}}Nothing is
+    waiting on a reply right now.{{end}}
+    Who gets emailed about a new one is set on the
+    <a href="/admin/settings" class="underline" style="color: var(--unit-color);">Site Settings</a> page.
+  </p>
+
+  {{if .Prospects}}
+    <div class="space-y-4">
+      {{range .Prospects}}
+        <section class="rounded-lg border {{if .Open}}border-amber-300 bg-amber-50{{else}}border-gray-200 bg-white{{end}} p-4">
+          <div class="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+            <h2 class="font-semibold">
+              {{.ChildName}}
+              <span class="font-normal text-gray-600">
+                — via {{.ParentName}}
+              </span>
+            </h2>
+            <span class="rounded-full px-2 py-0.5 text-xs font-medium {{if .Open}}bg-amber-200 text-amber-900{{else}}bg-gray-200 text-gray-700{{end}}">
+              {{.StatusLabel}}
+            </span>
+          </div>
+
+          <dl class="grid gap-x-6 gap-y-1 sm:grid-cols-2 text-sm mb-3">
+            <div><dt class="inline text-gray-500">Email:</dt> <dd class="inline"><a href="mailto:{{.ParentEmail}}" class="underline" style="color: var(--unit-color);">{{.ParentEmail}}</a></dd></div>
+            {{if .ParentPhone}}<div><dt class="inline text-gray-500">Phone:</dt> <dd class="inline">{{.ParentPhone}}</dd></div>{{end}}
+            {{if .ChildAge}}<div><dt class="inline text-gray-500">Age:</dt> <dd class="inline">{{.ChildAge}}</dd></div>{{end}}
+            {{if .ChildGrade}}<div><dt class="inline text-gray-500">Grade:</dt> <dd class="inline">{{.ChildGrade}}</dd></div>{{end}}
+            {{if .ChildSchool}}<div><dt class="inline text-gray-500">School:</dt> <dd class="inline">{{.ChildSchool}}</dd></div>{{end}}
+          </dl>
+
+          {{if .Message}}
+            <p class="text-sm text-gray-700 whitespace-pre-line rounded-md bg-white/70 border border-gray-200 p-3 mb-3">{{.Message}}</p>
+          {{end}}
+
+          <form method="post" action="/admin/prospects/{{.ID}}" class="space-y-2">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            {{if $.ShowAll}}<input type="hidden" name="all" value="1">{{end}}
+            <div class="flex flex-wrap items-end gap-2">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1" for="status-{{.ID}}">Status</label>
+                <select class="rounded-md border border-gray-300 px-3 py-2 text-sm" id="status-{{.ID}}" name="status">
+                  {{$current := .Status}}
+                  {{range $.Statuses}}<option value="{{.Value}}" {{if eq .Value $current}}selected{{end}}>{{.Label}}</option>{{end}}
+                </select>
+              </div>
+              <div class="flex-1 min-w-[16rem]">
+                <label class="block text-xs text-gray-500 mb-1" for="notes-{{.ID}}">Notes</label>
+                <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                       id="notes-{{.ID}}" name="notes" maxlength="4000"
+                       placeholder="Called 3 Sep — coming to the meeting on the 12th" value="{{.Notes}}">
+              </div>
+              <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Save</button>
+            </div>
+          </form>
+
+          <div class="flex items-baseline justify-between gap-3 mt-3 pt-3 border-t border-black/10">
+            <p class="text-xs text-gray-500">Enquired {{.CreatedAt.Format "Jan 2, 2006"}}</p>
+            <form method="post" action="/admin/prospects/{{.ID}}/delete"
+                  data-confirm="Delete this enquiry from {{.ParentName}}? Use this for spam — for a family who decided not to join, set the status to &quot;Not joining&quot; instead so you keep the record.">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              {{if $.ShowAll}}<input type="hidden" name="all" value="1">{{end}}
+              <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
+            </form>
+          </div>
+        </section>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="text-sm text-gray-500">
+      {{if .ShowAll}}No enquiries yet.{{else}}Nothing open — every enquiry has been dealt with.
+      <a href="/admin/prospects?all=1" class="underline" style="color: var(--unit-color);">Show all</a>.{{end}}
+    </p>
+  {{end}}
+{{end}}

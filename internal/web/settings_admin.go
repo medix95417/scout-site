@@ -158,7 +158,7 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		settings.SocialTikTokURL:    "home-tiktok",
 	}
 
-	var paymentTextViews, socialTextViews, welcomeEmailTextViews, treasuryControlViews []unitTextSettingView
+	var paymentTextViews, socialTextViews, welcomeEmailTextViews, treasuryControlViews, prospectTextViews []unitTextSettingView
 	for _, t := range settings.UnitTextSettings {
 		v := unitTextSettingView{UnitTextSetting: t}
 		if t.Secret {
@@ -182,6 +182,8 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 			welcomeEmailTextViews = append(welcomeEmailTextViews, v)
 		case "treasury_controls":
 			treasuryControlViews = append(treasuryControlViews, v)
+		case "prospects":
+			prospectTextViews = append(prospectTextViews, v)
 		default:
 			paymentTextViews = append(paymentTextViews, v)
 		}
@@ -236,6 +238,7 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		SocialToggles       []unitToggleView
 		SocialTextSettings  []unitTextSettingView
 		WelcomeEmailText    []unitTextSettingView
+		ProspectText        []unitTextSettingView
 		TreasuryControls    []unitTextSettingView
 		Fundraisers         []ledger.Fundraiser
 		ActiveStorefrontID  string
@@ -251,6 +254,7 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		SocialToggles:       socialToggleViews,
 		SocialTextSettings:  socialTextViews,
 		WelcomeEmailText:    welcomeEmailTextViews,
+		ProspectText:        prospectTextViews,
 		TreasuryControls:    treasuryControlViews,
 		Fundraisers:         fundraisers,
 		ActiveStorefrontID:  activeStorefrontID,
@@ -439,6 +443,36 @@ func (h *Handlers) TreasuryControlsUpdateText(w http.ResponseWriter, r *http.Req
 				return
 			}
 			log.Printf("web: updating treasury control %q: %v", t.Key, err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+}
+
+// ProspectSettingsUpdateText saves the Prospects section's own field
+// (Section == "prospects") from its own form — the addresses notified
+// when the public enquiry form is submitted. Same one-section-per-form
+// shape as the Social/Welcome Email/Treasury Controls sections, so
+// saving one can never blank another's fields.
+func (h *Handlers) ProspectSettingsUpdateText(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	actor, ok := h.requireSuperAdmin(w, r, "/admin/settings")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	for _, t := range settings.UnitTextSettings {
+		if t.Section != "prospects" {
+			continue
+		}
+		if err := settings.SetUnitText(r.Context(), h.Pool, unit.ID, t.Key, r.FormValue(t.Key), actor.ID); err != nil {
+			log.Printf("web: updating prospect setting %q: %v", t.Key, err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}

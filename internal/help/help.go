@@ -332,6 +332,19 @@ var Topics = []Topic{
 		},
 	},
 	{
+		ID:                 "prospects",
+		Title:              "Families asking about joining",
+		Audience:           AudienceLeader,
+		RequiredCapability: units.CapEditContent,
+		RequiresSettings:   []string{settings.ProspectFormEnabled},
+		Body: []string{
+			"A family who fills in the enquiry form on the public site lands on the Prospects page, with what they told us about themselves and their child.",
+			"Move each one along as you go — contacted, visited a meeting, joined, or not joining — and note what was said. That's what stops an enquiry going cold because everyone assumed somebody else had called.",
+			"An Admin sets who gets emailed about a new enquiry in Site Settings. Nobody has to be: the enquiry is recorded either way, so the list is the record rather than somebody's inbox.",
+			"Joining is still a separate step. When a family signs up, add them on the Manage Roster page and mark the enquiry as joined — a prospect deliberately isn't a roster member until you make them one.",
+		},
+	},
+	{
 		ID:                 "newsletters",
 		Title:              "Sending a newsletter",
 		Audience:           AudienceLeader,
