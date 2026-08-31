@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/47-yonkers/scout-site/internal/auth"
@@ -213,7 +214,7 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 		InactiveRoster    []rosterRow
 		OtherMembers      []roster.MemberOption
 	}{
-		baseData:          h.base(r, "Manage Roster"),
+		baseData:          rosterListBase(h.base(r, "Manage Roster"), r.URL.Query().Get("add_member_error")),
 		Scope:             scope,
 		SubGroupNoun:      subGroupNoun(unit.UnitType),
 		SubGroups:         subGroups,
@@ -328,8 +329,12 @@ func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) 
 	// nothing has been written yet, so the leader can correct the form
 	// rather than find a half-finished person on the roster.
 	if wantsLogin && email == "" {
-		http.Error(w, "enter an email address to give this person their own login, or untick that box — "+
-			"without one they're reached through the family's shared login", http.StatusBadRequest)
+		// Same reasoning as the redirect below: this route only answers
+		// POST, so an error rendered here strands the browser somewhere a
+		// reload turns into 405.
+		http.Redirect(w, r, "/admin/roster?add_member_error="+url.QueryEscape(
+			"Enter an email address to give this person their own login, or untick that box — without one they're reached through the family's shared login."),
+			http.StatusSeeOther)
 		return
 	}
 
@@ -354,12 +359,18 @@ func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		// The member is on the roster at this point and staying there —
 		// rolling that back would throw away good work over a duplicate
-		// email. Say exactly what happened and where to finish the job,
-		// rather than a generic failure that leaves the leader unsure
-		// whether the person was added at all.
+		// email.
+		//
+		// Redirect to that member's own page rather than rendering an
+		// error here. Two reasons, both learned the hard way: this URL is
+		// POST-only, so an error page rendered at it leaves the browser
+		// on an address that answers 405 Method Not Allowed the moment
+		// anyone reloads or goes back — which is what a leader actually
+		// hit. And the member's page already carries the "Create
+		// Individual Login" form, so it's where the problem gets fixed.
 		log.Printf("web: creating individual login for new member: %v", err)
-		http.Error(w, firstName+" was added to the roster, but their login wasn't created: "+err.Error()+
-			". Open them from the roster to try again with a different email.", http.StatusBadRequest)
+		http.Redirect(w, r, "/admin/roster/members/"+memberID+"?login_error="+url.QueryEscape(err.Error()),
+			http.StatusSeeOther)
 		return
 	}
 
@@ -582,7 +593,7 @@ func (h *Handlers) AdminRosterMemberEdit(w http.ResponseWriter, r *http.Request)
 		HasIndividualLogin   bool
 		IndividualLoginEmail string
 	}{
-		baseData:             h.base(r, "Edit "+member.FirstName+" "+member.LastName),
+		baseData:             memberEditBase(h.base(r, "Edit "+member.FirstName+" "+member.LastName), member.FirstName, r.URL.Query().Get("login_error")),
 		Scope:                scope,
 		SubGroupNoun:         subGroupNoun(unit.UnitType),
 		Member:               member,
@@ -594,6 +605,30 @@ func (h *Handlers) AdminRosterMemberEdit(w http.ResponseWriter, r *http.Request)
 		IndividualLoginEmail: individualLoginEmail,
 	}
 	h.render(w, h.rosterMemberEdit, data)
+}
+
+// rosterListBase carries a message back from a form POST that couldn't be
+// completed. The add-member route only answers POST, so it can't render
+// its own errors without leaving the browser on a URL that 405s on
+// reload — see AdminRosterAddMember.
+func rosterListBase(b baseData, addMemberErr string) baseData {
+	if addMemberErr != "" {
+		b.Flash = addMemberErr
+	}
+	return b
+}
+
+// memberEditBase attaches the "we added them but couldn't make the login"
+// message to the member page, when AdminRosterAddMember redirected here
+// after one failed. Written for the leader: it says what did happen, what
+// didn't, and that the fix is right there on this page.
+func memberEditBase(b baseData, firstName, loginErr string) baseData {
+	if loginErr == "" {
+		return b
+	}
+	b.Flash = firstName + " was added to the roster, but their own login wasn't created: " + loginErr +
+		". They can still be reached through the family's shared login — or use \"Create Individual Login\" below with a different email address."
+	return b
 }
 
 // AdminRosterCreateMemberLogin creates a brand-new individual login for one
