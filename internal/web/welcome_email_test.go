@@ -122,3 +122,42 @@ func TestLooksLikeHTML(t *testing.T) {
 		}
 	}
 }
+
+// TestPlaceholders_ToleratesSpacesInsideBraces covers the variation
+// people actually type. The failure it prevents is silent and lands on a
+// family: a template whose placeholder doesn't match sends a real email
+// with "{{ password }}" printed where the password should be.
+func TestPlaceholders_ToleratesSpacesInsideBraces(t *testing.T) {
+	r := welcomeEmailReplacer("Jamie", "j@e.com", "Xk7-mQ2p", "https://x/login", "Pack 47", true)
+	for _, tmpl := range []string{
+		`<p>{{password}}</p>`,
+		`<p>{{ password }}</p>`,
+		`<p>{{  password  }}</p>`,
+		`<td style="font-family:monospace">{{ password }}</td>`,
+	} {
+		out := r.Replace(canonicalizePlaceholders(tmpl))
+		if !strings.Contains(out, "Xk7-mQ2p") {
+			t.Errorf("password didn't substitute into %q, got %q", tmpl, out)
+		}
+	}
+}
+
+// TestHasPasswordPlaceholder backs the save-time refusal. The three
+// negative cases are exactly how a template built in another tool arrives
+// looking correct while being broken: braces split by markup, braces
+// HTML-encoded, or the placeholder simply absent.
+func TestHasPasswordPlaceholder(t *testing.T) {
+	for tmpl, want := range map[string]bool{
+		`<p>Password: {{password}}</p>`:           true,
+		`<p>Password: {{ password }}</p>`:         true,
+		`<table><td>{{password}}</td></table>`:    true,
+		`<p>Welcome aboard!</p>`:                  false,
+		`<p>{{<span>password</span>}}</p>`:        false,
+		`<p>&#123;&#123;password&#125;&#125;</p>`: false,
+		`<p>{{passwrod}}</p>`:                     false,
+	} {
+		if got := HasPasswordPlaceholder(tmpl); got != want {
+			t.Errorf("HasPasswordPlaceholder(%q) = %v, want %v", tmpl, got, want)
+		}
+	}
+}

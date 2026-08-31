@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/content"
@@ -245,7 +246,7 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		StorageByCategory   []categorySummaryView
 		StorageTotal        categorySummaryView
 	}{
-		baseData:            h.base(r, "Site Settings"),
+		baseData:            settingsBase(h.base(r, "Site Settings"), r.URL.Query().Get("save_error")),
 		Toggles:             views,
 		TextSettings:        textViews,
 		UnitToggles:         unitViews,
@@ -503,12 +504,48 @@ func (h *Handlers) WelcomeEmailSettingsUpdateText(w http.ResponseWriter, r *http
 		}
 		if err := settings.SetUnitText(r.Context(), h.Pool, unit.ID, t.Key, r.FormValue(t.Key), actor.ID); err != nil {
 			log.Printf("web: updating welcome email setting %q: %v", t.Key, err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
+			settingsSaveError(w, r, err)
 			return
 		}
 	}
 
 	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+}
+
+// settingsBase carries a save failure back onto the settings page.
+func settingsBase(b baseData, saveErr string) baseData {
+	if saveErr != "" {
+		b.Flash = saveErr
+	}
+	return b
+}
+
+// settingsSaveError sends the admin back to the settings page carrying
+// the reason, rather than rendering it here.
+//
+// Two things it gets right that the previous "internal error" did not. A
+// template refused for a fixable reason — no {{password}} placeholder,
+// too large — is not an internal error, and reporting it as one tells the
+// admin nothing about what to change. And these save routes only answer
+// POST, so an error page rendered at one leaves the browser on a URL that
+// returns 405 Method Not Allowed to the next reload (the same trap fixed
+// on the roster in #94).
+func settingsSaveError(w http.ResponseWriter, r *http.Request, err error) {
+	// A known validation failure is the admin's to fix and its message is
+	// written for them; anything else is ours and shouldn't be echoed.
+	msg := "Something went wrong saving that. Please try again."
+	for _, known := range []error{
+		settings.ErrWelcomeEmailNeedsPassword,
+		settings.ErrTemplateTooLarge,
+		settings.ErrInvalidThreshold,
+		settings.ErrLiveKeyNotAccepted,
+	} {
+		if errors.Is(err, known) {
+			msg = err.Error()
+			break
+		}
+	}
+	http.Redirect(w, r, "/admin/settings?save_error="+url.QueryEscape(msg), http.StatusSeeOther)
 }
 
 // UnitSettingsToggle is SystemSettingsToggle's per-unit sibling — flips

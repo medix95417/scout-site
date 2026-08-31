@@ -27,6 +27,20 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A welcome email can no longer be saved without `{{password}}`.**
+  A custom HTML template missing it sent a real family a real email with
+  no password in it, and nothing errored — the leader had no way to know.
+  Saving is now refused, with a message naming the line to paste and the
+  two ways a template built elsewhere ends up looking correct while being
+  broken (braces split by formatting, or turned into `&#123;`).
+- Placeholders now tolerate spaces inside the braces, so `{{ password }}`
+  works as well as `{{password}}`.
+- Settings save failures land back on the settings page with the reason,
+  instead of a bare "internal error" at a POST-only URL that then
+  returned 405 on reload — the same trap fixed for the roster in #94.
+
 ## [2.5.0] — 2026-08-31
 
 ### Added
@@ -40,6 +54,31 @@ tagged commit with an accurate date.
   models the formats in its own toolbar and would silently flatten a real
   table-based email. Switching source → design warns first when there's
   something that would be lost; design → source never loses anything.
+- **Encrypted backups and a scripted restore.** `scripts/backup.sh`
+  produces two separate encrypted artifacts — the database via the real
+  `pg_dump` inside the `db` container, and the photos via the app's new
+  `-backup-files`, since those live in object storage rather than the
+  database and a database dump alone doesn't contain them. Both are
+  AES-256 encrypted with a passphrase read from a file, never a command
+  line. `scripts/restore.sh` verifies a checksum manifest, decrypts, and
+  rebuilds the site, refusing by default to overwrite a database that
+  already has tables. See "Backups and recovery" in `DEPLOY.md`.
+- `-backup-files` and `-restore-files` on the server binary, streaming
+  the object store to and from a tar archive. The app is what holds the
+  S3 credentials, so this needs no bucket tooling on the host.
+- **An "interested in joining" form** at `/join`, capturing a parent's
+  name, email and phone plus their child's name, age, grade and school.
+  Each enquiry is recorded and can be emailed to a list of addresses set
+  on the Site Settings page — and it's recorded whether or not anyone is
+  emailed, so an enquiry is never lost to somebody's inbox. Reachable by
+  URL but **deliberately not linked from the homepage or nav yet**.
+- **A Prospects page** (`/admin/prospects`, leaders only) tracking each
+  enquiry through new → contacted → visited → joined or not joining,
+  with a note of what was said. Defaults to showing only the ones still
+  needing a reply. Every change is recorded in the Activity Log.
+- A `prospect_form_enabled` toggle, default on, closing the public form
+  without a deploy — enquiries already received stay on the Prospects
+  page.
 
 ### Fixed
 
@@ -69,37 +108,6 @@ tagged commit with an accurate date.
   survive a mail server, but the ceiling is deliberately roomy because a
   template with images embedded as base64 is the normal reason a
   legitimate one gets large.
-
-### Added (continued)
-
-- **Encrypted backups and a scripted restore.** `scripts/backup.sh`
-  produces two separate encrypted artifacts — the database via the real
-  `pg_dump` inside the `db` container, and the photos via the app's new
-  `-backup-files`, since those live in object storage rather than the
-  database and a database dump alone doesn't contain them. Both are
-  AES-256 encrypted with a passphrase read from a file, never a command
-  line. `scripts/restore.sh` verifies a checksum manifest, decrypts, and
-  rebuilds the site, refusing by default to overwrite a database that
-  already has tables. See "Backups and recovery" in `DEPLOY.md`.
-- `-backup-files` and `-restore-files` on the server binary, streaming
-  the object store to and from a tar archive. The app is what holds the
-  S3 credentials, so this needs no bucket tooling on the host.
-
-### Added
-
-- **An "interested in joining" form** at `/join`, capturing a parent's
-  name, email and phone plus their child's name, age, grade and school.
-  Each enquiry is recorded and can be emailed to a list of addresses set
-  on the Site Settings page — and it's recorded whether or not anyone is
-  emailed, so an enquiry is never lost to somebody's inbox. Reachable by
-  URL but **deliberately not linked from the homepage or nav yet**.
-- **A Prospects page** (`/admin/prospects`, leaders only) tracking each
-  enquiry through new → contacted → visited → joined or not joining,
-  with a note of what was said. Defaults to showing only the ones still
-  needing a reply. Every change is recorded in the Activity Log.
-- A `prospect_form_enabled` toggle, default on, closing the public form
-  without a deploy — enquiries already received stay on the Prospects
-  page.
 
 ### Changed
 

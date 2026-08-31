@@ -13,6 +13,7 @@ package settings
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -836,6 +837,25 @@ var ErrLiveKeyNotAccepted = errors.New(
 // the note on the newsletter form.
 const MaxEmailTemplateBytes = 5 << 20 // 5 MB
 
+// welcomePasswordPlaceholder matches the {{password}} placeholder with
+// any whitespace inside the braces, mirroring what the sender accepts
+// (see internal/web's canonicalizePlaceholders).
+var welcomePasswordPlaceholder = regexp.MustCompile(`\{\{\s*password\s*\}\}`)
+
+// ErrWelcomeEmailNeedsPassword is returned when a welcome-email body
+// wouldn't actually tell anyone their password.
+//
+// A hard refusal rather than a warning, because the failure is silent and
+// lands on a real family: the leader ticks "email login details", the
+// email goes out looking perfectly fine, and the family has no password
+// and no idea why they can't log in. The leader doesn't find out either —
+// nothing errors. Cheaper to refuse the save, when the fix is one line.
+var ErrWelcomeEmailNeedsPassword = errors.New(
+	"this welcome email has no {{password}} placeholder, so it wouldn't tell anyone their password. " +
+		"Add a line like:  <p>Temporary password: {{password}}</p>  " +
+		"(if a template built elsewhere looks like it has one, check the braces haven't been split by " +
+		"formatting or turned into &#123; — either breaks the match)")
+
 // ErrTemplateTooLarge is returned for an email template past that bound.
 var ErrTemplateTooLarge = errors.New(
 	"that email template is over 5 MB — check you picked the right file, since anything that large is likely to be rejected by a mail server before it reaches anyone")
@@ -844,8 +864,13 @@ func validateUnitTextValue(key, trimmed string) error {
 	if trimmed == "" {
 		return nil
 	}
-	if key == WelcomeEmailBody && len(trimmed) > MaxEmailTemplateBytes {
-		return ErrTemplateTooLarge
+	if key == WelcomeEmailBody {
+		if len(trimmed) > MaxEmailTemplateBytes {
+			return ErrTemplateTooLarge
+		}
+		if !welcomePasswordPlaceholder.MatchString(trimmed) {
+			return ErrWelcomeEmailNeedsPassword
+		}
 	}
 	if key == ExpenseApprovalThreshold {
 		if dollars, err := strconv.ParseInt(trimmed, 10, 32); err != nil || dollars < 0 {

@@ -79,6 +79,25 @@ else
   exit 1
 fi
 
+# Refuse to cut a release whose notes have the same heading twice.
+#
+# Each merged change tends to prepend its own "### Added"/"### Fixed"
+# block to [Unreleased], so by release time the section can carry two
+# Addeds and a Changed in the middle. Harmless in a diff and invisible
+# until the moment it's dated and permanent, which is exactly when it
+# stops being easy to fix — this has now happened twice. Cheaper to
+# catch here, where the fix is to merge two blocks by hand and re-run.
+dupes=$(awk '/^## \[Unreleased\]/{f=1;next} /^## \[/{exit} f&&/^### /{print}' "$CHANGELOG" \
+        | sed -E 's/ \(continued\)$//' | sort | uniq -d)
+if [ -n "$dupes" ]; then
+  echo "error: [Unreleased] has the same heading more than once:" >&2
+  echo "$dupes" | sed 's/^/  /' >&2
+  echo "Merge those blocks into one section each, then re-run. A released" >&2
+  echo "changelog listing \"Added\" twice is confusing and can't be tidied" >&2
+  echo "without editing a dated section after the fact." >&2
+  exit 1
+fi
+
 echo "$current -> $next ($bump)"
 
 sed -i "s/^const Version = \"$current\"\$/const Version = \"$next\"/" "$VERSION_FILE"

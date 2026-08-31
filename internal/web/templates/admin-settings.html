@@ -262,7 +262,12 @@
             <p class="text-xs text-gray-500 mt-1">
               Replaces what's above with the file's contents, which you can then edit here. Nothing is uploaded —
               the file is read in your browser. Remember to keep the {{"{{name}}"}} and {{"{{password}}"}}
-              placeholders, or the email won't tell anyone their login. Unlike a newsletter this is stored exactly
+              placeholders, or the email won't tell anyone their login — saving is refused without
+              {{"{{password}}"}}, since an email missing it leaves the family unable to sign in. Paste this
+              where you want it to appear:
+              <span class="font-mono block mt-1">&lt;p&gt;Temporary password: {{"{{password}}"}}&lt;/p&gt;</span>
+              If a template built elsewhere looks like it already has one, check the braces haven't been split
+              by formatting or turned into &amp;#123; — either breaks the match. Unlike a newsletter this is stored exactly
               as you write it, so keep styling in <span class="font-mono">style="…"</span> attributes — most mail
               clients ignore a {{"<style>"}} block.
             </p>
