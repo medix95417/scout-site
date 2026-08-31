@@ -59,6 +59,7 @@ var entityTypeTable = map[string]string{
 	"system_setting":            "system_settings",
 	"unit_setting":              "unit_settings",
 	"bank_reconciliation":       "bank_reconciliations",
+	"prospect":                  "prospects",
 }
 
 var entityTypeLiteral = regexp.MustCompile(`EntityType:\s*"([a-z_]+)"`)

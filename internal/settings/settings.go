@@ -212,6 +212,17 @@ const AdvancementEnabled = "advancement_enabled"
 // browsing balances turn that off without dropping the treasury feature.
 const ScoutAccountSelfService = "scout_account_self_service"
 
+// ProspectFormEnabled controls whether the public "interested in
+// joining" form at /join is served. Defaults to true.
+//
+// Worth having as a switch rather than always-on because it is the only
+// route besides the fundraiser storefront where a member of the public
+// can write to this database, and a unit that isn't recruiting — or that
+// is being flooded with spam — needs a way to close it that doesn't
+// involve a deploy. Turning it off hides the form and 404s the route;
+// enquiries already received stay on /admin/prospects.
+const ProspectFormEnabled = "prospect_form_enabled"
+
 // PermissionSlipsEnabled is the feature's master switch, distinct from
 // PermissionSlipEnforcement below (which only narrows *which* events show
 // a slip while the feature is on). Defaults to true, so a unit already
@@ -338,6 +349,14 @@ var UnitToggles = []UnitToggle{
 		Label:       "My Accounts (family access to Scout account balances)",
 		Description: "Shows the \"My Accounts\" nav link and page, letting a family (or a Scout's own login) view their own Scout account balance and history. Turn off to keep account balances treasurer-only — the Treasury area is unchanged, this just shuts off the family-facing self-service view.",
 		Default:     true,
+	},
+	{
+		Key:   ProspectFormEnabled,
+		Label: "\"Interested in joining\" form",
+		Description: "Serves the public enquiry form at /join, where a prospective family leaves their details. " +
+			"On by default. Turning it off closes the form to the public — anyone with the link gets \"not found\" — " +
+			"but keeps every enquiry already received on the Prospects page, so nothing is lost by pausing it.",
+		Default: true,
 	},
 	{
 		Key:         PermissionSlipsEnabled,
@@ -715,6 +734,13 @@ const (
 	SocialInstagramURL = "social_instagram_url"
 	SocialTikTokURL    = "social_tiktok_url"
 
+	// ProspectNotifyEmails is who gets told when someone fills in the
+	// public "interested in joining" form — a list of addresses, one per
+	// line or comma-separated. Blank means nobody is emailed; the enquiry
+	// is still recorded and still shows on /admin/prospects, so it is
+	// never lost, just not pushed to anyone.
+	ProspectNotifyEmails = "prospect_notify_emails"
+
 	WelcomeEmailSubject = "welcome_email_subject"
 	WelcomeEmailBody    = "welcome_email_body"
 
@@ -889,6 +915,16 @@ var UnitTextSettings = []UnitTextSetting{
 		Section:     "social",
 	},
 	{
+		Key:   ProspectNotifyEmails,
+		Label: "Who to email about a new enquiry",
+		Description: "Email addresses to notify when someone fills in the \"interested in joining\" form — " +
+			"one per line, or separated by commas. Usually the Cubmaster or Scoutmaster and whoever handles new " +
+			"families. Leave blank and nobody is emailed; the enquiry still appears on the Prospects page.",
+		Placeholder: "cubmaster@example.com\nmembership@example.com",
+		Multiline:   true,
+		Section:     "prospects",
+	},
+	{
 		Key:         WelcomeEmailSubject,
 		Label:       "Welcome email subject",
 		Description: "Placeholders: {{name}}, {{email}}, {{password}}, {{login_url}}, {{unit_name}}. Left blank, a sensible default is used.",
@@ -898,7 +934,7 @@ var UnitTextSettings = []UnitTextSetting{
 	{
 		Key:         WelcomeEmailBody,
 		Label:       "Welcome email body",
-		Description: "Same placeholders as the subject. Sent only when a leader checks \"Email login details\" while creating a family or individual login — never automatically. A family account's email always gets one extra, non-editable paragraph appended noting they can see every child linked to their account across both the Pack and Troop sites, since that's real behavior of this login, not just wording.",
+		Description: "Same placeholders as the subject. HTML is allowed — write tags and they're sent as formatting; a template with no tags is sent as plain paragraphs exactly as before. Values substituted for the placeholders are always escaped, so a name or password containing < or & can't break the layout. Sent only when a leader checks \"Email login details\" while creating a family or individual login — never automatically. A family account's email always gets one extra, non-editable paragraph appended noting they can see every child linked to their account across both the Pack and Troop sites, since that's real behavior of this login, not just wording.",
 		Placeholder: "",
 		Multiline:   true,
 		Section:     "welcome_email",

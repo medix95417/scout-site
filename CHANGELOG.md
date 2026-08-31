@@ -27,6 +27,33 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **An "interested in joining" form** at `/join`, capturing a parent's
+  name, email and phone plus their child's name, age, grade and school.
+  Each enquiry is recorded and can be emailed to a list of addresses set
+  on the Site Settings page — and it's recorded whether or not anyone is
+  emailed, so an enquiry is never lost to somebody's inbox. Reachable by
+  URL but **deliberately not linked from the homepage or nav yet**.
+- **A Prospects page** (`/admin/prospects`, leaders only) tracking each
+  enquiry through new → contacted → visited → joined or not joining,
+  with a note of what was said. Defaults to showing only the ones still
+  needing a reply. Every change is recorded in the Activity Log.
+- A `prospect_form_enabled` toggle, default on, closing the public form
+  without a deploy — enquiries already received stay on the Prospects
+  page.
+
+### Changed
+
+- **The welcome email can now be written in HTML.** The template on the
+  Site Settings page takes tags and they're sent as formatting. A
+  template with no tags — the default, and anything customized before
+  this — is converted to paragraphs and reads exactly as it did, so
+  nothing changes for a unit that hasn't asked for HTML. Values
+  substituted for `{{name}}`, `{{password}}` and the rest are always
+  escaped, so a name or generated password containing `<` or `&` can't
+  break the layout or inject markup.
+
 ## [2.4.0] — 2026-08-28
 
 ### Added

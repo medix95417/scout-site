@@ -57,10 +57,68 @@ func TestCredentialsTemplate_RendersEveryDataShape(t *testing.T) {
 // text by a leader, so a missed placeholder would silently leak into a
 // real family's inbox.
 func TestWelcomeEmailReplacer(t *testing.T) {
-	r := welcomeEmailReplacer("Jamie", "jamie@example.com", "hunter2", "https://example.com/login", "Troop 47")
+	r := welcomeEmailReplacer("Jamie", "jamie@example.com", "hunter2", "https://example.com/login", "Troop 47", false)
 	got := r.Replace("{{name}}/{{email}}/{{password}}/{{login_url}}/{{unit_name}}")
 	want := "Jamie/jamie@example.com/hunter2/https://example.com/login/Troop 47"
 	if got != want {
 		t.Errorf("welcomeEmailReplacer substitution = %q, want %q", got, want)
+	}
+}
+
+// TestWelcomeEmailReplacer_EscapesValuesForHTML is the rule that makes an
+// HTML welcome email safe to send: the leader's template is theirs to
+// write markup in, but the values dropped into it are not markup and must
+// never be treated as such.
+//
+// The password is the case that matters most. It's generated, a leader
+// reads it off the credentials page, and if a "<" in it silently ate the
+// rest of the email nobody would know why the family never got their
+// login.
+func TestWelcomeEmailReplacer_EscapesValuesForHTML(t *testing.T) {
+	r := welcomeEmailReplacer(`Ben & Jo <b>`, "a@b.com", `p<a>ss&"`, "https://example.com/login?a=1&b=2", "Troop & Pack", true)
+	got := r.Replace("{{name}}|{{password}}|{{login_url}}|{{unit_name}}")
+
+	for _, raw := range []string{"<b>", `p<a>ss`, "& b=2"} {
+		if strings.Contains(got, raw) {
+			t.Errorf("substituted value %q reached the HTML body unescaped:\n%s", raw, got)
+		}
+	}
+	if !strings.Contains(got, "Ben &amp; Jo &lt;b&gt;") {
+		t.Errorf("expected the name to be escaped, got:\n%s", got)
+	}
+}
+
+// TestTextToHTML_KeepsPlainTemplatesReadable covers the compatibility
+// half: every template written before HTML was allowed has no markup, and
+// must not collapse into one paragraph now that the mail is sent as HTML.
+func TestTextToHTML_KeepsPlainTemplatesReadable(t *testing.T) {
+	got := textToHTML("Hi Jamie,\n\nEmail: a@b.com\nPassword: hunter2\n\nSee you soon.")
+
+	if n := strings.Count(got, "<p>"); n != 3 {
+		t.Errorf("expected 3 paragraphs from 3 blank-line-separated blocks, got %d:\n%s", n, got)
+	}
+	if !strings.Contains(got, "Email: a@b.com<br>") {
+		t.Errorf("a single newline inside a paragraph should become a break, got:\n%s", got)
+	}
+	if strings.Contains(textToHTML("5 < 6 & 7"), "5 < 6") {
+		t.Error("plain text must be escaped on its way into HTML")
+	}
+}
+
+// TestLooksLikeHTML pins the rule that decides which of the two paths a
+// stored template takes.
+func TestLooksLikeHTML(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		want bool
+	}{
+		{defaultWelcomeEmailBody, false},
+		{"Hi {{name}},\n\nWelcome!", false},
+		{"<p>Hi {{name}},</p>", true},
+		{"<a href=\"{{login_url}}\">Log in</a>", true},
+	} {
+		if got := looksLikeHTML(tc.body); got != tc.want {
+			t.Errorf("looksLikeHTML(%q) = %v, want %v", tc.body, got, tc.want)
+		}
 	}
 }

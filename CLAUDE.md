@@ -51,7 +51,7 @@ a new one.
 `internal/approval`, `internal/audit`, `internal/ledger`,
 `internal/twofactor`, `internal/settings`, `internal/permission`,
 `internal/advancement`, `internal/leaders`, `internal/resources`,
-`internal/help`) contain
+`internal/help`, `internal/prospect`) contain
 data model and business rules only — no HTTP or template code. All HTTP
 handlers and `html/template` rendering live together in `internal/web`
 (one package, many files split by feature area, e.g. `treasury.go`,
@@ -100,6 +100,11 @@ elsewhere. Follow this pattern for any new optional external dependency.
 - `internal/settings` — small generic key/value store for site-wide
   on/off toggles (`system_settings` table); add a new toggle here rather
   than inventing a one-off settings mechanism.
+- `internal/prospect` — enquiries from families interested in joining,
+  captured by the public `/join` form and tracked by leaders on
+  `/admin/prospects`. Deliberately not part of `internal/roster`: a
+  prospect has no family, no login and no roles, and joining is a
+  separate act a leader performs on the roster page.
 - `internal/help` — the in-app help catalog. Each topic declares the
   capability it needs and the feature toggles it depends on, and
   `help.For(Viewer)` is the only place that decides visibility. When you

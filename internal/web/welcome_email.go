@@ -1,6 +1,7 @@
 package web
 
 import (
+	"html"
 	"log"
 	"net/http"
 	"strings"
@@ -42,19 +43,73 @@ You'll be asked to choose your own password the first time you log in.`
 // only ever sees that one person's own stuff, not "every child."
 const familyCrossUnitNote = "\n\nOnce logged in, you'll be able to see every child linked to your family's account — across both our Pack and Troop sites, using this same login."
 
+// familyCrossUnitNoteHTML is the same sentence for an HTML body. Kept as
+// its own constant rather than run through the text-to-HTML conversion
+// below, so the markup around it is deliberate rather than incidental.
+const familyCrossUnitNoteHTML = "<p>Once logged in, you'll be able to see every child linked to your family's account — across both our Pack and Troop sites, using this same login.</p>"
+
 // welcomeEmailReplacer builds the {{name}}/{{email}}/{{password}}/
 // {{login_url}}/{{unit_name}} substitution for a welcome email template
 // — plain string substitution, not html/template, since this is a
-// leader-edited plain-text field (see settings.WelcomeEmailBody), not
-// code to execute.
-func welcomeEmailReplacer(name, email, password, loginURL, unitName string) *strings.Replacer {
+// leader-edited field (see settings.WelcomeEmailBody), not code to
+// execute.
+//
+// escape controls whether the substituted VALUES are HTML-escaped. It
+// must be true whenever the result is sent as HTML: a member named
+// "Ben & Jo" or a generated password containing a "<" would otherwise
+// land as raw markup, at best mangling the email and at worst letting a
+// value close a tag the template opened. The template itself is never
+// escaped — that's the whole point of letting a leader write HTML — only
+// the values dropped into it.
+func welcomeEmailReplacer(name, email, password, loginURL, unitName string, escape bool) *strings.Replacer {
+	esc := func(v string) string {
+		if escape {
+			return html.EscapeString(v)
+		}
+		return v
+	}
 	return strings.NewReplacer(
-		"{{name}}", name,
-		"{{email}}", email,
-		"{{password}}", password,
-		"{{login_url}}", loginURL,
-		"{{unit_name}}", unitName,
+		"{{name}}", esc(name),
+		"{{email}}", esc(email),
+		"{{password}}", esc(password),
+		"{{login_url}}", esc(loginURL),
+		"{{unit_name}}", esc(unitName),
 	)
+}
+
+// looksLikeHTML reports whether a stored template is meant to be HTML.
+//
+// The test is deliberately crude — does it contain a "<" at all — because
+// the alternative is worse in both directions. Parsing to decide would
+// call a template with one stray "<" HTML and mangle the rest; a separate
+// "this template is HTML" checkbox would be one more thing to set wrong,
+// and every existing template predates it.
+//
+// A plain-text template (the default, and every template customized
+// before this) has no "<" and takes the textToHTML path below, so it
+// renders exactly as it always did. A leader who writes any tag at all
+// gets their markup through untouched.
+func looksLikeHTML(body string) bool { return strings.Contains(body, "<") }
+
+// textToHTML renders a plain-text template as HTML: escaped, with blank
+// lines becoming paragraphs and single newlines becoming breaks. Without
+// this, switching to an HTML send would collapse every existing template
+// into one run-on paragraph, since HTML ignores newlines.
+func textToHTML(body string) string {
+	var out strings.Builder
+	for i, para := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n\n") {
+		para = strings.TrimSpace(para)
+		if para == "" {
+			continue
+		}
+		if i > 0 {
+			out.WriteString("\n")
+		}
+		out.WriteString("<p>")
+		out.WriteString(strings.ReplaceAll(html.EscapeString(para), "\n", "<br>\n"))
+		out.WriteString("</p>")
+	}
+	return out.String()
 }
 
 // sendWelcomeEmail emails a brand-new login's address and temporary
@@ -92,14 +147,24 @@ func (h *Handlers) sendWelcomeEmail(r *http.Request, name, email, password strin
 	}
 
 	loginURL := h.requestOrigin(r) + "/login"
-	replacer := welcomeEmailReplacer(name, email, password, loginURL, unit.Name)
-	subject := replacer.Replace(subjectTmpl)
-	body := replacer.Replace(bodyTmpl)
+
+	// The subject is always plain text — mail clients don't render markup
+	// in a subject line — so its values are substituted unescaped.
+	subject := welcomeEmailReplacer(name, email, password, loginURL, unit.Name, false).Replace(subjectTmpl)
+
+	// A template a leader wrote HTML into is sent as-is. One without any
+	// markup — the default, and anything customized before HTML was
+	// allowed — is converted, so it reads the same as it always has.
+	htmlTemplate := looksLikeHTML(bodyTmpl)
+	if !htmlTemplate {
+		bodyTmpl = textToHTML(bodyTmpl)
+	}
+	body := welcomeEmailReplacer(name, email, password, loginURL, unit.Name, true).Replace(bodyTmpl)
 	if familyAccount {
-		body += familyCrossUnitNote
+		body += "\n" + familyCrossUnitNoteHTML
 	}
 
-	if err := h.Mailer.Send(r.Context(), email, subject, body); err != nil {
+	if err := h.Mailer.SendHTML(r.Context(), email, subject, body); err != nil {
 		log.Printf("web: sending welcome email to %s: %v", email, err)
 		return false
 	}

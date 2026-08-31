@@ -89,6 +89,13 @@ type Handlers struct {
 	loginLimiter *ratelimit.Limiter
 	resetLimiter *ratelimit.Limiter
 
+	// joinLimiter bounds the public "interested in joining" form. Like
+	// the storefront it is an anonymous write, and unlike the storefront
+	// it also sends mail, so an unbounded one would let a stranger use
+	// this site to post arbitrary text into a leader's inbox as fast as
+	// they can loop.
+	joinLimiter *ratelimit.Limiter
+
 	home                 *template.Template
 	login                *template.Template
 	roster               *template.Template
@@ -142,6 +149,9 @@ type Handlers struct {
 	resourcesList *template.Template
 
 	helpPage *template.Template
+
+	joinPage      *template.Template
+	prospectsPage *template.Template
 
 	treasuryReports    *template.Template
 	treasuryReportView *template.Template
@@ -340,6 +350,11 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 		// Generous enough for a leader helping several families reset in
 		// one sitting; far below what a script would want.
 		resetLimiter: ratelimit.New(10, time.Hour),
+
+		// 5 enquiries an hour from one address. A real family sends one;
+		// a second is a correction. Anything past that is either a mistake
+		// worth slowing down or somebody using the form as a mail relay.
+		joinLimiter: ratelimit.New(5, time.Hour),
 	}
 
 	var err error
@@ -469,6 +484,12 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.helpPage, err = parse("help.html"); err != nil {
 		return nil, err
 	}
+	if h.joinPage, err = parse("join.html"); err != nil {
+		return nil, err
+	}
+	if h.prospectsPage, err = parse("admin-prospects.html"); err != nil {
+		return nil, err
+	}
 	if h.treasuryReports, err = parse("treasury-reports.html"); err != nil {
 		return nil, err
 	}
@@ -571,6 +592,11 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	// Phase 2: two-factor login (Treasurer/super_admin) and self-service enrollment.
 	mux.HandleFunc("GET /login/2fa", h.LoginTwoFactorForm)
 	mux.HandleFunc("POST /login/2fa", h.LoginTwoFactorSubmit)
+	mux.HandleFunc("GET /join", h.JoinForm)
+	mux.HandleFunc("POST /join", h.JoinSubmit)
+	mux.HandleFunc("GET /admin/prospects", h.ProspectsList)
+	mux.HandleFunc("POST /admin/prospects/{id}", h.ProspectUpdate)
+	mux.HandleFunc("POST /admin/prospects/{id}/delete", h.ProspectDelete)
 	mux.HandleFunc("GET /help", h.Help)
 	mux.HandleFunc("GET /settings/2fa", h.TwoFactorSettings)
 	mux.HandleFunc("POST /settings/2fa/enroll", h.TwoFactorEnroll)
@@ -623,6 +649,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/settings/unit/text", h.UnitSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/social", h.SocialSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/welcome-email", h.WelcomeEmailSettingsUpdateText)
+	mux.HandleFunc("POST /admin/settings/unit/prospects", h.ProspectSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/treasury-controls", h.TreasuryControlsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/fundraiser-storefront", h.FundraiserStorefrontSettingsUpdate)
 
