@@ -25,6 +25,34 @@ var allowedTags = map[string]bool{
 var allowedAttrs = map[string]map[string]bool{
 	"a":   {"href": true},
 	"img": {"src": true, "alt": true, "width": true, "height": true},
+
+	// Table presentation. HTML email is still built out of tables with
+	// these attributes — every template a tool like Mailchimp produces
+	// leans on them, and a leader can now upload one of those (see
+	// admin-newsletter-form.html's HTML-source mode), so dropping them
+	// would silently reduce a carefully-built template to unstyled rows.
+	//
+	// Safe to allow because they are inert: each one takes a length, a
+	// colour or a keyword, and none can carry a URL or script. The
+	// attributes that CAN — href, src, style — are still checked by
+	// value in sanitizeAttrValue below, and every script-capable tag
+	// remains absent from allowedTags.
+	"table": tablePresentationAttrs,
+	"thead": tablePresentationAttrs,
+	"tbody": tablePresentationAttrs,
+	"tr":    tablePresentationAttrs,
+	"td":    tablePresentationAttrs,
+	"th":    tablePresentationAttrs,
+}
+
+// tablePresentationAttrs is shared by every table element above.
+var tablePresentationAttrs = map[string]bool{
+	"width": true, "height": true, "align": true, "valign": true,
+	"bgcolor": true, "border": true, "cellpadding": true, "cellspacing": true,
+	"colspan": true, "rowspan": true,
+	// role="presentation" is how a layout table tells a screen reader not
+	// to announce it as data — worth keeping for exactly that reason.
+	"role": true,
 }
 
 // globalAttrs are allowed on every element — style/class are how Quill

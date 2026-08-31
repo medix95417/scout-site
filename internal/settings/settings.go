@@ -820,9 +820,32 @@ var ErrLiveKeyNotAccepted = errors.New(
 // validateUnitTextValue rejects values that shouldn't be stored yet. Kept
 // in SetUnitText rather than in the handler so every path that writes a
 // setting gets the same check.
+// MaxEmailTemplateBytes bounds an admin-editable email template.
+//
+// The global POST limit is 500 MB, sized so a phone's camera roll can be
+// uploaded in one go (see internal/csrf). That's the wrong bound for
+// something that ends up as an email body, so this is a far tighter one —
+// but deliberately roomy, because a template with images embedded as
+// base64 data URIs is the normal reason a legitimate one gets big, and
+// refusing that would be refusing the actual use case.
+//
+// Worth knowing when picking a template rather than a number: most mail
+// clients cope with a large body, but Gmail clips a message past about
+// 102 KB behind a "View entire message" link. A template comfortably
+// under this ceiling can still be truncated in the reader's inbox — see
+// the note on the newsletter form.
+const MaxEmailTemplateBytes = 5 << 20 // 5 MB
+
+// ErrTemplateTooLarge is returned for an email template past that bound.
+var ErrTemplateTooLarge = errors.New(
+	"that email template is over 5 MB — check you picked the right file, since anything that large is likely to be rejected by a mail server before it reaches anyone")
+
 func validateUnitTextValue(key, trimmed string) error {
 	if trimmed == "" {
 		return nil
+	}
+	if key == WelcomeEmailBody && len(trimmed) > MaxEmailTemplateBytes {
+		return ErrTemplateTooLarge
 	}
 	if key == ExpenseApprovalThreshold {
 		if dollars, err := strconv.ParseInt(trimmed, 10, 32); err != nil || dollars < 0 {

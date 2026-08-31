@@ -172,6 +172,10 @@ func (h *Handlers) AdminNewsletterCreate(w http.ResponseWriter, r *http.Request)
 
 	subject := strings.TrimSpace(r.PostFormValue("subject"))
 	body := r.PostFormValue("body")
+	if len(body) > settings.MaxEmailTemplateBytes {
+		http.Error(w, settings.ErrTemplateTooLarge.Error(), http.StatusBadRequest)
+		return
+	}
 	if subject == "" {
 		http.Error(w, "subject is required", http.StatusBadRequest)
 		return
@@ -201,6 +205,10 @@ func (h *Handlers) AdminNewsletterUpdate(w http.ResponseWriter, r *http.Request)
 
 	subject := strings.TrimSpace(r.PostFormValue("subject"))
 	body := r.PostFormValue("body")
+	if len(body) > settings.MaxEmailTemplateBytes {
+		http.Error(w, settings.ErrTemplateTooLarge.Error(), http.StatusBadRequest)
+		return
+	}
 	if subject == "" {
 		http.Error(w, "subject is required", http.StatusBadRequest)
 		return

@@ -225,6 +225,45 @@
         e.target.form.submit();
       }
     });
+
+    // Load a .html file the leader picked into a textarea, so an email
+    // template built elsewhere can be brought in and then edited here.
+    //
+    // Read in the browser rather than uploaded: the file only ever needs
+    // to become the contents of a field the form already posts, so a
+    // server endpoint, a stored file and a cleanup story would all be
+    // machinery for nothing. The text lands in a <textarea>, which holds
+    // it as characters rather than parsing it as markup.
+    document.addEventListener('change', function (e) {
+      var input = e.target;
+      if (!input.hasAttribute || !input.hasAttribute('data-html-file-target')) {
+        return;
+      }
+      var target = document.getElementById(input.getAttribute('data-html-file-target'));
+      var file = input.files && input.files[0];
+      if (!target || !file) {
+        return;
+      }
+      // Matches settings.MaxEmailTemplateBytes, so the browser refuses
+      // exactly what the server would rather than letting someone wait
+      // for an upload that was never going to be accepted.
+      if (file.size > 5242880) {
+        window.alert('That file is ' + Math.round(file.size / 1048576 * 10) / 10 + ' MB, over the 5 MB limit for an email template \u2014 check you picked the right file.');
+        input.value = '';
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        target.value = reader.result;
+        // Let whatever owns the field know it changed \u2014 the newsletter
+        // form uses this to switch itself into HTML-source mode.
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      reader.onerror = function () { window.alert("That file couldn't be read."); };
+      reader.readAsText(file);
+      input.value = '';
+    });
   </script>
 
   {{if .PageHeroImageURL}}

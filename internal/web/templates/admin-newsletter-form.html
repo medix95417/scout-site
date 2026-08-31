@@ -49,9 +49,51 @@
     </div>
 
     <div>
-      <label class="block text-sm font-medium mb-1">Body</label>
-      <p class="text-xs text-gray-500 mb-2">Full formatting supported — bold, lists, links, images, colors.</p>
-      <div id="quill-editor" style="height: 300px; background: white;"></div>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+        <label class="block text-sm font-medium">Body</label>
+        <div class="flex items-center gap-1 text-xs" role="group" aria-label="Editor mode">
+          <button type="button" id="mode-design" class="rounded-md border px-2 py-1">Design</button>
+          <button type="button" id="mode-source" class="rounded-md border px-2 py-1">HTML source</button>
+        </div>
+      </div>
+      <p class="text-xs text-gray-500 mb-2" id="mode-help">Full formatting supported — bold, lists, links, images, colors.</p>
+
+      <div id="design-pane">
+        <div id="quill-editor" style="height: 300px; background: white;"></div>
+      </div>
+      <div id="source-pane" class="hidden">
+        <textarea id="body-source" rows="18"
+                  class="w-full rounded-md border border-gray-300 px-3 py-2 text-xs font-mono"
+                  spellcheck="false">{{.Newsletter.Body}}</textarea>
+      </div>
+
+      {{if or (not .IsEdit) (eq .Newsletter.Status "draft")}}
+        <div class="mt-2 rounded-md bg-gray-50 border border-gray-200 p-3">
+          <label class="block text-sm font-medium mb-1" for="html-file">Start from an HTML file</label>
+          <input type="file" id="html-file" accept=".html,.htm,text/html"
+                 data-html-file-target="body-source"
+                 class="block w-full text-sm">
+          <p class="text-xs text-gray-500 mt-1">
+            Loads a template you built elsewhere straight into the HTML source above, exactly as written. Nothing is
+            uploaded — the file is read here in your browser.
+          </p>
+          <p class="text-xs text-gray-500 mt-1">
+            On save, the document wrapper (<span class="font-mono">&lt;!DOCTYPE&gt;</span>,
+            <span class="font-mono">&lt;html&gt;</span>, <span class="font-mono">&lt;head&gt;</span>) and any
+            <span class="font-mono">&lt;style&gt;</span> block are removed — an email body is a fragment, and Gmail
+            strips <span class="font-mono">&lt;style&gt;</span> anyway. Put your styling in
+            <span class="font-mono">style="…"</span> attributes, which are kept, as are tables and their
+            <span class="font-mono">cellpadding</span>/<span class="font-mono">bgcolor</span>/
+            <span class="font-mono">align</span> attributes. Scripts and event handlers are always removed.
+          </p>
+          <p class="text-xs text-gray-500 mt-1">
+            Up to 5 MB, which is room for images embedded in the file itself. Worth knowing that Gmail hides
+            anything past roughly 100 KB behind a &ldquo;View entire message&rdquo; link — so for a newsletter people
+            will actually read top to bottom, linking to images beats embedding them.
+          </p>
+        </div>
+      {{end}}
+
       <textarea id="body-initial" style="display:none">{{.Newsletter.Body}}</textarea>
       <input type="hidden" id="body-input" name="body">
     </div>
@@ -79,7 +121,117 @@
 
   <script nonce="{{.CSPNonce}}">
     document.addEventListener('DOMContentLoaded', function () {
-      var quill = new Quill('#quill-editor', {
+      var designPane = document.getElementById('design-pane');
+      var sourcePane = document.getElementById('source-pane');
+      var source = document.getElementById('body-source');
+      var modeDesign = document.getElementById('mode-design');
+      var modeSource = document.getElementById('mode-source');
+      var help = document.getElementById('mode-help');
+      var initial = document.getElementById('body-initial').value;
+      var readOnly = {{if and .IsEdit (ne .Newsletter.Status "draft")}}true{{else}}false{{end}};
+
+      // Quill comes from a CDN, and a CDN is a thing that can be
+      // unreachable: an outage, a school or workplace firewall, a leader
+      // working offline. Everything below therefore works without it, and
+      // the rich editor is layered on afterwards only if it actually
+      // loaded.
+      //
+      // This matters more than it looks. The body is submitted by script,
+      // so an editor that half-initialises doesn't degrade to a plain
+      // form — it degrades to silently saving nothing. The source
+      // textarea is a complete HTML editor on its own, so falling back to
+      // it costs comfort, not capability.
+      var quill = null;
+      var sourceMode = false;
+
+      function paintMode() {
+        if (designPane) { designPane.classList.toggle('hidden', sourceMode); }
+        sourcePane.classList.toggle('hidden', !sourceMode);
+        if (modeDesign) {
+          modeDesign.className = 'rounded-md border px-2 py-1' + (sourceMode ? '' : ' bg-gray-200 font-medium');
+          modeDesign.setAttribute('aria-pressed', String(!sourceMode));
+        }
+        modeSource.className = 'rounded-md border px-2 py-1' + (sourceMode ? ' bg-gray-200 font-medium' : '');
+        modeSource.setAttribute('aria-pressed', String(sourceMode));
+        help.textContent = sourceMode
+          ? 'Editing the raw HTML. Kept exactly as written \u2014 nothing here is rewritten.'
+          : 'Full formatting supported \u2014 bold, lists, links, images, colors.';
+      }
+
+      function toSource() {
+        if (sourceMode) { return; }
+        if (quill) { source.value = quill.root.innerHTML; } // lossless: this is what would have been saved
+        sourceMode = true;
+        paintMode();
+      }
+
+      function toDesign() {
+        if (!sourceMode || !quill) { return; }
+        // Quill only models the formats in its toolbar, so handing it a
+        // real email template \u2014 the table-and-inline-style kind a tool
+        // like Mailchimp produces \u2014 silently drops everything else.
+        // Warn only when there's something it would actually discard;
+        // plain formatting survives the trip untouched.
+        var risky = /<(table|style|head|meta|!doctype|html|body)\b/i.test(source.value);
+        if (risky && !window.confirm('The design editor only understands basic formatting, so switching will simplify this HTML \u2014 tables, style blocks and document structure will be dropped.\n\nSwitch anyway?')) {
+          return;
+        }
+        quill.root.innerHTML = source.value;
+        sourceMode = false;
+        paintMode();
+      }
+
+      modeSource.addEventListener('click', toSource);
+      if (modeDesign) { modeDesign.addEventListener('click', toDesign); }
+
+      // Loading a file (see base.html's data-html-file-target handler)
+      // means the leader wants that exact markup, so show it to them
+      // as-is rather than round-tripping it through the design editor.
+      source.addEventListener('input', function () {
+        if (!sourceMode) { toSource(); }
+      });
+
+      // The body is posted from whichever editor is showing.
+      document.getElementById('newsletter-form').addEventListener('submit', function () {
+        document.getElementById('body-input').value =
+          (sourceMode || !quill) ? source.value : quill.root.innerHTML;
+      });
+
+      {{if not .IsEdit}}
+        // Wired up before the Quill check below so the starter templates
+        // still work when the rich editor didn't load — they're just
+        // strings of HTML, and the source editor takes those fine.
+        var starterTemplates = {{.StarterTemplates}};
+        var picker = document.getElementById('starter-template');
+        starterTemplates.forEach(function (t) {
+          var opt = document.createElement('option');
+          opt.textContent = t.Name;
+          opt.value = t.Name;
+          picker.appendChild(opt);
+        });
+        picker.addEventListener('change', function () {
+          var t = starterTemplates.find(function (t) { return t.Name === picker.value; });
+          if (!t) { return; }
+          document.getElementById('subject').value = t.Subject;
+          source.value = t.Body;
+          if (quill) { quill.root.innerHTML = t.Body; }
+        });
+      {{end}}
+
+      if (typeof Quill === 'undefined') {
+        // No rich editor available: source is the only mode, and say so
+        // rather than leaving a dead "Design" button.
+        if (modeDesign) { modeDesign.remove(); }
+        if (designPane) { designPane.remove(); }
+        designPane = null;
+        modeDesign = null;
+        sourceMode = true;
+        paintMode();
+        help.textContent = "The formatting editor couldn't load (it comes from an external service). You can still write and edit the HTML directly below.";
+        return;
+      }
+
+      quill = new Quill('#quill-editor', {
         theme: 'snow',
         modules: {
           toolbar: [
@@ -94,37 +246,9 @@
           ]
         }
       });
-
-      var initial = document.getElementById('body-initial').value;
-      if (initial) {
-        quill.root.innerHTML = initial;
-      }
-      {{if and .IsEdit (ne .Newsletter.Status "draft")}}
-        quill.enable(false);
-      {{end}}
-
-      document.getElementById('newsletter-form').addEventListener('submit', function () {
-        document.getElementById('body-input').value = quill.root.innerHTML;
-      });
-
-      {{if not .IsEdit}}
-        var starterTemplates = {{.StarterTemplates}};
-        var picker = document.getElementById('starter-template');
-        starterTemplates.forEach(function (t) {
-          var opt = document.createElement('option');
-          opt.textContent = t.Name;
-          opt.value = t.Name;
-          picker.appendChild(opt);
-        });
-        picker.addEventListener('change', function () {
-          var t = starterTemplates.find(function (t) { return t.Name === picker.value; });
-          if (!t) {
-            return;
-          }
-          document.getElementById('subject').value = t.Subject;
-          quill.root.innerHTML = t.Body;
-        });
-      {{end}}
+      if (initial) { quill.root.innerHTML = initial; }
+      if (readOnly) { quill.enable(false); }
+      paintMode();
     });
   </script>
 {{end}}
