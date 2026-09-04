@@ -61,12 +61,27 @@ handlers and `html/template` rendering live together in `internal/web`
 **Request middleware order matters** (`cmd/server/main.go`): resolve the
 tenant unit from `Host` first (`units.Middleware`, everything downstream
 assumes it's in request context), then attach the logged-in user
-(`auth.WithUser`), then CSRF, then security headers.
+(`auth.WithUser`), then CSRF, then security headers. Note the wrapping
+reads inside-out — the last `handler = X(handler)` line runs first — and
+CSRF genuinely depends on running after `auth.WithUser`, since it sizes
+the request-body limit by whether the caller is signed in.
 
 **Multi-tenancy + roles.** One family/login can exist across both units;
 roles (Cubmaster, Scoutmaster, Den Leader, Treasurer, super_admin, etc.)
 are granted per-unit, not globally — an account with a leader role on one
-subdomain doesn't automatically get it on the other. As of individual
+subdomain doesn't automatically get it on the other.
+
+**Three different questions, and don't confuse them.** "Is this request
+signed in" (`auth.UserFromContext`), "does this login belong to THIS unit"
+(`isUnitMember`/`requireUnitMember`/`viewerIsUnitMember` in
+`internal/web/unit_membership.go`), and "what may it do here"
+(`capabilitiesFor` + the `units.Can*` helpers). Signing in says nothing
+about which unit's pages you may read, because one login deliberately
+spans both — a members-only page gated on "signed in" alone leaks it to
+the other unit's families, which is exactly how the Troop roster became
+readable from the Pack site. A page showing one unit's own data wants
+membership; a page mixing public and members-only content should pick
+which to show by membership, not by session. As of individual
 Scout logins, "the current login" no longer always means "the whole
 family" — every permission check in `internal/web` goes through the
 `rolesFor`/`actingMember`/`isAccountOwner`/`rosterScope` helpers rather

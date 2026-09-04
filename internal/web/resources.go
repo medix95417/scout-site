@@ -32,9 +32,14 @@ func (h *Handlers) ResourcesList(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
 
+	// Members-only resources are this unit's. A signed-in family from the
+	// other unit gets the public list, same as a stranger — see
+	// internal/web/unit_membership.go.
+	isMember := h.viewerIsUnitMember(r)
+
 	var list []resources.Resource
 	var err error
-	if loggedIn {
+	if isMember {
 		list, err = resources.ListForUnit(r.Context(), h.Pool, unit.ID)
 	} else {
 		list, err = resources.ListPublicForUnit(r.Context(), h.Pool, unit.ID)

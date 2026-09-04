@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/47-yonkers/scout-site/internal/advancement"
-	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/roster"
 	"github.com/47-yonkers/scout-site/internal/settings"
@@ -94,9 +93,7 @@ func decorateAdvancement(records []advancement.Record, names map[string]string) 
 
 func (h *Handlers) Advancement(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
-	_, loggedIn := auth.UserFromContext(r.Context())
-	if !loggedIn {
-		http.Redirect(w, r, "/login?next=/advancement", http.StatusSeeOther)
+	if _, _, ok := h.requireUnitMember(w, r, "/advancement"); !ok {
 		return
 	}
 	if !h.requireAdvancementEnabled(w, r, unit.ID) {

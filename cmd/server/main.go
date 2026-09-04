@@ -274,12 +274,25 @@ func main() {
 	mux := http.NewServeMux()
 	handlers.Routes(mux)
 
-	// Middleware order matters: resolve the unit first (everything else
-	// assumes it's in context), then attach the logged-in user if any.
+	// Middleware order matters, and reads inside-out: the LAST wrap here
+	// is the OUTERMOST, so this list runs bottom-to-top. Resolve the unit
+	// first (everything downstream assumes it's in context), then attach
+	// the logged-in user, then CSRF — which is the order
+	// scout-website-architecture-phase1.md and CLAUDE.md both describe.
+	//
+	// CSRF used to be wrapped last of the three, which put it OUTSIDE
+	// auth.WithUser and therefore ran it before any session existed in
+	// the request context. That was invisible while CSRF only compared a
+	// token, and became load-bearing once it had to size the request-body
+	// limit by whether the caller is signed in: outside auth, every
+	// request looks anonymous.
 	var handler http.Handler = mux
+	handler = csrf.Middleware(secureCookie, func(r *http.Request) bool {
+		_, ok := auth.UserFromContext(r.Context())
+		return ok
+	})(handler)
 	handler = auth.WithUser(pool)(handler)
 	handler = units.Middleware(pool)(handler)
-	handler = csrf.Middleware(secureCookie)(handler)
 	// Before securityHeaders only by convention — they touch different
 	// headers. Must be outside every template-rendering handler, since
 	// those read the nonce it puts in the request context.
@@ -288,9 +301,25 @@ func main() {
 	handler = requestLogger(handler)
 
 	srv := &http.Server{
-		Addr:        cfg.ListenAddr,
-		Handler:     handler,
-		ReadTimeout: 10 * time.Second,
+		Addr:    cfg.ListenAddr,
+		Handler: handler,
+
+		// ReadHeaderTimeout, not ReadTimeout, is what defends against a
+		// client that opens a connection and dribbles headers forever
+		// (slowloris): headers are small and must arrive promptly whoever
+		// you are.
+		ReadHeaderTimeout: 10 * time.Second,
+
+		// ReadTimeout covers reading the entire request BODY as well, so
+		// it has to be large enough for the largest upload the site
+		// accepts (internal/csrf's maxRequestBodySize, 250 MB) over a
+		// domestic connection. It was 10 seconds, which meant a parent
+		// uploading a batch of camp photos on a 5 Mbit/s line — roughly
+		// 40 seconds for 25 MB — had the connection killed mid-upload and
+		// saw a broken page rather than any error the app wrote. 250 MB at
+		// a slow-but-real 2 Mbit/s is about 17 minutes, hence the value
+		// below; the size cap, not the clock, is what bounds abuse here.
+		ReadTimeout: 20 * time.Minute,
 		// Must comfortably exceed the slowest a single request can
 		// legitimately block for — currently that's a synchronous outbound
 		// SMTP send (forgot-password, a newsletter recipient), bounded by

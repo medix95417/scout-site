@@ -27,6 +27,57 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Security
+
+- **A family in one unit could read the other unit's roster.** Members-only
+  pages checked only that you were signed in, and one login deliberately
+  works on both subdomains — so a Pack family could open the Troop's
+  roster, family directory, advancement, members-only calendar events,
+  files and patrol pages, in both directions, PDF exports included. They
+  now check membership of the unit being asked for. **A family with a
+  Scout in each unit is unaffected and still sees both sites in full** —
+  membership is held per person per unit, so holding a role in both passes
+  both checks. Pages that mix public and members-only content now choose
+  by membership rather than by session, so a visitor from the other unit
+  sees exactly the public site.
+- **Deactivating a member left their permissions intact.** `members.active`
+  is a soft delete, but the role lookups ignored it, so a Scoutmaster who
+  left the unit vanished from the roster while keeping full admin access.
+  Both lookups now require the member to be active.
+- **The login redirect could be pointed off-site.** `?next=` rejected
+  `//evil.com` but not `/\evil.com`, which browsers resolve to the same
+  thing — a phishing hand-off on the one page where a password has just
+  been typed. It now parses the value and refuses anything naming a scheme
+  or host, plus backslashes and control characters.
+- **An anonymous POST could make the server buffer a 250 MB body.** The
+  size cap has to be applied before the CSRF token can be read, so a
+  request with a junk token still cost a full parse and disk spill.
+  Signed-out requests are now capped at 1 MB; the upload cap applies only
+  to signed-in ones. CSRF middleware moved to run after the user is
+  attached, which is the order the architecture docs already described.
+
+### Fixed
+
+- **Uploads larger than a few megabytes were being killed mid-transfer.**
+  `ReadTimeout` was 10 seconds but covers reading the whole request body,
+  so a parent uploading camp photos on a home connection lost the
+  connection with no error. Split into a 10-second `ReadHeaderTimeout`
+  (which is what actually defends against slowloris) and a `ReadTimeout`
+  sized to the upload cap.
+- The request-size cap and the message shown when you exceed it disagreed
+  — 500 MB in code, 250 MB on screen. Both now say 250 MB, and an
+  over-limit signed-out form gets an accurate message instead of
+  "your form session expired".
+
+### Added
+
+- A demo family with a Scout in **each** unit (`robin.parent.both@example.com`).
+  The only account holding roles in both units was the super admin, whose
+  access comes from being a super admin — useless for checking that an
+  ordinary two-unit family sees both sites, which is how the cross-unit
+  leak above went unnoticed.
+
+
 ## [2.6.0] — 2026-09-04
 
 ### Removed

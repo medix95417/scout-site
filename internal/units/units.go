@@ -292,7 +292,11 @@ func CapabilitiesForRoles(ctx context.Context, pool *pgxpool.Pool, unitID string
 // who is also a Den Leader).
 func RolesForMemberInUnit(ctx context.Context, pool *pgxpool.Pool, memberID, unitID string) ([]string, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT role::text FROM role_assignments WHERE member_id = $1 AND unit_id = $2
+		SELECT role_assignments.role::text
+		FROM role_assignments
+		JOIN members ON members.id = role_assignments.member_id
+		WHERE role_assignments.member_id = $1 AND role_assignments.unit_id = $2
+		  AND members.active
 	`, memberID, unitID)
 	if err != nil {
 		return nil, err
@@ -429,6 +433,7 @@ func RolesForFamilyInUnit(ctx context.Context, pool *pgxpool.Pool, familyID, uni
 		FROM role_assignments
 		JOIN members ON members.id = role_assignments.member_id
 		WHERE members.family_id = $1 AND role_assignments.unit_id = $2
+		  AND members.active
 	`, familyID, unitID)
 	if err != nil {
 		return nil, err

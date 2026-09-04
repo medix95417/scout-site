@@ -349,8 +349,15 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 // out as a pure function so it's unit-testable without a real storage
 // backend — the only file a logged-out visitor may ever fetch is one a
 // leader has explicitly marked public (see migration 0016).
-func requiresLoginToDownload(f files.File, loggedIn bool) bool {
-	return !f.Public && !loggedIn
+// requiresLoginToDownload decides whether a file may be served.
+//
+// The second argument is unit MEMBERSHIP, not merely "signed in": files
+// are owned by a unit, and a family from the other unit is no more
+// entitled to this unit's members-only photos than a stranger is. A file
+// a leader marked public stays public for everyone, which is what keeps
+// homepage images working for logged-out visitors.
+func requiresLoginToDownload(f files.File, isUnitMember bool) bool {
+	return !f.Public && !isUnitMember
 }
 
 func (h *Handlers) FileDownload(w http.ResponseWriter, r *http.Request) {
@@ -375,8 +382,7 @@ func (h *Handlers) FileDownload(w http.ResponseWriter, r *http.Request) {
 	// public (see migration 0016) — that's how a homepage image slot (see
 	// content-admin.html's "choose from library" picker) can point at a
 	// library photo and still render for a logged-out visitor.
-	_, loggedIn := auth.UserFromContext(r.Context())
-	if requiresLoginToDownload(f, loggedIn) {
+	if requiresLoginToDownload(f, h.viewerIsUnitMember(r)) {
 		http.Redirect(w, r, "/login?next=/files", http.StatusSeeOther)
 		return
 	}
@@ -440,8 +446,7 @@ func (h *Handlers) FileThumbnail(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	_, loggedIn := auth.UserFromContext(r.Context())
-	if requiresLoginToDownload(f, loggedIn) {
+	if requiresLoginToDownload(f, h.viewerIsUnitMember(r)) {
 		http.Redirect(w, r, "/login?next=/files", http.StatusSeeOther)
 		return
 	}

@@ -72,6 +72,23 @@ func (h *Handlers) CalendarFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Membership is re-checked on every fetch, not just when the link was
+	// issued. A family that leaves this unit — or was never in it — must
+	// stop receiving its members-only events, and a subscription that
+	// keeps working for months after the fact is exactly the way that
+	// would go unnoticed. Same reason the sub-group scoping below is
+	// recomputed per request rather than baked into the token.
+	member, err := h.isUnitMember(r.Context(), user, unit.ID)
+	if err != nil {
+		log.Printf("web: checking feed owner's unit membership: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !member {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
 	now := time.Now()
 	events, err := calendar.ListForRangeForUnit(r.Context(), h.Pool, unit.ID,
 		now.Add(-feedWindowPast), now.Add(feedWindowFuture))

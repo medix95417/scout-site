@@ -141,9 +141,7 @@ func (h *Handlers) MyFamilyUpdateMember(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handlers) FamilyDirectory(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
-	_, loggedIn := auth.UserFromContext(r.Context())
-	if !loggedIn {
-		http.Redirect(w, r, "/login?next=/directory", http.StatusSeeOther)
+	if _, _, ok := h.requireUnitMember(w, r, "/directory"); !ok {
 		return
 	}
 
@@ -169,9 +167,7 @@ func (h *Handlers) FamilyDirectory(w http.ResponseWriter, r *http.Request) {
 // out for printing/saving rather than browsing.
 func (h *Handlers) DirectoryExportPDF(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
-	_, loggedIn := auth.UserFromContext(r.Context())
-	if !loggedIn {
-		http.Redirect(w, r, "/login?next=/directory", http.StatusSeeOther)
+	if _, _, ok := h.requireUnitMember(w, r, "/directory"); !ok {
 		return
 	}
 
