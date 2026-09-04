@@ -224,11 +224,13 @@ transfers — Phase 2 (below) adds the ledger, accounts, and trip funds, but
 still not real payment processing (Stripe/PayPal credentials and
 per-unit on/off toggles exist in `/admin/settings`; there's no actual
 checkout flow wired up to them yet). The newsletter email feature,
-digital permission slips, rank/badge advancement tracking, and the
-Scoutbook CSV import job (`/admin/roster/import` — a leader pastes a
-Scoutbook roster export, matched by header names) were all originally
-listed here as Phase 3 candidates not yet built; all four have since
-shipped.
+rank/badge advancement tracking, and the Scoutbook CSV import job
+(`/admin/roster/import` — a leader pastes a Scoutbook roster export,
+matched by header names) were all originally listed here as Phase 3
+candidates not yet built; all three have since shipped. Digital
+permission slips shipped too and were then removed again in 2.6.0 — the
+unit collects consent on paper, so the feature and its tables were
+dropped rather than left switched off (migration 0043).
 
 **Also added post-Phase-2 — a fundraiser storefront (the order-taking
 half of online payments):** a Treasurer can give any Fundraiser an item

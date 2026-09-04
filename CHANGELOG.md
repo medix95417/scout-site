@@ -27,6 +27,27 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Removed
+
+- **Permission slips are gone.** The unit collects consent on paper, so
+  rather than leave a switched-off feature and two tables nobody reads,
+  the whole thing is removed: the `internal/permission` package, the
+  handlers, the template, the two settings toggles, the per-event
+  "requires a permission slip" flag, and both help topics.
+  Migration `0043` drops `permission_slips` and
+  `permission_slip_signatures` and the `events.requires_permission_slip`
+  column. **This deletes any slips and signatures already collected** —
+  they survive only in a backup taken before the migration ran.
+
+### Added
+
+- **The join enquiry form is now linked from the homepage.** An
+  "Interested in joining?" call-to-action sits directly under Meeting Info
+  and Leadership & Contact, where both existing "How to Join" buttons
+  already land. Shown only to signed-out visitors, and only while the unit
+  has the form open (`prospect_form_enabled`) — so closing the form removes
+  the link rather than leaving one that 404s.
+
 ### Fixed
 
 - **A welcome email can no longer be saved without `{{password}}`.**

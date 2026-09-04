@@ -64,9 +64,6 @@
         <label class="flex items-center gap-2 text-sm">
           <input type="checkbox" name="public" value="1"> Visible to the public
         </label>
-        <label class="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="requires_permission_slip" value="1"> Requires a permission slip
-        </label>
         <div>
           <label class="block text-xs text-gray-500 mb-1" for="repeat_frequency">Repeats (optional)</label>
           <div class="flex gap-2">
@@ -178,7 +175,6 @@
             <button name="response" value="yes" class="text-xs rounded-full border px-2 py-1">I'm going</button>
             <button name="response" value="maybe" class="text-xs rounded-full border px-2 py-1">Maybe</button>
             <button name="response" value="no" class="text-xs rounded-full border px-2 py-1">Can't make it</button>
-            {{if .ShowPermissionSlip}}<a href="/calendar/{{.ID}}/permission-slip" class="text-xs underline ml-1" style="color: var(--unit-color);">Permission slip</a>{{end}}
             {{if $.CanManageFiles}}<a href="/files" class="text-xs underline ml-1" style="color: var(--unit-color);">Attach a file</a>{{end}}
             {{if $.CanManageFiles}}<a href="/calendar/{{.ID}}/attendees.pdf" class="text-xs underline ml-1" style="color: var(--unit-color);">Print attendee roster</a>{{end}}
           </form>
@@ -211,9 +207,6 @@
                   {{end}}
                   <label class="flex items-center gap-2 text-xs">
                     <input type="checkbox" name="public" value="1" {{if eq .Visibility "public"}}checked{{end}}> Visible to the public
-                  </label>
-                  <label class="flex items-center gap-2 text-xs">
-                    <input type="checkbox" name="requires_permission_slip" value="1" {{if .RequiresPermissionSlip}}checked{{end}}> Requires a permission slip
                   </label>
                   <button type="submit" class="rounded-md px-3 py-1.5 text-xs btn-accent">Save changes</button>
                 </form>

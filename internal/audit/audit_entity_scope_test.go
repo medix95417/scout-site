@@ -35,31 +35,29 @@ import (
 // Both are already covered by the role_assignments-based unions, so they
 // map to the table those unions select from.
 var entityTypeTable = map[string]string{
-	"advancement_record":        "advancement_records",
-	"content_page":              "content_pages",
-	"custom_role":               "custom_roles",
-	"event":                     "events",
-	"family":                    "role_assignments", // families.id, via members.family_id
-	"family_address":            "role_assignments", // families.id, via members.family_id
-	"fundraiser":                "fundraisers",
-	"fundraiser_allocation":     "fundraiser_allocations",
-	"fundraiser_order":          "fundraiser_orders",
-	"leader":                    "leaders",
-	"ledger_account":            "ledger_accounts",
-	"ledger_transaction":        "ledger_transactions",
-	"member":                    "role_assignments", // members.id, via role_assignments.member_id
-	"member_contact_info":       "role_assignments", // members.id, via role_assignments.member_id
-	"newsletter":                "newsletters",
-	"permission_slip":           "permission_slips",
-	"permission_slip_signature": "permission_slip_signatures",
-	"resource":                  "resources",
-	"role_assignment":           "role_assignments",
-	"saved_treasury_report":     "saved_treasury_reports",
-	"sub_group":                 "sub_groups",
-	"system_setting":            "system_settings",
-	"unit_setting":              "unit_settings",
-	"bank_reconciliation":       "bank_reconciliations",
-	"prospect":                  "prospects",
+	"advancement_record":    "advancement_records",
+	"content_page":          "content_pages",
+	"custom_role":           "custom_roles",
+	"event":                 "events",
+	"family":                "role_assignments", // families.id, via members.family_id
+	"family_address":        "role_assignments", // families.id, via members.family_id
+	"fundraiser":            "fundraisers",
+	"fundraiser_allocation": "fundraiser_allocations",
+	"fundraiser_order":      "fundraiser_orders",
+	"leader":                "leaders",
+	"ledger_account":        "ledger_accounts",
+	"ledger_transaction":    "ledger_transactions",
+	"member":                "role_assignments", // members.id, via role_assignments.member_id
+	"member_contact_info":   "role_assignments", // members.id, via role_assignments.member_id
+	"newsletter":            "newsletters",
+	"resource":              "resources",
+	"role_assignment":       "role_assignments",
+	"saved_treasury_report": "saved_treasury_reports",
+	"sub_group":             "sub_groups",
+	"system_setting":        "system_settings",
+	"unit_setting":          "unit_settings",
+	"bank_reconciliation":   "bank_reconciliations",
+	"prospect":              "prospects",
 }
 
 var entityTypeLiteral = regexp.MustCompile(`EntityType:\s*"([a-z_]+)"`)

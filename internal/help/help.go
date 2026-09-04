@@ -107,7 +107,7 @@ type Topic struct {
 	ScoutLoginOnly bool
 
 	// FamilyLoginOnly is its mirror, for topics that only make sense on a
-	// shared family login — signing a permission slip, for instance,
+	// shared family login — a parent-only action, for instance,
 	// which an individual Scout login is refused.
 	FamilyLoginOnly bool
 }
@@ -196,17 +196,6 @@ var Topics = []Topic{
 		Body: []string{
 			"The Calendar lists everything coming up. Events marked for a single den or patrol only show for the families in it.",
 			"Open an event to RSVP. Changing your mind later is fine — just RSVP again with the new answer.",
-		},
-	},
-	{
-		ID:               "permission-slips",
-		Title:            "Signing a permission slip",
-		Audience:         AudienceEveryone,
-		RequiresSettings: []string{settings.PermissionSlipsEnabled},
-		FamilyLoginOnly:  true,
-		Body: []string{
-			"When an event needs a permission slip, a \"Permission slip\" link appears next to it on the calendar. Open it, read it, and sign for each Scout who's going.",
-			"Only a parent or guardian login can sign — a Scout's own login can read the slip but can't sign it for themselves.",
 		},
 	},
 	{
@@ -307,17 +296,6 @@ var Topics = []Topic{
 		Body: []string{
 			"Events can be public (on the site for anyone) or members-only, and can be scoped to one den or patrol so only those families see them.",
 			"A repeating event is created as a series; editing or deleting one later asks whether you mean that single date or the whole series.",
-		},
-	},
-	{
-		ID:                 "permission-slips-manage",
-		Title:              "Collecting permission slips",
-		Audience:           AudienceLeader,
-		RequiredCapability: units.CapEditContent,
-		RequiresSettings:   []string{settings.PermissionSlipsEnabled},
-		Body: []string{
-			"Attach a slip to an event and families can sign it from the calendar. You'll see who has signed and who hasn't at a glance.",
-			"If most of your events don't need one, there's a setting that limits the slip link to events explicitly marked as requiring it, so a weekly meeting doesn't show one.",
 		},
 	},
 	{
@@ -424,7 +402,7 @@ var Topics = []Topic{
 		Audience:           AudienceAdmin,
 		RequiredCapability: units.CapSuperAdmin,
 		Body: []string{
-			"Site Settings switches whole features on and off for a unit — the treasury, advancement, newsletters, permission slips, family access to Scout account balances.",
+			"Site Settings switches whole features on and off for a unit — the treasury, advancement, newsletters, family access to Scout account balances.",
 			"Turning something off closes its pages and hides its links, but never deletes what's underneath. Turn it back on and the data is exactly as it was. This help page follows the same rule: it stops describing a feature that's switched off.",
 			"The Troop and the Pack are configured separately, so turning something off on one doesn't affect the other.",
 		},

@@ -151,7 +151,7 @@
 
   <!-- 5. Meeting info + leadership/contact — the #join anchor the hero
        and Our Program both point at. -->
-  <div id="join" class="grid gap-6 sm:grid-cols-2 mb-14">
+  <div id="join" class="grid gap-6 sm:grid-cols-2 mb-6">
     <section class="rounded-xl border border-gray-200 bg-white p-5">
       <h2 class="text-lg font-semibold mb-2">Meeting Info</h2>
       <p class="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{{.Meeting}}</p>
@@ -161,6 +161,25 @@
       <p class="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{{.Leadership}}</p>
     </section>
   </div>
+
+  {{/* The enquiry form itself. Sits directly under the meeting/contact
+       details because this is where both "How to Join" buttons land, and
+       a family who has just read when and where the unit meets is exactly
+       the one ready to get in touch. Hidden from signed-in families (they
+       have already joined) and whenever the unit has closed the form. */}}
+  {{if and .JoinFormOpen (not .LoggedIn)}}
+    <section class="mb-14 rounded-xl border-2 p-6 text-center" style="border-color: var(--unit-color);">
+      <h2 class="text-xl font-semibold mb-2">Interested in joining?</h2>
+      <p class="text-gray-700 text-sm max-w-xl mx-auto mb-4">
+        Tell us a little about your Scout and we&#39;ll be in touch. Visitors are
+        always welcome at a meeting first &mdash; there&#39;s no obligation, and no
+        need to join before coming along.
+      </p>
+      <a href="/join" class="inline-block rounded-md px-6 py-2.5 font-medium btn-accent">
+        Tell us about your Scout &#8594;
+      </a>
+    </section>
+  {{end}}
 
   {{if .CanEditContent}}
     <div class="mb-10 text-right">

@@ -224,37 +224,6 @@ const ScoutAccountSelfService = "scout_account_self_service"
 // enquiries already received stay on /admin/prospects.
 const ProspectFormEnabled = "prospect_form_enabled"
 
-// PermissionSlipsEnabled is the feature's master switch, distinct from
-// PermissionSlipEnforcement below (which only narrows *which* events show
-// a slip while the feature is on). Defaults to true, so a unit already
-// using slips sees no change.
-//
-// Off means off for everyone, with no leader escape hatch: no link on any
-// event on /calendar for a family, a logged-out visitor, or a leader, and
-// every /calendar/{id}/permission-slip route returns 404 — including for
-// an event a leader flagged as requiring one, or already attached a real
-// slip to. That last part is the point of the setting rather than an edge
-// case: a unit that collects slips on paper doesn't want a half-finished
-// digital slip reachable by URL, and it especially doesn't want one
-// listed on the calendar a prospective family is reading.
-//
-// Nothing underneath is deleted — slips and the signatures already
-// collected stay in the database exactly as they are, and turning the
-// feature back on restores them. Same treatment as TreasuryEnabled.
-const PermissionSlipsEnabled = "permission_slips_enabled"
-
-// PermissionSlipEnforcement controls whether the "Permission slip" link on
-// /calendar only shows for events a leader has explicitly marked as
-// requiring one (see calendar.Event.RequiresPermissionSlip) — a weekly
-// meeting doesn't need it cluttering every single event. Defaults to
-// false: every event keeps showing the link, same as before this existed,
-// so nothing changes until a unit opts in. A leader (CanEditUnitContent)
-// can always reach an event's permission-slip page regardless of this
-// setting or the event's own flag — there's no way to edit an event after
-// creation yet, so a leader who forgot to check the box still needs an
-// escape hatch to attach a slip after the fact.
-const PermissionSlipEnforcement = "permission_slip_enforcement"
-
 // TreasuryEnabled controls whether the Treasury area (/treasury and its
 // sub-pages, including the fundraiser storefront's admin management) and
 // the family self-service "My Accounts" view (/accounts) are reachable
@@ -358,18 +327,6 @@ var UnitToggles = []UnitToggle{
 			"On by default. Turning it off closes the form to the public — anyone with the link gets \"not found\" — " +
 			"but keeps every enquiry already received on the Prospects page, so nothing is lost by pausing it.",
 		Default: true,
-	},
-	{
-		Key:         PermissionSlipsEnabled,
-		Label:       "Permission slips",
-		Description: "On (default): families can view and sign permission slips for events from the calendar. Turn off for a unit that handles slips on paper — the link disappears from every event for everyone, leaders included, and the slip pages return \"not found\" even for an event already marked as needing one. Slips and signatures already recorded are kept, and come back if you turn this on again.",
-		Default:     true,
-	},
-	{
-		Key:         PermissionSlipEnforcement,
-		Label:       "Only show permission slips on events that need one",
-		Description: "Off (default): every event shows a \"Permission slip\" link, whether or not it needs one. On: only events a leader marks \"Requires a permission slip\" when creating them show that link — a weekly meeting won't display it at all. Leaders can always reach an event's permission slip page either way.",
-		Default:     false,
 	},
 	{
 		Key:         PaymentsStripeEnabled,

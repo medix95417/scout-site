@@ -53,8 +53,8 @@ func (h *Handlers) Help(w http.ResponseWriter, r *http.Request) {
 	sections := help.For(help.Viewer{
 		Capabilities: caps,
 		// user.MemberID is set only for an individual Scout's own login;
-		// a shared family login leaves it nil. Same test the treasury and
-		// permission-slip handlers use to tell the two apart.
+		// a shared family login leaves it nil. Same test the treasury
+		// handlers use to tell the two apart.
 		IsIndividualScout: user.MemberID != nil,
 		Enabled:           enabled,
 	})
