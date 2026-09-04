@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.6.1] — 2026-09-04
+
 ### Security
 
 - **A family in one unit could read the other unit's roster.** Members-only
