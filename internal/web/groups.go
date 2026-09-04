@@ -71,10 +71,8 @@ func (h *Handlers) GroupsList(w http.ResponseWriter, r *http.Request) {
 // GroupView is one patrol/den's own members-only page: its blurb, member
 // list, and linked photos.
 func (h *Handlers) GroupView(w http.ResponseWriter, r *http.Request) {
-	unit, _ := units.UnitFromContext(r.Context())
-	user, loggedIn := auth.UserFromContext(r.Context())
-	if !loggedIn {
-		http.Redirect(w, r, "/login?next=/groups/"+r.PathValue("id"), http.StatusSeeOther)
+	unit, user, ok := h.requireUnitMember(w, r, "/groups/"+r.PathValue("id"))
+	if !ok {
 		return
 	}
 

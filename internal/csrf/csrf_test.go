@@ -11,9 +11,16 @@ import (
 )
 
 func handlerUnderTest() http.Handler {
-	return Middleware(false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
+	return handlerUnderTestAs(false)
+}
+
+// handlerUnderTestAs builds the middleware with a fixed answer to "is this
+// request authenticated", which is what decides the request-body limit.
+func handlerUnderTestAs(authed bool) http.Handler {
+	return Middleware(false, func(*http.Request) bool { return authed })(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
 }
 
 func TestMiddleware_GETIssuesCookie(t *testing.T) {
@@ -167,5 +174,52 @@ func TestMiddleware_ReusesExistingCookie(t *testing.T) {
 
 	if len(rec2.Result().Cookies()) != 0 {
 		t.Error("Middleware re-issued a CSRF cookie when a valid one was already present")
+	}
+}
+
+// An anonymous POST must not be able to make the server buffer an
+// upload-sized body.
+//
+// The token can only be checked after the body is parsed — for multipart
+// it is a field inside the body — so a request with a junk token still
+// costs a full parse first. At the signed-in cap that is 250 MB of
+// buffering and disk spill per request, from anyone, repeatable: a cheap
+// way to fill a small VPS's disk. Signed-out traffic on this site is
+// logins, password resets and join enquiries, all a few kilobytes.
+func TestAnonymousPostIsCappedFarBelowTheUploadLimit(t *testing.T) {
+	if maxAnonymousRequestBodySize >= maxRequestBodySize {
+		t.Fatalf("anonymous cap (%d) must be well below the signed-in cap (%d)",
+			maxAnonymousRequestBodySize, maxRequestBodySize)
+	}
+
+	// A body comfortably over the anonymous cap but under the signed-in one.
+	big := strings.Repeat("x", maxAnonymousRequestBodySize+(1<<20))
+
+	for _, tc := range []struct {
+		name     string
+		authed   bool
+		wantCode int
+	}{
+		{"anonymous is refused as too large", false, http.StatusRequestEntityTooLarge},
+		// Signed in, the same body is allowed through the size check and
+		// then fails on the token instead — proving the cap, not the body,
+		// is what changed.
+		{"signed in gets the full cap", true, http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := handlerUnderTestAs(tc.authed)
+
+			form := url.Values{"csrf_token": {"definitely-not-valid"}, "padding": {big}}
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.AddCookie(&http.Cookie{Name: CookieName, Value: "some-token-value"})
+
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != tc.wantCode {
+				t.Errorf("got %d, want %d", rec.Code, tc.wantCode)
+			}
+		})
 	}
 }

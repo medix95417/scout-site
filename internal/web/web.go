@@ -14,6 +14,7 @@ import (
 	"log"
 	"math/rand/v2"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -772,29 +773,36 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 type baseData struct {
 	Unit                     units.Unit
 	LoggedIn                 bool
-	CanEditContent           bool              // leader roles only — drives the "Edit Homepage" nav link and homepage edit affordances
-	CanManageLedger          bool              // Treasurer/super_admin in *this* unit — drives the "Treasury" nav link
-	CanApproveExpenses       bool              // Cubmaster/Scoutmaster/super_admin in *this* unit — drives the "Authorize Spending" nav link, see internal/web/expense_approvals.go
-	IsSuperAdmin             bool              // super_admin in *this* unit — drives the "Site Settings" nav link (see internal/web/settings_admin.go)
-	AdvancementEnabled       bool              // this unit's settings.AdvancementEnabled toggle — drives the "Advancement"/"Manage Advancement" nav links, see internal/web/advancement.go
-	TreasuryEnabled          bool              // this unit's settings.TreasuryEnabled toggle — drives the "My Accounts"/"Treasury"/"Reports" nav links, see internal/web/treasury.go's requireTreasuryEnabled
-	NewsletterEnabled        bool              // this unit's settings.NewsletterEnabled toggle — drives the "Newsletters" nav link, see internal/web/newsletter.go
-	ScoutAccountsSelfService bool              // this unit's settings.ScoutAccountSelfService toggle — drives the "My Accounts" nav link and family self-service account access, see internal/web/accounts.go
-	PasswordResetEnabled     bool              // site-wide settings.PasswordResetEnabled toggle — drives whether the login page's "Forgot your password?" link points to the reset form or an explanation, see internal/web/password_reset.go. Computed for every request (not just logged-in ones), since /login and /forgot-password are reached signed out
-	NeedsTwoFactorSetup      bool              // this login holds a treasury role, or the require-two-factor-for-all setting is on, and hasn't confirmed TOTP enrollment yet — drives a persistent nudge banner, see base.html
-	NavSubGroups             []roster.SubGroup // every patrol/den in this unit, for the hamburger nav's Patrols/Dens submenu (see base.html) — named distinctly from any page's own "Groups" field (e.g. internal/web/groups.go's GroupsList) so embedding baseData never shadows a page's own data
-	PageHeroImageURL         string            // this request's page hero banner image, if the current path is one of content.HeroPages and a leader has set one — see heroKeyForPath and base.html. Named distinctly from the Home handler's own "HeroImageURL" field (for the homepage's separate, richer hero mechanism) so embedding baseData never lets one shadow the other
-	PageHeroSize             string            // content.HeroSize{Short,Medium,Tall} for PageHeroImageURL, already normalized — see base.html's heroSizeClass
-	MainWidthClass           string            // overrides <main>'s default max-w-4xl (see base.html) for pages that need extra width — currently just the homepage, whose Recent Activities gallery grid needs the room; empty means "use the default" for every other page
-	FooterFacebookURL        string            // site-wide footer's social icons — see h.socialLinks. Named distinctly from the Home handler's own FacebookURL/InstagramURL/TikTokURL fields so embedding baseData never lets one shadow the other
-	FooterInstagramURL       string
-	FooterTikTokURL          string
-	FooterYear               int // current year, for the footer's copyright line
-	PageTitle                string
-	Flash                    string
-	CSPNonce                 string // per-request Content-Security-Policy nonce — every inline <script> in a template must carry it or the browser won't run it (see internal/csp)
-	CSRFToken                string // embedded as a hidden field in every <form method="post"> — see internal/csrf
-	Version                  string // this build's release version — see internal/version, shown in base.html's footer
+	CanEditContent           bool // leader roles only — drives the "Edit Homepage" nav link and homepage edit affordances
+	CanManageLedger          bool // Treasurer/super_admin in *this* unit — drives the "Treasury" nav link
+	CanApproveExpenses       bool // Cubmaster/Scoutmaster/super_admin in *this* unit — drives the "Authorize Spending" nav link, see internal/web/expense_approvals.go
+	IsSuperAdmin             bool // super_admin in *this* unit — drives the "Site Settings" nav link (see internal/web/settings_admin.go)
+	AdvancementEnabled       bool // this unit's settings.AdvancementEnabled toggle — drives the "Advancement"/"Manage Advancement" nav links, see internal/web/advancement.go
+	TreasuryEnabled          bool // this unit's settings.TreasuryEnabled toggle — drives the "My Accounts"/"Treasury"/"Reports" nav links, see internal/web/treasury.go's requireTreasuryEnabled
+	NewsletterEnabled        bool // this unit's settings.NewsletterEnabled toggle — drives the "Newsletters" nav link, see internal/web/newsletter.go
+	ScoutAccountsSelfService bool // this unit's settings.ScoutAccountSelfService toggle — drives the "My Accounts" nav link and family self-service account access, see internal/web/accounts.go
+	PasswordResetEnabled     bool // site-wide settings.PasswordResetEnabled toggle — drives whether the login page's "Forgot your password?" link points to the reset form or an explanation, see internal/web/password_reset.go. Computed for every request (not just logged-in ones), since /login and /forgot-password are reached signed out
+	NeedsTwoFactorSetup      bool // this login holds a treasury role, or the require-two-factor-for-all setting is on, and hasn't confirmed TOTP enrollment yet — drives a persistent nudge banner, see base.html
+	// IsUnitMember drives which nav links are shown: the unit-scoped ones
+	// (roster, directory, patrols/dens, advancement, files) are pointless
+	// for a signed-in family from the OTHER unit, who would only get a
+	// "this page is for X families" refusal on clicking them. Self-scoped
+	// links (My Family, Help, Security) stay under LoggedIn, since they
+	// work on either site. See internal/web/unit_membership.go.
+	IsUnitMember       bool
+	NavSubGroups       []roster.SubGroup // every patrol/den in this unit, for the hamburger nav's Patrols/Dens submenu (see base.html) — named distinctly from any page's own "Groups" field (e.g. internal/web/groups.go's GroupsList) so embedding baseData never shadows a page's own data
+	PageHeroImageURL   string            // this request's page hero banner image, if the current path is one of content.HeroPages and a leader has set one — see heroKeyForPath and base.html. Named distinctly from the Home handler's own "HeroImageURL" field (for the homepage's separate, richer hero mechanism) so embedding baseData never lets one shadow the other
+	PageHeroSize       string            // content.HeroSize{Short,Medium,Tall} for PageHeroImageURL, already normalized — see base.html's heroSizeClass
+	MainWidthClass     string            // overrides <main>'s default max-w-4xl (see base.html) for pages that need extra width — currently just the homepage, whose Recent Activities gallery grid needs the room; empty means "use the default" for every other page
+	FooterFacebookURL  string            // site-wide footer's social icons — see h.socialLinks. Named distinctly from the Home handler's own FacebookURL/InstagramURL/TikTokURL fields so embedding baseData never lets one shadow the other
+	FooterInstagramURL string
+	FooterTikTokURL    string
+	FooterYear         int // current year, for the footer's copyright line
+	PageTitle          string
+	Flash              string
+	CSPNonce           string // per-request Content-Security-Policy nonce — every inline <script> in a template must carry it or the browser won't run it (see internal/csp)
+	CSRFToken          string // embedded as a hidden field in every <form method="post"> — see internal/csrf
+	Version            string // this build's release version — see internal/version, shown in base.html's footer
 }
 
 // rolesFor resolves the current login's roles in a unit. A family-wide
@@ -1009,6 +1017,14 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 		caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 		if err != nil {
 			log.Printf("web: loading capabilities: %v", err)
+		}
+		// Any role in this unit is membership; capabilities say what that
+		// membership may do. Derived from the roles already loaded above
+		// rather than a second query.
+		if roles, err := h.rolesFor(r.Context(), user, unit.ID); err != nil {
+			log.Printf("web: loading roles for nav: %v", err)
+		} else {
+			data.IsUnitMember = len(roles) > 0
 		}
 		data.CanEditContent = units.CanEditUnitContent(caps)
 		data.CanManageLedger = units.CanManageLedger(caps)
@@ -1506,8 +1522,48 @@ func (h *Handlers) HomeContentSave(w http.ResponseWriter, r *http.Request) {
 // legitimate login silently hand the visitor off to an attacker-controlled
 // page (a phishing pivot that abuses trust in the real login flow). "//" is
 // rejected too, since browsers treat a scheme-relative URL as absolute.
+// sanitizeNextPath decides whether a ?next= value is a safe place to send
+// somebody after login, and falls back to the homepage when it isn't.
+//
+// The value arrives in a URL anyone can craft and is followed immediately
+// after a password is typed, which makes an off-site redirect here a
+// credential-phishing step rather than a curiosity: land on the real
+// login page, sign in, get bounced to a copy that asks you to "confirm"
+// your password.
+//
+// Rejecting "//host" alone is not enough. Browsers normalise a backslash
+// to a forward slash while resolving a URL, so "/\evil.com" is fetched as
+// "//evil.com" — a protocol-relative URL to another origin — even though
+// it passes a naive first-character check. Rather than enumerate the
+// tricks, this parses the value and insists it names no scheme and no
+// host, so anything that could leave this site is refused whatever
+// spelling it arrives in.
 func sanitizeNextPath(next string) string {
-	if next == "" || next[0] != '/' || strings.HasPrefix(next, "//") {
+	if next == "" || next[0] != '/' {
+		return "/"
+	}
+	// A backslash never legitimately appears in a path this app generates,
+	// and browsers treat it as a slash — so refuse it outright rather than
+	// reasoning about where it might end up.
+	if strings.ContainsAny(next, `\`) {
+		return "/"
+	}
+	// Control characters (including a stray newline or tab) can be dropped
+	// or reinterpreted by a browser mid-parse, changing what the rest of
+	// the string means.
+	for _, r := range next {
+		if r < 0x20 || r == 0x7f {
+			return "/"
+		}
+	}
+	u, err := url.Parse(next)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.Opaque != "" {
+		return "/"
+	}
+	// url.Parse leaves "//host/path" with an empty Scheme but a non-empty
+	// Host, so the check above catches it; this is belt-and-braces for a
+	// value that somehow parses with neither.
+	if strings.HasPrefix(next, "//") {
 		return "/"
 	}
 	return next
@@ -1665,8 +1721,7 @@ func rosterContactDisplay(e family.RosterEntry) string {
 
 func (h *Handlers) Roster(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
-	if _, loggedIn := auth.UserFromContext(r.Context()); !loggedIn {
-		http.Redirect(w, r, "/login?next=/roster", http.StatusSeeOther)
+	if _, _, ok := h.requireUnitMember(w, r, "/roster"); !ok {
 		return
 	}
 
@@ -1688,8 +1743,7 @@ func (h *Handlers) Roster(w http.ResponseWriter, r *http.Request) {
 // be logged in" gate, rendered as a downloadable PDF.
 func (h *Handlers) RosterExportPDF(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
-	if _, loggedIn := auth.UserFromContext(r.Context()); !loggedIn {
-		http.Redirect(w, r, "/login?next=/roster", http.StatusSeeOther)
+	if _, _, ok := h.requireUnitMember(w, r, "/roster"); !ok {
 		return
 	}
 
@@ -1762,13 +1816,18 @@ func parseMonthParam(raw string, today time.Time) (int, time.Month) {
 func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
+	// Members-only events belong to the families of THIS unit. Being
+	// signed in is not enough, because one login legitimately spans both
+	// units — see internal/web/unit_membership.go. A signed-in visitor
+	// from the other unit sees the same public calendar a stranger does.
+	isMember := h.viewerIsUnitMember(r)
 
 	// Unauthenticated visitors must only ever see public events — members-only
 	// events (the default visibility for anything not explicitly marked
 	// public) are for logged-in families only.
 	var events []calendar.Event
 	var err error
-	if loggedIn {
+	if isMember {
 		events, err = calendar.ListUpcomingForUnit(r.Context(), h.Pool, unit.ID)
 	} else {
 		events, err = calendar.ListUpcomingPublicForUnit(r.Context(), h.Pool, unit.ID)
@@ -1783,7 +1842,7 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 	year, month := parseMonthParam(r.URL.Query().Get("month"), today)
 	rangeStart, rangeEnd := calendar.GridRange(year, month, today.Location())
 	var monthEvents []calendar.Event
-	if loggedIn {
+	if isMember {
 		monthEvents, err = calendar.ListForRangeForUnit(r.Context(), h.Pool, unit.ID, rangeStart, rangeEnd)
 	} else {
 		monthEvents, err = calendar.ListForRangePublicForUnit(r.Context(), h.Pool, unit.ID, rangeStart, rangeEnd)
@@ -2269,10 +2328,11 @@ func (h *Handlers) CalendarDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) CalendarRSVP(w http.ResponseWriter, r *http.Request) {
-	unit, _ := units.UnitFromContext(r.Context())
-	user, loggedIn := auth.UserFromContext(r.Context())
-	if !loggedIn {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	// RSVPing is acting on this unit's event, so it needs membership here
+	// and not merely a session — a family in the other unit has no
+	// business adding themselves to this unit's attendee list.
+	unit, user, ok := h.requireUnitMember(w, r, "/calendar")
+	if !ok {
 		return
 	}
 	eventID := r.PathValue("id")
@@ -2339,12 +2399,15 @@ func (h *Handlers) ApprovalDecide(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) CalendarExportPDF(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
+	// Same rule as the on-screen calendar: the printable copy must not
+	// carry members-only events to a family from the other unit.
+	isMember := h.viewerIsUnitMember(r)
 
 	from, to := parseDateRangeParam(r)
 
 	var events []calendar.Event
 	var err error
-	if loggedIn {
+	if isMember {
 		events, err = calendar.ListForRangeForUnit(r.Context(), h.Pool, unit.ID, from, to)
 	} else {
 		events, err = calendar.ListForRangePublicForUnit(r.Context(), h.Pool, unit.ID, from, to)

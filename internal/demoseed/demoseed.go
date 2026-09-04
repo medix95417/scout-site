@@ -253,6 +253,40 @@ func Run(ctx context.Context, pool *pgxpool.Pool) (Summary, error) {
 	}
 	s.Personas = append(s.Personas, Persona{Label: "Parent + Scout", Unit: "Pack 47", Email: "jesse.parent.pack@example.com", Password: DemoPassword, Note: "Family login: Jesse Nakamura (parent) and Morgan Nakamura (scout) share this account."})
 
+	// A family with a Scout in EACH unit — an older sibling in the Troop
+	// and a younger one in the Pack, on one shared login. This is the
+	// case the whole cross-unit design exists for (see
+	// scout-website-requirements.md Section 2's single-sign-on model),
+	// and it is deliberately a plain parent with no leadership role
+	// anywhere, so it exercises membership rather than capability.
+	//
+	// Without it in the demo data, the only account holding roles in both
+	// units was the super admin, whose access comes from being a super
+	// admin — which makes it useless for checking that an ordinary
+	// two-unit family sees both sites. That gap is exactly how the
+	// cross-unit roster leak fixed in this change went unnoticed.
+	robin, err := addPersona(ctx, pool, passwordHash, actor, "Okonkwo Family", "robin.parent.both@example.com", "Robin", "Okonkwo", "adult", troop.ID, nil, "parent")
+	if err != nil {
+		return Summary{}, err
+	}
+	if _, err := addFamilyMember(ctx, pool, robin.FamilyID, "Ada", "Okonkwo", "youth", troop.ID, &eaglePatrol.ID, "scout", actor); err != nil {
+		return Summary{}, fmt.Errorf("demoseed: adding Ada Okonkwo (troop): %w", err)
+	}
+	if _, err := addFamilyMember(ctx, pool, robin.FamilyID, "Chidi", "Okonkwo", "youth", pack.ID, &bearDen.ID, "scout", actor); err != nil {
+		return Summary{}, fmt.Errorf("demoseed: adding Chidi Okonkwo (pack): %w", err)
+	}
+	// The parent needs a role in the Pack too, not just the Troop —
+	// membership is held per person per unit, and this family belongs to
+	// both.
+	if err := roster.AssignRole(ctx, pool, robin.MemberID, pack.ID, nil, "parent", actor); err != nil {
+		return Summary{}, fmt.Errorf("demoseed: assigning Robin Okonkwo a Pack role: %w", err)
+	}
+	s.Personas = append(s.Personas, Persona{
+		Label: "Parent + Scouts in BOTH units", Unit: "Troop 47 & Pack 47",
+		Email: "robin.parent.both@example.com", Password: DemoPassword,
+		Note: "Ada is in the Troop (Eagle Patrol), Chidi in the Pack (Bear Den 3). One login, both sites — the case single sign-on exists for.",
+	})
+
 	// -- Homepage content: a couple of real overrides per unit, the rest
 	// left as Phase 1's stock placeholders so both states are visible. --
 	if _, err := content.UpsertSection(ctx, pool, troop.ID, "home-hero", "Hero tagline", "Adventure, leadership, and lifelong friendships — Troop 47 of Yonkers.", sam.MemberID); err != nil {

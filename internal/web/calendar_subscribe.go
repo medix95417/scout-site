@@ -7,7 +7,6 @@ import (
 
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/calendar"
-	"github.com/47-yonkers/scout-site/internal/units"
 )
 
 // The page where somebody creates, replaces, or removes the private
@@ -31,10 +30,8 @@ type calendarSubscribeData struct {
 }
 
 func (h *Handlers) CalendarSubscribe(w http.ResponseWriter, r *http.Request) {
-	unit, _ := units.UnitFromContext(r.Context())
-	user, ok := auth.UserFromContext(r.Context())
+	unit, user, ok := h.requireUnitMember(w, r, "/settings/calendar")
 	if !ok {
-		http.Redirect(w, r, "/login?next=/settings/calendar", http.StatusSeeOther)
 		return
 	}
 
@@ -62,10 +59,8 @@ func (h *Handlers) CalendarSubscribe(w http.ResponseWriter, r *http.Request) {
 // redirect would either lose it or require smuggling a secret through a
 // query string, where it would land in logs and browser history.
 func (h *Handlers) CalendarSubscribeRegenerate(w http.ResponseWriter, r *http.Request) {
-	unit, _ := units.UnitFromContext(r.Context())
-	user, ok := auth.UserFromContext(r.Context())
+	unit, user, ok := h.requireUnitMember(w, r, "/settings/calendar")
 	if !ok {
-		http.Redirect(w, r, "/login?next=/settings/calendar", http.StatusSeeOther)
 		return
 	}
 
@@ -97,10 +92,8 @@ func (h *Handlers) CalendarSubscribeRegenerate(w http.ResponseWriter, r *http.Re
 }
 
 func (h *Handlers) CalendarSubscribeRemove(w http.ResponseWriter, r *http.Request) {
-	unit, _ := units.UnitFromContext(r.Context())
-	user, ok := auth.UserFromContext(r.Context())
+	unit, user, ok := h.requireUnitMember(w, r, "/settings/calendar")
 	if !ok {
-		http.Redirect(w, r, "/login?next=/settings/calendar", http.StatusSeeOther)
 		return
 	}
 	if err := calendar.DeleteFeedToken(r.Context(), h.Pool, user.ID, unit.ID); err != nil {
