@@ -199,6 +199,15 @@ var Topics = []Topic{
 		},
 	},
 	{
+		ID:       "calendar-on-your-phone",
+		Title:    "Putting the calendar on your phone",
+		Audience: AudienceEveryone,
+		Body: []string{
+			"On the Calendar page, \"Add to your phone\" creates a private link you can subscribe to from the calendar app you already use. Unit events then sit alongside everything else in your life and update on their own.",
+			"The link is yours alone and shows exactly what you can see here, including your den or patrol's own events. Treat it like a password: anyone you send it to can see those events without signing in. If you lose a phone, create a new link — the old one stops working straight away.",
+		},
+	},
+	{
 		ID:       "my-family",
 		Title:    "Keeping your family's details up to date",
 		Audience: AudienceEveryone,
@@ -296,6 +305,17 @@ var Topics = []Topic{
 		Body: []string{
 			"Events can be public (on the site for anyone) or members-only, and can be scoped to one den or patrol so only those families see them.",
 			"A repeating event is created as a series; editing or deleting one later asks whether you mean that single date or the whole series.",
+		},
+	},
+	{
+		ID:                 "calendar-import",
+		Title:              "Importing another calendar",
+		Audience:           AudienceLeader,
+		RequiredCapability: units.CapEditContent,
+		Body: []string{
+			"Imported calendars brings events in from somewhere else — the council's calendar, or one a leader keeps in Google — so they appear here without anybody retyping them.",
+			"In Google Calendar, go to Settings, pick the calendar, open Integrate calendar, and copy the \"Secret address in iCal format\". Paste that here. The plain sharing page won't work; it has to be the .ics address.",
+			"Events refresh on their own. Changes made in the source calendar follow through, and anything removed there is removed here too — so imported events can't be edited on this site. Removing a calendar removes the events that came from it, and leaves events created here untouched.",
 		},
 	},
 	{

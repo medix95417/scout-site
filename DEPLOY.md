@@ -440,6 +440,22 @@ Add a line like:
 0 * * * *  cd /home/deploy/scout-site && /usr/bin/docker compose run --rm app -send-event-reminders >> /home/deploy/reminders.log 2>&1
 ```
 
+**Refreshing imported calendars.** If any unit subscribes to an external
+calendar (Calendar → Imported calendars), the same kind of cron job keeps
+those events current. Nothing breaks without it — a leader can press
+"Check now" on the admin page — but the point of subscribing is that it
+happens on its own. Every four hours is plenty; a council calendar does
+not change by the minute:
+
+```
+0 */4 * * *  cd /home/deploy/scout-site && /usr/bin/docker compose run --rm app -refresh-calendar-feeds >> /home/deploy/calendar-feeds.log 2>&1
+```
+
+A feed that fails is recorded against that calendar and shown on the
+admin page with the reason, so a subscription that quietly stopped
+working is visible rather than merely absent. One failing feed does not
+stop the others refreshing.
+
 Adjust the path to wherever you cloned/unzipped the repo. This reuses the
 same `.env` the rest of the stack reads, so no separate configuration is
 needed — it just needs `SMTP_HOST` to be set for anything to actually go
@@ -510,3 +526,4 @@ docker compose down
 - [ ] Backups are automated and copied off-server.
 - [ ] The admin password from step 7 is a real, unique password.
 - [ ] If email is configured, `-send-event-reminders` is on a cron job (see "Ongoing operations" above).
+- [ ] If any unit imports an external calendar, `-refresh-calendar-feeds` is on a cron job too.

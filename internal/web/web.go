@@ -129,6 +129,9 @@ type Handlers struct {
 	rosterImport        *template.Template
 	rosterImportResults *template.Template
 
+	calendarSubscribe *template.Template
+	calendarFeeds     *template.Template
+
 	advancement      *template.Template
 	advancementAdmin *template.Template
 
@@ -453,6 +456,12 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.rosterImportResults, err = parse("admin-roster-import-results.html"); err != nil {
 		return nil, err
 	}
+	if h.calendarSubscribe, err = parse("calendar-subscribe.html"); err != nil {
+		return nil, err
+	}
+	if h.calendarFeeds, err = parse("admin-calendar-feeds.html"); err != nil {
+		return nil, err
+	}
 	if h.advancement, err = parse("advancement.html"); err != nil {
 		return nil, err
 	}
@@ -604,6 +613,23 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/prospects/{id}", h.ProspectUpdate)
 	mux.HandleFunc("POST /admin/prospects/{id}/delete", h.ProspectDelete)
 	mux.HandleFunc("GET /help", h.Help)
+	mux.HandleFunc("GET /admin/calendar-feeds", h.AdminCalendarFeeds)
+	mux.HandleFunc("POST /admin/calendar-feeds", h.AdminCalendarFeedAdd)
+	mux.HandleFunc("POST /admin/calendar-feeds/{id}/refresh", h.AdminCalendarFeedRefresh)
+	mux.HandleFunc("POST /admin/calendar-feeds/{id}/toggle", h.AdminCalendarFeedToggle)
+	mux.HandleFunc("POST /admin/calendar-feeds/{id}/delete", h.AdminCalendarFeedDelete)
+	mux.HandleFunc("GET /settings/calendar", h.CalendarSubscribe)
+	mux.HandleFunc("POST /settings/calendar/regenerate", h.CalendarSubscribeRegenerate)
+	mux.HandleFunc("POST /settings/calendar/remove", h.CalendarSubscribeRemove)
+	// The feed itself. Public in the routing sense — a calendar app can't
+	// log in — with the token in the path doing the authenticating. See
+	// calendar_feed.go.
+	//
+	// Deliberately NOT under /calendar/: that subtree already has
+	// /calendar/{id}/... routes, and a {token} wildcard beside an {id}
+	// one makes "/calendar/feed/attendees.pdf" ambiguous — which Go's
+	// ServeMux rejects at startup rather than resolving arbitrarily.
+	mux.HandleFunc("GET /feed/{token}", h.CalendarFeed)
 	mux.HandleFunc("GET /settings/2fa", h.TwoFactorSettings)
 	mux.HandleFunc("POST /settings/2fa/enroll", h.TwoFactorEnroll)
 	mux.HandleFunc("POST /settings/2fa/confirm", h.TwoFactorConfirm)

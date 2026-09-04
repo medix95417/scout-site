@@ -41,6 +41,21 @@ tagged commit with an accurate date.
 
 ### Added
 
+- **Put the unit calendar on your phone.** Each person can create a
+  private subscription link (Calendar → "Add to your phone") and add it to
+  the calendar app they already use. The feed shows exactly what that
+  person sees on the site — public, members-only, and their own den or
+  patrol's events — and is re-scoped on every refresh, so changing patrol
+  or losing a role is reflected without reissuing anything. Links are
+  stored hashed, shown once, and can be replaced or turned off.
+- **Import events from another calendar.** Leaders can subscribe the unit
+  to an external .ics feed — a Google calendar's secret address, or any
+  other — from Calendar → Imported calendars. Events are copied in,
+  refreshed by the new `-refresh-calendar-feeds` command, and matched on
+  the source's own identifier so a refresh updates rather than duplicates.
+  Recurring events are expanded, exceptions honoured, and cancelled or
+  deleted events removed. Removing a subscription removes the events that
+  came with it and nothing else.
 - **The join enquiry form is now linked from the homepage.** An
   "Interested in joining?" call-to-action sits directly under Meeting Info
   and Leadership & Contact, where both existing "How to Join" buttons

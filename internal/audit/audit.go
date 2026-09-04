@@ -157,6 +157,8 @@ const entityScopeSQL = `
 	SELECT id FROM bank_reconciliations WHERE unit_id = $1
 	UNION
 	SELECT id FROM prospects WHERE unit_id = $1
+	UNION
+	SELECT id FROM calendar_feeds WHERE unit_id = $1
 `
 
 // SystemActor is the Filter.ActorID sentinel for "system-initiated

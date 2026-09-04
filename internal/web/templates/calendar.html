@@ -1,5 +1,13 @@
 {{define "content"}}
-  <h1 class="text-2xl font-bold mb-6">Calendar — {{.Unit.Name}}</h1>
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <h1 class="text-2xl font-bold">Calendar — {{.Unit.Name}}</h1>
+    {{if .LoggedIn}}
+      <a href="/settings/calendar" class="text-sm underline" style="color: var(--unit-color);">Add to your phone</a>
+    {{end}}
+    {{if .CanEditContent}}
+      <a href="/admin/calendar-feeds" class="text-sm underline" style="color: var(--unit-color);">Imported calendars</a>
+    {{end}}
+  </div>
 
   {{if .PendingApprovals}}
     <section class="mb-8">
