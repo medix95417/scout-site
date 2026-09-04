@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.6.0] — 2026-09-04
+
 ### Removed
 
 - **Permission slips are gone.** The unit collects consent on paper, so
