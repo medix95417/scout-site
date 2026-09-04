@@ -8,6 +8,7 @@
 //	server -seed                 insert the Troop/Pack unit rows, then exit
 //	server -seed-demo            insert a full set of test logins/activity data (one per role), then exit — see DEMO_DATA.md
 //	server -send-event-reminders email RSVP'd members of soon-starting events, then exit (run via cron)
+//	server -refresh-calendar-feeds  re-fetch every subscribed external calendar, then exit (run via cron)
 //	server -grant-role           grant an existing user a role in a unit, then exit (see DEPLOY.md "Adding a unit later")
 //	server -backfill-thumbnails  generate a cached thumbnail for every image file that doesn't already have one, then exit (safe to re-run) — runs automatically in the background on every normal server startup too, this is only for running it on demand/synchronously
 package main
@@ -27,6 +28,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/backup"
 	"github.com/47-yonkers/scout-site/internal/bootstrap"
+	"github.com/47-yonkers/scout-site/internal/calendar"
 	"github.com/47-yonkers/scout-site/internal/config"
 	"github.com/47-yonkers/scout-site/internal/csp"
 	"github.com/47-yonkers/scout-site/internal/csrf"
@@ -45,6 +47,7 @@ func main() {
 	seedDemo := flag.Bool("seed-demo", false, "insert a full set of test logins and activity data (one per role — see DEMO_DATA.md) and exit; safe to re-run, no-ops if demo data already exists")
 	bootstrapAdmin := flag.Bool("bootstrap-admin", false, "create the first super-admin login from ADMIN_EMAIL/ADMIN_PASSWORD/ADMIN_FIRST_NAME/ADMIN_LAST_NAME env vars, then exit")
 	sendEventReminders := flag.Bool("send-event-reminders", false, "email everyone RSVP'd yes/maybe to an event starting within REMINDER_WINDOW_HOURS (default 24), then exit — meant to be run periodically via cron, see DEPLOY.md")
+	refreshCalendarFeeds := flag.Bool("refresh-calendar-feeds", false, "re-fetch every enabled external calendar subscription and update the events imported from it, then exit — meant to be run periodically via cron, see DEPLOY.md")
 	grantRole := flag.Bool("grant-role", false, "grant an existing user (GRANT_EMAIL) a role (GRANT_ROLE) in a unit (GRANT_UNIT_SLUG) and exit — for giving an already-existing account a foothold in a unit -bootstrap-admin didn't reach, e.g. one added after -bootstrap-admin first ran")
 	backfillThumbnails := flag.Bool("backfill-thumbnails", false, "generate a cached thumbnail for every image file that doesn't already have one, then exit. The normal server already does this automatically in the background on every startup — use this flag only to run it on demand and see the result immediately instead of waiting/checking logs (safe to re-run either way)")
 	backupFiles := flag.Bool("backup-files", false, "write every stored photo and document to stdout as a tar archive, then exit — the photo half of a backup, since these live in object storage rather than the database. Meant to be piped straight into an encryption tool; see scripts/backup.sh")
@@ -144,6 +147,29 @@ func main() {
 	}, pool)
 	if !mail.Enabled(ctx) {
 		log.Println("email is not configured (no SMTP_HOST or MAIL_PROVIDER environment variable and no host set on /admin/settings) — password reset and event reminders will report a clear error instead of sending")
+	}
+
+	if *refreshCalendarFeeds {
+		results, err := calendar.RefreshAllFeeds(ctx, pool)
+		if err != nil {
+			log.Fatalf("refresh-calendar-feeds: %v", err)
+		}
+		var failed int
+		for _, res := range results {
+			if res.Err != nil {
+				failed++
+				// Logged rather than fatal: one unreachable calendar
+				// must not stop the others being refreshed, and the
+				// failure is already recorded against the feed for the
+				// admin page to show.
+				log.Printf("refresh-calendar-feeds: %s: %v", res.FeedName, res.Err)
+				continue
+			}
+			log.Printf("refresh-calendar-feeds: %s: %d new, %d updated, %d removed",
+				res.FeedName, res.Created, res.Updated, res.Removed)
+		}
+		log.Printf("refresh-calendar-feeds: %d feeds, %d failed", len(results), failed)
+		return
 	}
 
 	if *sendEventReminders {

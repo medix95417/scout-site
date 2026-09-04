@@ -90,7 +90,7 @@ type LogEntry struct {
 // adding them below).
 //
 // Most entity types have a direct unit_id column and are scoped with a
-// plain `WHERE unit_id = $1`. Four don't, each for a different reason:
+// plain `WHERE unit_id = $1`. Three don't, each for a different reason:
 //   - system_settings has no unit_id at all — it's genuinely global, so a
 //     site-wide setting change is relevant to every unit's log, included
 //     unconditionally rather than filtered.
@@ -101,14 +101,12 @@ type LogEntry struct {
 //     model) — scoped the same way units.RolesForFamilyInUnit and
 //     roster.Scope already answer "is this member/family part of this
 //     unit."
-//   - permission_slip_signatures has no unit_id either — a signature's
-//     unit comes from the slip it belongs to.
 //
 // KEEPING THIS IN SYNC IS LOAD-BEARING, and has silently drifted twice:
 // once for family/member/role_assignment/sub_group (see the note above),
-// and again for the eight types added in the block below — advancement
-// records, custom roles, newsletters, permission slips and their
-// signatures, saved treasury reports, per-unit settings, and leader
+// and again for the types added in the block below — advancement
+// records, custom roles, newsletters, saved treasury reports, per-unit
+// settings, and leader
 // profiles were all being written to audit_log but were unreachable from
 // every read path, so 48 real rows in the development database had never
 // been displayable. Adding an audit.Log call with a new EntityType is
@@ -150,10 +148,6 @@ const entityScopeSQL = `
 	UNION
 	SELECT id FROM newsletters WHERE unit_id = $1
 	UNION
-	SELECT id FROM permission_slips WHERE unit_id = $1
-	UNION
-	SELECT id FROM permission_slip_signatures WHERE permission_slip_id IN (SELECT id FROM permission_slips WHERE unit_id = $1)
-	UNION
 	SELECT id FROM saved_treasury_reports WHERE unit_id = $1
 	UNION
 	SELECT id FROM unit_settings WHERE unit_id = $1
@@ -163,6 +157,8 @@ const entityScopeSQL = `
 	SELECT id FROM bank_reconciliations WHERE unit_id = $1
 	UNION
 	SELECT id FROM prospects WHERE unit_id = $1
+	UNION
+	SELECT id FROM calendar_feeds WHERE unit_id = $1
 `
 
 // SystemActor is the Filter.ActorID sentinel for "system-initiated

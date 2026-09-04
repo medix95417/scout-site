@@ -149,7 +149,6 @@ func TestEveryTopicNamingAGatedFeatureDeclaresItsGate(t *testing.T) {
 		settings.TreasuryEnabled:         {"treasury", "reconcil", "fundraiser", "ledger", "expense"},
 		settings.AdvancementEnabled:      {"advancement"},
 		settings.NewsletterEnabled:       {"newsletter"},
-		settings.PermissionSlipsEnabled:  {"permission slip"},
 		settings.ScoutAccountSelfService: {"account balance", "my accounts"},
 	}
 

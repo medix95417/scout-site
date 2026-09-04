@@ -11,6 +11,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"log"
 	"regexp"
 	"sort"
 
@@ -40,8 +41,45 @@ func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 
 // Migrate applies any migration files that haven't been recorded yet, in
 // filename order, each inside its own transaction.
+// migrateLockKey is an arbitrary but fixed identifier for the Postgres
+// advisory lock that serialises Migrate. Any constant works as long as
+// nothing else in the system picks the same one.
+const migrateLockKey int64 = 8412559930274160001
+
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	if _, err := pool.Exec(ctx, `
+	// Only one migration run at a time, per database.
+	//
+	// Without this, two processes starting together each read
+	// schema_migrations, both conclude a migration is unapplied, and both
+	// try to apply it — the second failing with "already exists" and
+	// taking its process down with it. That is not hypothetical: it is
+	// exactly what the test suite does, since `go test ./...` runs
+	// packages in parallel and internal/ledger, internal/roster and
+	// internal/prospect each migrate the same test database. It is also
+	// reachable in production the moment the app is started with more
+	// than one replica, or restarted while the old container is still up.
+	//
+	// The lock is held on one connection for the whole run and released
+	// by the defer, so a crashed process drops it when its connection
+	// closes rather than wedging every future start.
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("db: acquiring connection for migration lock: %w", err)
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrateLockKey); err != nil {
+		return fmt.Errorf("db: taking migration lock: %w", err)
+	}
+	defer func() {
+		// Best effort: if this fails the connection is being returned to
+		// the pool in a bad state anyway, and closing it drops the lock.
+		if _, err := conn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, migrateLockKey); err != nil {
+			log.Printf("db: releasing migration lock: %v", err)
+		}
+	}()
+
+	if _, err := conn.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			filename    text PRIMARY KEY,
 			applied_at  timestamptz NOT NULL DEFAULT now()
@@ -66,7 +104,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 
 	for _, filename := range filenames {
 		var already bool
-		err := pool.QueryRow(ctx,
+		err := conn.QueryRow(ctx,
 			`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE filename = $1)`,
 			filename,
 		).Scan(&already)
@@ -82,7 +120,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 			return fmt.Errorf("db: reading %s: %w", filename, err)
 		}
 
-		tx, err := pool.Begin(ctx)
+		tx, err := conn.Begin(ctx)
 		if err != nil {
 			return fmt.Errorf("db: beginning transaction for %s: %w", filename, err)
 		}

@@ -1,0 +1,71 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-2">{{.Unit.Name}} calendar on your phone</h1>
+  <p class="text-gray-700 mb-6 max-w-2xl">
+    Subscribe once and unit events appear in the calendar app you already use,
+    alongside everything else. New events and changes turn up on their own &mdash;
+    there is nothing to download again.
+  </p>
+
+  {{if .NewURL}}
+    <section class="rounded-lg border-2 p-4 mb-8 max-w-2xl" style="border-color: var(--unit-color);">
+      <h2 class="text-lg font-semibold mb-2">Your private calendar link</h2>
+      <p class="text-sm text-gray-700 mb-3">
+        <strong>Copy this now.</strong> It is stored scrambled, so this is the only
+        time it can be shown. If you lose it, come back and create a new one.
+      </p>
+      <p class="mb-3">
+        <a href="{{.WebcalURL}}" class="inline-block rounded-md px-5 py-2.5 font-medium btn-accent">
+          Add to my calendar
+        </a>
+        <span class="block text-xs text-gray-500 mt-1">
+          Works on iPhone, iPad and Mac, and on Android with most calendar apps.
+        </span>
+      </p>
+      <label class="block text-sm font-medium mb-1" for="feed-url">
+        Or paste this address into your calendar app (Google Calendar &rarr;
+        Other calendars &rarr; From URL):
+      </label>
+      <input id="feed-url" class="w-full rounded-md border border-gray-300 px-3 py-2 text-xs font-mono"
+             type="text" value="{{.NewURL}}" readonly onfocus="this.select()">
+    </section>
+  {{end}}
+
+  <section class="rounded-lg border border-gray-200 bg-white p-4 max-w-2xl mb-8">
+    {{if .HasLink}}
+      <h2 class="text-lg font-semibold mb-1">You have a calendar link</h2>
+      <p class="text-sm text-gray-600 mb-1">Created {{.CreatedAt}}.</p>
+      <p class="text-sm text-gray-600 mb-4">
+        {{if .LastUsed}}Last collected by a calendar app on {{.LastUsed}}.
+        {{else}}No calendar app has collected it yet &mdash; if you have added it to your
+        phone, it can take a few hours before it first checks in.{{end}}
+      </p>
+      <div class="flex flex-wrap gap-2">
+        <form method="post" action="/settings/calendar/regenerate">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <button type="submit" class="rounded-md border border-gray-300 px-4 py-2 text-sm"
+                  data-confirm="Create a new link? The one on any device you have already set up will stop working, and you will need to add the new one.">
+            Create a new link
+          </button>
+        </form>
+        <form method="post" action="/settings/calendar/remove">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <button type="submit" class="rounded-md border border-gray-300 px-4 py-2 text-sm text-red-600"
+                  data-confirm="Turn off your calendar link? Unit events will stop updating on every device you have added it to.">
+            Turn it off
+          </button>
+        </form>
+      </div>
+    {{else}}
+      <h2 class="text-lg font-semibold mb-2">Create your calendar link</h2>
+      <p class="text-sm text-gray-700 mb-4">
+        The link is private to you and shows exactly the events you can see on the
+        calendar here &mdash; including your den or patrol&#39;s own events. Treat it like a
+        password: anyone you send it to can see the same events without signing in.
+      </p>
+      <form method="post" action="/settings/calendar/regenerate">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="rounded-md px-5 py-2.5 font-medium btn-accent">Create my calendar link</button>
+      </form>
+    {{end}}
+  </section>
+{{end}}

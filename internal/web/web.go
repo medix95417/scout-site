@@ -33,7 +33,6 @@ import (
 	"github.com/47-yonkers/scout-site/internal/leaders"
 	"github.com/47-yonkers/scout-site/internal/ledger"
 	"github.com/47-yonkers/scout-site/internal/mailer"
-	"github.com/47-yonkers/scout-site/internal/permission"
 	"github.com/47-yonkers/scout-site/internal/ratelimit"
 	"github.com/47-yonkers/scout-site/internal/roster"
 	"github.com/47-yonkers/scout-site/internal/settings"
@@ -130,7 +129,8 @@ type Handlers struct {
 	rosterImport        *template.Template
 	rosterImportResults *template.Template
 
-	permissionSlip *template.Template
+	calendarSubscribe *template.Template
+	calendarFeeds     *template.Template
 
 	advancement      *template.Template
 	advancementAdmin *template.Template
@@ -456,7 +456,10 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.rosterImportResults, err = parse("admin-roster-import-results.html"); err != nil {
 		return nil, err
 	}
-	if h.permissionSlip, err = parse("permission-slip.html"); err != nil {
+	if h.calendarSubscribe, err = parse("calendar-subscribe.html"); err != nil {
+		return nil, err
+	}
+	if h.calendarFeeds, err = parse("admin-calendar-feeds.html"); err != nil {
 		return nil, err
 	}
 	if h.advancement, err = parse("advancement.html"); err != nil {
@@ -568,9 +571,6 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /calendar/{id}/rsvp", h.CalendarRSVP)
 	mux.HandleFunc("GET /calendar/{id}/attendees.pdf", h.CalendarEventAttendeesExportPDF)
 	mux.HandleFunc("POST /calendar/approvals/{id}/decide", h.ApprovalDecide)
-	mux.HandleFunc("GET /calendar/{id}/permission-slip", h.PermissionSlipView)
-	mux.HandleFunc("POST /calendar/{id}/permission-slip", h.PermissionSlipSave)
-	mux.HandleFunc("POST /calendar/{id}/permission-slip/sign", h.PermissionSlipSign)
 	mux.HandleFunc("GET /audit", h.AuditView)
 	mux.HandleFunc("GET /audit/export.csv", h.AuditExport)
 	mux.HandleFunc("GET /accounts", h.AccountsView)
@@ -613,6 +613,23 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/prospects/{id}", h.ProspectUpdate)
 	mux.HandleFunc("POST /admin/prospects/{id}/delete", h.ProspectDelete)
 	mux.HandleFunc("GET /help", h.Help)
+	mux.HandleFunc("GET /admin/calendar-feeds", h.AdminCalendarFeeds)
+	mux.HandleFunc("POST /admin/calendar-feeds", h.AdminCalendarFeedAdd)
+	mux.HandleFunc("POST /admin/calendar-feeds/{id}/refresh", h.AdminCalendarFeedRefresh)
+	mux.HandleFunc("POST /admin/calendar-feeds/{id}/toggle", h.AdminCalendarFeedToggle)
+	mux.HandleFunc("POST /admin/calendar-feeds/{id}/delete", h.AdminCalendarFeedDelete)
+	mux.HandleFunc("GET /settings/calendar", h.CalendarSubscribe)
+	mux.HandleFunc("POST /settings/calendar/regenerate", h.CalendarSubscribeRegenerate)
+	mux.HandleFunc("POST /settings/calendar/remove", h.CalendarSubscribeRemove)
+	// The feed itself. Public in the routing sense — a calendar app can't
+	// log in — with the token in the path doing the authenticating. See
+	// calendar_feed.go.
+	//
+	// Deliberately NOT under /calendar/: that subtree already has
+	// /calendar/{id}/... routes, and a {token} wildcard beside an {id}
+	// one makes "/calendar/feed/attendees.pdf" ambiguous — which Go's
+	// ServeMux rejects at startup rather than resolving arbitrarily.
+	mux.HandleFunc("GET /feed/{token}", h.CalendarFeed)
 	mux.HandleFunc("GET /settings/2fa", h.TwoFactorSettings)
 	mux.HandleFunc("POST /settings/2fa/enroll", h.TwoFactorEnroll)
 	mux.HandleFunc("POST /settings/2fa/confirm", h.TwoFactorConfirm)
@@ -761,7 +778,6 @@ type baseData struct {
 	IsSuperAdmin             bool              // super_admin in *this* unit — drives the "Site Settings" nav link (see internal/web/settings_admin.go)
 	AdvancementEnabled       bool              // this unit's settings.AdvancementEnabled toggle — drives the "Advancement"/"Manage Advancement" nav links, see internal/web/advancement.go
 	TreasuryEnabled          bool              // this unit's settings.TreasuryEnabled toggle — drives the "My Accounts"/"Treasury"/"Reports" nav links, see internal/web/treasury.go's requireTreasuryEnabled
-	PermissionSlipsEnabled   bool              // this unit's settings.PermissionSlipsEnabled toggle — when off, no event anywhere offers a permission slip, see internal/web/permission_slip.go
 	NewsletterEnabled        bool              // this unit's settings.NewsletterEnabled toggle — drives the "Newsletters" nav link, see internal/web/newsletter.go
 	ScoutAccountsSelfService bool              // this unit's settings.ScoutAccountSelfService toggle — drives the "My Accounts" nav link and family self-service account access, see internal/web/accounts.go
 	PasswordResetEnabled     bool              // site-wide settings.PasswordResetEnabled toggle — drives whether the login page's "Forgot your password?" link points to the reset form or an explanation, see internal/web/password_reset.go. Computed for every request (not just logged-in ones), since /login and /forgot-password are reached signed out
@@ -989,16 +1005,6 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 		data.PasswordResetEnabled = enabled
 	}
 
-	// Loaded for every request, not just logged-in ones, unlike the other
-	// per-unit feature toggles below: /calendar is a public page, and
-	// hiding the permission-slip link from a logged-out visitor is the
-	// specific thing this setting is for.
-	if enabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.PermissionSlipsEnabled); err != nil {
-		log.Printf("web: checking permission-slips-enabled setting: %v", err)
-	} else {
-		data.PermissionSlipsEnabled = enabled
-	}
-
 	if loggedIn {
 		caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 		if err != nil {
@@ -1177,6 +1183,14 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: loading homepage content: %v", err)
 	}
 
+	// Fail closed: if this can't be read, the homepage shows no join
+	// link rather than one that might 404.
+	joinFormOpen, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.ProspectFormEnabled)
+	if err != nil {
+		log.Printf("web: loading prospect-form-enabled setting: %v", err)
+		joinFormOpen = false
+	}
+
 	text := make(map[string]string)
 	for _, def := range content.HomepageSections(unit.UnitType) {
 		text[def.Slug] = sectionText(saved, def)
@@ -1278,6 +1292,13 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		StorefrontActive    bool
 		StorefrontName      string
 		StorefrontButtonURL string
+		// JoinFormOpen gates the homepage's "interested in joining"
+		// call-to-action on the same setting /join itself checks
+		// (settings.ProspectFormEnabled). Linking to the form while the
+		// unit has it switched off would send a prospective family to a
+		// "not found" page, which is a worse first impression than no
+		// link at all.
+		JoinFormOpen bool
 	}{
 		baseData:            bd,
 		Events:              events,
@@ -1294,6 +1315,7 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		StorefrontActive:    storefrontActive,
 		StorefrontName:      storefront.Name,
 		StorefrontButtonURL: storefront.ButtonImageURL,
+		JoinFormOpen:        joinFormOpen,
 	}
 
 	h.render(w, h.home, data)
@@ -1718,13 +1740,12 @@ type pendingApprovalView struct {
 // linked to it — the calendar page's event list shows both inline.
 type eventView struct {
 	calendar.Event
-	Files              []files.File
-	SubGroupName       string // "" if unscoped — see calendar.Event.SubGroupID
-	ShowPermissionSlip bool   // whether calendar.html renders the "Permission slip" link at all — see settings.PermissionSlipEnforcement
-	SeriesCount        int    // >1 if this event is one occurrence of a repeating series — see calendar.CountInSeries
-	StartsAtInput      string // e.StartsAt formatted for an <input type="datetime-local">'s value — see calendar.go's datetimeLocalFormat
-	EndsAtInput        string // "" if EndsAt is nil
-	SubGroupIDValue    string // e.SubGroupID dereferenced ("" if unscoped) — Go templates' eq can't compare a *string to a string, so the edit form's <select> needs this plain-string form to mark the current selection
+	Files           []files.File
+	SubGroupName    string // "" if unscoped — see calendar.Event.SubGroupID
+	SeriesCount     int    // >1 if this event is one occurrence of a repeating series — see calendar.CountInSeries
+	StartsAtInput   string // e.StartsAt formatted for an <input type="datetime-local">'s value — see calendar.go's datetimeLocalFormat
+	EndsAtInput     string // "" if EndsAt is nil
+	SubGroupIDValue string // e.SubGroupID dereferenced ("" if unscoped) — Go templates' eq can't compare a *string to a string, so the edit form's <select> needs this plain-string form to mark the current selection
 }
 
 // parseMonthParam resolves the year/month a calendar page should show from
@@ -1861,36 +1882,6 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		subGroupNameByID[g.ID] = g.Name
 	}
 
-	// Whether the "Permission slip" link shows on every event (the
-	// historical, still-default behavior) or only on ones that need one —
-	// see settings.PermissionSlipEnforcement. Shown regardless of
-	// enforcement for a leader (no way yet to edit an event's "requires a
-	// permission slip" flag after creation, so they always need a way in)
-	// or for an event a leader already attached a real slip to (it should
-	// never become undiscoverable to families just because it wasn't also
-	// marked "required" up front).
-	slipEnforcement, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.PermissionSlipEnforcement)
-	if err != nil {
-		log.Printf("web: loading permission slip enforcement setting: %v", err)
-	}
-	// The feature's master switch (settings.PermissionSlipsEnabled). Off
-	// beats every exception below — including the leader escape hatch and
-	// "an event already has a slip attached" — because a unit that turned
-	// slips off wants them gone from the calendar entirely, not merely
-	// narrowed.
-	slipsEnabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.PermissionSlipsEnabled)
-	if err != nil {
-		log.Printf("web: loading permission-slips-enabled setting: %v", err)
-		// Fail closed: an unreadable setting hides the link rather than
-		// exposing it, which is the safe direction for a feature whose
-		// whole purpose here is not being shown.
-		slipsEnabled = false
-	}
-	eventsWithSlips, err := permission.EventIDsWithSlips(r.Context(), h.Pool, unit.ID)
-	if err != nil {
-		log.Printf("web: loading events with permission slips: %v", err)
-	}
-
 	const datetimeLocalFormat = "2006-01-02T15:04"
 	eventViews := make([]eventView, len(events))
 	for i, e := range events {
@@ -1898,8 +1889,7 @@ func (h *Handlers) Calendar(w http.ResponseWriter, r *http.Request) {
 		if e.SubGroupID != nil {
 			subGroupName = subGroupNameByID[*e.SubGroupID]
 		}
-		showSlip := slipsEnabled && (!slipEnforcement || e.RequiresPermissionSlip || canEditContent || eventsWithSlips[e.ID])
-		v := eventView{Event: e, Files: filesByEvent[e.ID], SubGroupName: subGroupName, ShowPermissionSlip: showSlip}
+		v := eventView{Event: e, Files: filesByEvent[e.ID], SubGroupName: subGroupName}
 		if e.SubGroupID != nil {
 			v.SubGroupIDValue = *e.SubGroupID
 		}
@@ -2102,17 +2092,16 @@ func (h *Handlers) CalendarCreate(w http.ResponseWriter, r *http.Request) {
 			occEnd = &e
 		}
 		_, err = calendar.Create(r.Context(), h.Pool, calendar.CreateInput{
-			UnitID:                 unit.ID,
-			Title:                  r.FormValue("title"),
-			SubGroupID:             subGroupID,
-			Description:            r.FormValue("description"),
-			Location:               r.FormValue("location"),
-			StartsAt:               occStart,
-			EndsAt:                 occEnd,
-			Visibility:             visibility,
-			CreatedBy:              actor.ID,
-			RequiresPermissionSlip: r.FormValue("requires_permission_slip") == "1",
-			SeriesID:               seriesID,
+			UnitID:      unit.ID,
+			Title:       r.FormValue("title"),
+			SubGroupID:  subGroupID,
+			Description: r.FormValue("description"),
+			Location:    r.FormValue("location"),
+			StartsAt:    occStart,
+			EndsAt:      occEnd,
+			Visibility:  visibility,
+			CreatedBy:   actor.ID,
+			SeriesID:    seriesID,
 		}, units.CanEditUnitContent(caps))
 		if err != nil {
 			log.Printf("web: creating event: %v", err)
@@ -2227,14 +2216,13 @@ func (h *Handlers) CalendarUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := calendar.Update(r.Context(), h.Pool, eventID, unit.ID, calendar.UpdateInput{
-		Title:                  r.FormValue("title"),
-		Description:            r.FormValue("description"),
-		Location:               r.FormValue("location"),
-		StartsAt:               startsAt,
-		EndsAt:                 endsAt,
-		Visibility:             visibility,
-		SubGroupID:             subGroupID,
-		RequiresPermissionSlip: r.FormValue("requires_permission_slip") == "1",
+		Title:       r.FormValue("title"),
+		Description: r.FormValue("description"),
+		Location:    r.FormValue("location"),
+		StartsAt:    startsAt,
+		EndsAt:      endsAt,
+		Visibility:  visibility,
+		SubGroupID:  subGroupID,
 	}, actor.ID); err != nil {
 		log.Printf("web: updating event: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)

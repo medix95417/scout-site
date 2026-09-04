@@ -649,6 +649,26 @@ func UserForSession(ctx context.Context, pool *pgxpool.Pool, token string) (User
 	return u, true, nil
 }
 
+// UserByID loads a login directly, without a session.
+//
+// Used by the calendar feed (internal/web/calendar_feed.go), where the
+// caller is a phone's calendar app holding a secret URL rather than a
+// browser holding a session cookie: the token identifies the user, and
+// this turns that id into the User the permission helpers expect. Nothing
+// here grants access on its own — the caller has already established who
+// is asking.
+func UserByID(ctx context.Context, pool *pgxpool.Pool, userID string) (User, error) {
+	var u User
+	err := pool.QueryRow(ctx, `
+		SELECT id, family_id, member_id, email, password_hash, must_change_password
+		FROM users WHERE id = $1
+	`, userID).Scan(&u.ID, &u.FamilyID, &u.MemberID, &u.Email, &u.PasswordHash, &u.MustChangePassword)
+	if err != nil {
+		return User{}, err
+	}
+	return u, nil
+}
+
 // SetSessionCookie writes the session cookie, scoped to cookieDomain so it's
 // shared across every subdomain under the parent domain (e.g.
 // ".47-yonkers.org" makes the cookie valid on both troop.47-yonkers.org and

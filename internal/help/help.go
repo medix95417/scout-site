@@ -107,7 +107,7 @@ type Topic struct {
 	ScoutLoginOnly bool
 
 	// FamilyLoginOnly is its mirror, for topics that only make sense on a
-	// shared family login — signing a permission slip, for instance,
+	// shared family login — a parent-only action, for instance,
 	// which an individual Scout login is refused.
 	FamilyLoginOnly bool
 }
@@ -199,14 +199,12 @@ var Topics = []Topic{
 		},
 	},
 	{
-		ID:               "permission-slips",
-		Title:            "Signing a permission slip",
-		Audience:         AudienceEveryone,
-		RequiresSettings: []string{settings.PermissionSlipsEnabled},
-		FamilyLoginOnly:  true,
+		ID:       "calendar-on-your-phone",
+		Title:    "Putting the calendar on your phone",
+		Audience: AudienceEveryone,
 		Body: []string{
-			"When an event needs a permission slip, a \"Permission slip\" link appears next to it on the calendar. Open it, read it, and sign for each Scout who's going.",
-			"Only a parent or guardian login can sign — a Scout's own login can read the slip but can't sign it for themselves.",
+			"On the Calendar page, \"Add to your phone\" creates a private link you can subscribe to from the calendar app you already use. Unit events then sit alongside everything else in your life and update on their own.",
+			"The link is yours alone and shows exactly what you can see here, including your den or patrol's own events. Treat it like a password: anyone you send it to can see those events without signing in. If you lose a phone, create a new link — the old one stops working straight away.",
 		},
 	},
 	{
@@ -310,14 +308,14 @@ var Topics = []Topic{
 		},
 	},
 	{
-		ID:                 "permission-slips-manage",
-		Title:              "Collecting permission slips",
+		ID:                 "calendar-import",
+		Title:              "Importing another calendar",
 		Audience:           AudienceLeader,
 		RequiredCapability: units.CapEditContent,
-		RequiresSettings:   []string{settings.PermissionSlipsEnabled},
 		Body: []string{
-			"Attach a slip to an event and families can sign it from the calendar. You'll see who has signed and who hasn't at a glance.",
-			"If most of your events don't need one, there's a setting that limits the slip link to events explicitly marked as requiring it, so a weekly meeting doesn't show one.",
+			"Imported calendars brings events in from somewhere else — the council's calendar, or one a leader keeps in Google — so they appear here without anybody retyping them.",
+			"In Google Calendar, go to Settings, pick the calendar, open Integrate calendar, and copy the \"Secret address in iCal format\". Paste that here. The plain sharing page won't work; it has to be the .ics address.",
+			"Events refresh on their own. Changes made in the source calendar follow through, and anything removed there is removed here too — so imported events can't be edited on this site. Removing a calendar removes the events that came from it, and leaves events created here untouched.",
 		},
 	},
 	{
@@ -424,7 +422,7 @@ var Topics = []Topic{
 		Audience:           AudienceAdmin,
 		RequiredCapability: units.CapSuperAdmin,
 		Body: []string{
-			"Site Settings switches whole features on and off for a unit — the treasury, advancement, newsletters, permission slips, family access to Scout account balances.",
+			"Site Settings switches whole features on and off for a unit — the treasury, advancement, newsletters, family access to Scout account balances.",
 			"Turning something off closes its pages and hides its links, but never deletes what's underneath. Turn it back on and the data is exactly as it was. This help page follows the same rule: it stops describing a feature that's switched off.",
 			"The Troop and the Pack are configured separately, so turning something off on one doesn't affect the other.",
 		},
