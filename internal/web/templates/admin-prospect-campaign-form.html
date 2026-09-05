@@ -90,9 +90,14 @@
                data-html-file-target="body-source" class="block w-full text-sm">
         <p class="text-xs text-gray-500 mt-1">
           Loads a template you built elsewhere straight into the HTML source above. Nothing is uploaded — the file
-          is read here in your browser. On save the document wrapper and any
-          <span class="font-mono">&lt;style&gt;</span> block are removed; put styling in
-          <span class="font-mono">style="…"</span> attributes, which are kept.
+          is read here in your browser. Your <span class="font-mono">&lt;style&gt;</span> block is kept, as are
+          <span class="font-mono">style="…"</span> attributes and table layout attributes, so an exported template
+          arrives looking the way you built it. The document wrapper
+          (<span class="font-mono">&lt;!DOCTYPE&gt;</span>, <span class="font-mono">&lt;html&gt;</span>,
+          <span class="font-mono">&lt;head&gt;</span>) is dropped, since an email body is a fragment. Scripts and
+          event handlers are always removed. Worth knowing that Gmail ignores much of a
+          <span class="font-mono">&lt;style&gt;</span> block, so anything that must survive everywhere belongs in a
+          <span class="font-mono">style="…"</span> attribute.
         </p>
       </div>
 
@@ -168,6 +173,15 @@
           : 'Full formatting supported — bold, lists, links, images, colors.';
       }
 
+      // showSource switches panes WITHOUT touching the textarea. Split
+      // out from toSource because a file load needs the mode change and
+      // must not have the content copy — see the html-file-loaded
+      // listener below.
+      function showSource() {
+        sourceMode = true;
+        paintMode();
+      }
+
       function toSource() {
         if (sourceMode) { return; }
         if (quill) { source.value = quill.root.innerHTML; }
@@ -188,8 +202,14 @@
 
       modeSource.addEventListener('click', toSource);
       if (modeDesign) { modeDesign.addEventListener('click', toDesign); }
-      source.addEventListener('input', function () {
-        if (!sourceMode) { toSource(); }
+      // Loading a file means the leader wants that exact markup, so show
+      // it to them as-is. Deliberately showSource, not toSource: the
+      // latter copies the rich editor's content into the textarea first,
+      // which would overwrite the file that was just loaded with an empty
+      // editor. That is precisely the bug this replaced — the upload
+      // appeared to do nothing at all.
+      source.addEventListener('html-file-loaded', function () {
+        showSource();
       });
 
       document.getElementById('campaign-form').addEventListener('submit', function () {

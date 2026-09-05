@@ -17,6 +17,18 @@ var allowedTags = map[string]bool{
 	"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
 	"ul": true, "ol": true, "li": true, "a": true, "img": true,
 	"table": true, "thead": true, "tbody": true, "tr": true, "td": true, "th": true,
+	// <style> is allowed, with its CSS checked by sanitizeCSS and its
+	// content emitted raw rather than HTML-escaped — see renderSanitized.
+	//
+	// It was excluded originally, alongside script/iframe/object/embed/
+	// form/link/meta, and for that list that is still right. But a style
+	// block is not in their class: it cannot execute anything once the
+	// handful of legacy CSS escapes below are refused, and dropping it
+	// silently gutted every real email template. A design tool's export
+	// puts its typography, its colours and its whole responsive layout in
+	// a <style> block; a leader pasting one saw the styling vanish with no
+	// message saying why.
+	"style": true,
 }
 
 // allowedAttrs is the attribute allowlist per tag, checked in addition to
@@ -100,6 +112,24 @@ func renderSanitized(b *strings.Builder, n *html.Node) {
 	}
 
 	tag := n.Data
+
+	// <style> is the one element whose children are NOT markup. Its text
+	// is CSS, and HTML-escaping it would corrupt every child selector
+	// ("a > b" becoming "a &gt; b") and every "&" in a media query. So it
+	// is emitted raw, which is exactly why its content has to be checked
+	// as CSS first — see sanitizeCSS. Attributes are dropped: nothing an
+	// email needs lives on the tag itself.
+	if tag == "style" {
+		css, ok := sanitizeCSS(textOf(n))
+		if !ok || strings.TrimSpace(css) == "" {
+			return
+		}
+		b.WriteString("<style>")
+		b.WriteString(css)
+		b.WriteString("</style>")
+		return
+	}
+
 	b.WriteString("<")
 	b.WriteString(tag)
 	for _, a := range n.Attr {
@@ -190,4 +220,58 @@ func stripURLNoise(val string) string {
 		}
 		return r
 	}, val)
+}
+
+// textOf concatenates an element's direct text content — for <style>,
+// whose single child is the CSS.
+func textOf(n *html.Node) string {
+	var b strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.TextNode {
+			b.WriteString(c.Data)
+		}
+	}
+	return b.String()
+}
+
+// cssBanned are the constructs that make CSS executable or fetching, and
+// the one sequence that would end the block early.
+//
+// Each is a real escape rather than a precaution: expression() ran
+// arbitrary JScript in old IE; -moz-binding pointed at an XBL document
+// that could script; behavior: did the same through an HTC file;
+// javascript:/vbscript: in a url() still execute in some clients; @import
+// pulls in a stylesheet from anywhere, which is a tracking beacon at best
+// and someone else's CSS at worst. "</style" is the breakout — without
+// refusing it, CSS could close its own block and open a script tag.
+var cssBanned = []string{
+	"expression(",
+	"javascript:",
+	"vbscript:",
+	"-moz-binding",
+	"behavior:",
+	"@import",
+	"</style",
+}
+
+// sanitizeCSS decides whether a <style> block is safe to emit as-is.
+//
+// All-or-nothing on purpose. Surgically editing CSS means parsing it, and
+// a half-understood stylesheet that gets partially rewritten is a worse
+// outcome than one that is refused whole — the leader can see their
+// styling is missing and ask why, where they would never notice one
+// silently altered rule. The banned list is short and every entry is a
+// known execution or fetch vector.
+//
+// Checked against a copy with the ASCII control characters and whitespace
+// browsers themselves ignore stripped out, for the same reason safeURL
+// does it: "java\tscript:" reads as harmless here and executes there.
+func sanitizeCSS(css string) (string, bool) {
+	probe := strings.ToLower(stripURLNoise(css))
+	for _, bad := range cssBanned {
+		if strings.Contains(probe, bad) {
+			return "", false
+		}
+	}
+	return css, true
 }

@@ -357,10 +357,11 @@ func (h *Handlers) AdminNewsletterView(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		baseData
 		Newsletter newsletter.Newsletter
-		// Body went through newsletter.Sanitize before it was stored and
-		// before it was emailed — the same allowlist that made it safe to
-		// send makes it safe to show here.
-		Body           template.HTML
+		// Body is shown in a sandboxed iframe (see the template) rather
+		// than rendered into this page. A plain string, not
+		// template.HTML: it goes into a srcdoc attribute, where
+		// html/template's attribute escaping is exactly what is wanted.
+		Body           string
 		Recipients     []newsletterRecipientRow
 		Delivered      int
 		Failed         int
@@ -370,7 +371,7 @@ func (h *Handlers) AdminNewsletterView(w http.ResponseWriter, r *http.Request) {
 	}{
 		baseData:   h.base(r, "Newsletter"),
 		Newsletter: n,
-		Body:       template.HTML(n.Body), //nolint:gosec // sanitized by newsletter.Sanitize before storage
+		Body:       n.Body,
 		Recipients: rows,
 		Delivered:  delivered,
 		Failed:     len(rows) - delivered,

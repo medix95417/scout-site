@@ -350,11 +350,12 @@ func (h *Handlers) AdminCampaignView(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		baseData
 		Campaign prospect.Campaign
-		// Body is the exact HTML that was sent, rendered inside the page
-		// so a leader can see what a family saw. Safe to mark as HTML
-		// because it went through newsletter.Sanitize on the way in —
-		// the same allowlist that made it safe to email.
-		Body       template.HTML
+		// Body is the exact HTML that was sent, shown in a sandboxed
+		// iframe (see the template) rather than rendered into this page.
+		// A plain string, not template.HTML: it goes into a srcdoc
+		// attribute, and html/template's attribute escaping is exactly
+		// what is wanted there.
+		Body       string
 		Recipients []campaignRecipientRow
 		Delivered  int
 		Failed     int
@@ -362,7 +363,7 @@ func (h *Handlers) AdminCampaignView(w http.ResponseWriter, r *http.Request) {
 	}{
 		baseData:   h.base(r, "Message to Prospects"),
 		Campaign:   c,
-		Body:       template.HTML(c.Body), //nolint:gosec // sanitized by newsletter.Sanitize before storage
+		Body:       c.Body,
 		Recipients: rows,
 		Delivered:  delivered,
 		Failed:     len(rows) - delivered,

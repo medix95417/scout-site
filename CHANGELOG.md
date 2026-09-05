@@ -27,6 +27,25 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Start from an HTML file" silently discarded the file.** On both the
+  newsletter and prospect-campaign composers, loading a template did
+  nothing visible: the file landed in the HTML source box and was
+  immediately overwritten by the empty formatting editor, before anyone
+  saw it.
+- **A pasted email template lost its styling.** Everything in a
+  `<style>` block — typography, colours, the whole responsive layout that
+  a design tool puts there — was stripped out with nothing saying why, so
+  an exported template arrived unstyled. Style blocks are now kept, with
+  their CSS checked for the handful of things that can execute or fetch
+  (`expression()`, `javascript:`/`vbscript:` URLs, `-moz-binding`,
+  `behavior:`, `@import`) and the block refused whole if any is present.
+  Scripts, iframes, forms and event handlers are still removed, as before.
+- **The "what was sent" preview is now shown as a mail client would show
+  it**, in a sandboxed frame rather than rendered into the admin page —
+  so an email's own CSS styles the email, not the page around it.
+
 ## [2.7.1] — 2026-09-05
 
 ### Fixed

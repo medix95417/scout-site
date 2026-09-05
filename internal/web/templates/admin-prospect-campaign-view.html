@@ -34,9 +34,19 @@
     <p class="text-xs text-gray-500 mb-3">
       Exactly the message the families received, minus the unsubscribe footer added to each copy.
     </p>
-    <div class="rounded-lg border border-gray-200 bg-white p-6 prose prose-sm max-w-none overflow-x-auto">
-      {{.Body}}
-    </div>
+    <!-- Shown in a sandboxed iframe rather than rendered into this page.
+         Two reasons, and both are load-bearing now that a <style> block
+         survives sanitizing: an email's CSS would otherwise apply to this
+         admin page and wreck it, and an iframe shows the message the way
+         a mail client will rather than the way this page's own styles
+         make it look. sandbox="" is the maximally restrictive form — no
+         scripts, no forms, no same-origin access — so even if something
+         ever got past the sanitizer it has nothing to act on. -->
+    <iframe title="The message as it was sent"
+            sandbox=""
+            srcdoc="{{.Body}}"
+            class="w-full rounded-lg border border-gray-200 bg-white"
+            style="height: 32rem;"></iframe>
   </section>
 
   <section>

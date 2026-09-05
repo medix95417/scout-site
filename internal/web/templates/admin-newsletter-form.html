@@ -79,12 +79,13 @@
           </p>
           <p class="text-xs text-gray-500 mt-1">
             On save, the document wrapper (<span class="font-mono">&lt;!DOCTYPE&gt;</span>,
-            <span class="font-mono">&lt;html&gt;</span>, <span class="font-mono">&lt;head&gt;</span>) and any
-            <span class="font-mono">&lt;style&gt;</span> block are removed — an email body is a fragment, and Gmail
-            strips <span class="font-mono">&lt;style&gt;</span> anyway. Put your styling in
-            <span class="font-mono">style="…"</span> attributes, which are kept, as are tables and their
+            <span class="font-mono">&lt;html&gt;</span>, <span class="font-mono">&lt;head&gt;</span>) is removed — an
+            email body is a fragment — but your <span class="font-mono">&lt;style&gt;</span> block is kept, as are
+            <span class="font-mono">style="…"</span> attributes and tables with their
             <span class="font-mono">cellpadding</span>/<span class="font-mono">bgcolor</span>/
-            <span class="font-mono">align</span> attributes. Scripts and event handlers are always removed.
+            <span class="font-mono">align</span> attributes. Scripts and event handlers are always removed. Worth
+            knowing that Gmail ignores much of a <span class="font-mono">&lt;style&gt;</span> block, so anything that
+            must survive everywhere belongs in a <span class="font-mono">style="…"</span> attribute.
           </p>
           <p class="text-xs text-gray-500 mt-1">
             Up to 5 MB, which is room for images embedded in the file itself. Worth knowing that Gmail hides
@@ -158,6 +159,15 @@
           : 'Full formatting supported \u2014 bold, lists, links, images, colors.';
       }
 
+      // showSource switches panes WITHOUT touching the textarea. Split
+      // out from toSource because a file load needs the mode change and
+      // must not have the content copy — see the html-file-loaded
+      // listener below.
+      function showSource() {
+        sourceMode = true;
+        paintMode();
+      }
+
       function toSource() {
         if (sourceMode) { return; }
         if (quill) { source.value = quill.root.innerHTML; } // lossless: this is what would have been saved
@@ -184,11 +194,14 @@
       modeSource.addEventListener('click', toSource);
       if (modeDesign) { modeDesign.addEventListener('click', toDesign); }
 
-      // Loading a file (see base.html's data-html-file-target handler)
-      // means the leader wants that exact markup, so show it to them
-      // as-is rather than round-tripping it through the design editor.
-      source.addEventListener('input', function () {
-        if (!sourceMode) { toSource(); }
+      // Loading a file means the leader wants that exact markup, so show
+      // it to them as-is. Deliberately showSource, not toSource: the
+      // latter copies the rich editor's content into the textarea first,
+      // which would overwrite the file that was just loaded with an empty
+      // editor. That is precisely the bug this replaced — the upload
+      // appeared to do nothing at all.
+      source.addEventListener('html-file-loaded', function () {
+        showSource();
       });
 
       // The body is posted from whichever editor is showing.
