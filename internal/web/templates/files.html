@@ -46,16 +46,21 @@
     </section>
   {{end}}
 
-  {{if .Events}}
+  {{/* FilterEvents, not Events: only an event with something attached is
+       worth filtering to. The link controls above and below use the full
+       list, since linking is how a file gets attached in the first
+       place. */}}
+  {{if .FilterEvents}}
     <details class="mb-6 rounded-lg border border-gray-200 bg-white p-4 max-w-lg" {{if .GroupedByEvent}}open{{end}}>
       <summary class="cursor-pointer select-none text-sm font-semibold">Filter/group by event</summary>
       <p class="text-xs text-gray-500 mt-2 mb-2">
         Check one or more events to see just their files, grouped by event, instead of the full list below.
+        Only events that have something attached are listed.
       </p>
       <form method="get" action="/files" class="space-y-2">
         <div class="max-h-40 overflow-y-auto space-y-1 border border-gray-100 rounded-md p-2">
           {{$selected := .SelectedEventIDs}}
-          {{range .Events}}
+          {{range .FilterEvents}}
             <label class="flex items-center gap-2 text-sm">
               <input type="checkbox" name="event_id" value="{{.ID}}" {{if index $selected .ID}}checked{{end}}>
               <span class="truncate">{{.Title}} <span class="text-gray-400">— {{.DateRangeDisplay}}</span></span>
