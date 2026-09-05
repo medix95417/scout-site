@@ -180,6 +180,11 @@ func (h *Handlers) AdminNewsletterCreate(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "subject is required", http.StatusBadRequest)
 		return
 	}
+	// Images the author embedded move out to the file library here, before
+	// the draft is written — see inline_images.go. CreateDraft/UpdateDraft
+	// sanitize again on the way in, which this is careful to leave
+	// unchanged: a hosted image is an ordinary https src by then.
+	body = h.hostInlineImages(r.Context(), unit.ID, h.siteURL(r), &actor.ID, body)
 
 	n, err := newsletter.CreateDraft(r.Context(), h.Pool, unit.ID, subject, body, actor.ID)
 	if err != nil {
@@ -213,6 +218,11 @@ func (h *Handlers) AdminNewsletterUpdate(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "subject is required", http.StatusBadRequest)
 		return
 	}
+	// Images the author embedded move out to the file library here, before
+	// the draft is written — see inline_images.go. CreateDraft/UpdateDraft
+	// sanitize again on the way in, which this is careful to leave
+	// unchanged: a hosted image is an ordinary https src by then.
+	body = h.hostInlineImages(r.Context(), unit.ID, h.siteURL(r), &actor.ID, body)
 
 	id := r.PathValue("id")
 	if _, err := newsletter.UpdateDraft(r.Context(), h.Pool, id, unit.ID, subject, body, actor.ID); err != nil {

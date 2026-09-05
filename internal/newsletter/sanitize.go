@@ -1,6 +1,7 @@
 package newsletter
 
 import (
+	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -18,7 +19,7 @@ var allowedTags = map[string]bool{
 	"ul": true, "ol": true, "li": true, "a": true, "img": true,
 	"table": true, "thead": true, "tbody": true, "tr": true, "td": true, "th": true,
 	// <style> is allowed, with its CSS checked by sanitizeCSS and its
-	// content emitted raw rather than HTML-escaped — see renderSanitized.
+	// content emitted raw rather than HTML-escaped — see sanitizer.render.
 	//
 	// It was excluded originally, alongside script/iframe/object/embed/
 	// form/link/meta, and for that list that is still right. But a style
@@ -82,6 +83,23 @@ var globalAttrs = map[string]bool{"style": true, "class": true}
 // <script>) rather than unwrapped — simpler, and Quill's own output never
 // relies on a tag outside allowedTags carrying meaningful content.
 func Sanitize(rawHTML string) string {
+	return sanitize(rawHTML, nil)
+}
+
+// SanitizeHostingImages is Sanitize plus one step: an image the author
+// embedded in the body is handed to store, and if store gives back a URL
+// the body is pointed at that instead of carrying the image itself. See
+// ImageStore for why anyone would want that.
+//
+// Done during the sanitizing pass rather than as a second one because
+// this is the same decision, made once: the point where an embedded
+// image has been recognised as safe is the point where it can be moved.
+// A second pass would have to re-derive that, and could disagree.
+func SanitizeHostingImages(rawHTML string, store ImageStore) string {
+	return sanitize(rawHTML, store)
+}
+
+func sanitize(rawHTML string, store ImageStore) string {
 	nodes, err := html.ParseFragment(strings.NewReader(rawHTML), &html.Node{
 		Type:     html.ElementNode,
 		Data:     "body",
@@ -91,14 +109,20 @@ func Sanitize(rawHTML string) string {
 		return ""
 	}
 
+	s := sanitizer{store: store}
 	var b strings.Builder
 	for _, n := range nodes {
-		renderSanitized(&b, n)
+		s.render(&b, n)
 	}
 	return b.String()
 }
 
-func renderSanitized(b *strings.Builder, n *html.Node) {
+// sanitizer carries what the render walk needs beyond the node itself.
+type sanitizer struct {
+	store ImageStore // nil for a plain Sanitize
+}
+
+func (s sanitizer) render(b *strings.Builder, n *html.Node) {
 	switch n.Type {
 	case html.TextNode:
 		b.WriteString(html.EscapeString(n.Data))
@@ -139,16 +163,22 @@ func renderSanitized(b *strings.Builder, n *html.Node) {
 		if !sanitizeAttrValue(a.Key, a.Val) {
 			continue
 		}
+		// Checked for safety first, moved out second: hosting is only
+		// ever offered an image this sanitizer has already accepted.
+		val := a.Val
+		if a.Key == "src" {
+			val = s.hosted(val)
+		}
 		b.WriteString(" ")
 		b.WriteString(a.Key)
 		b.WriteString(`="`)
-		b.WriteString(html.EscapeString(a.Val))
+		b.WriteString(html.EscapeString(val))
 		b.WriteString(`"`)
 	}
 	b.WriteString(">")
 
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		renderSanitized(b, c)
+		s.render(b, c)
 	}
 
 	if tag != "br" && tag != "img" {
@@ -164,8 +194,12 @@ func renderSanitized(b *strings.Builder, n *html.Node) {
 // enough on its own.
 func sanitizeAttrValue(key, val string) bool {
 	switch key {
-	case "href", "src":
+	case "href":
 		return safeURL(val)
+	case "src":
+		// An image may also be embedded in the document itself. See
+		// safeImageDataURI for why that is allowed here and NOT on href.
+		return safeURL(val) || safeImageDataURI(val)
 	case "style":
 		lower := strings.ToLower(stripURLNoise(val))
 		if strings.Contains(lower, "expression(") || strings.Contains(lower, "javascript:") || strings.Contains(lower, "vbscript:") {
@@ -274,4 +308,36 @@ func sanitizeCSS(css string) (string, bool) {
 		}
 	}
 	return css, true
+}
+
+// imageDataURI matches an embedded raster image: the form a design tool
+// produces when it inlines a logo rather than hosting it.
+//
+// Deliberately an enumeration of raster types rather than "data:image/".
+// SVG is an image by MIME type and a scripted document by capability — it
+// can carry <script> and event handlers — so data:image/svg+xml is not on
+// this list and must not be added to it.
+//
+// The payload is base64 only. A plain (non-base64) data: URI can hold
+// arbitrary text, which is a harder thing to reason about for no benefit:
+// every tool that inlines an image base64-encodes it.
+var imageDataURI = regexp.MustCompile(`^(?i:data:image/(png|jpeg|jpg|gif|webp|bmp);base64,)[a-zA-Z0-9+/=]+$`)
+
+// safeImageDataURI reports whether a src is an embedded image.
+//
+// Allowed on src, and NOT on href, and the distinction is the whole point.
+// A data: URI in an <img> is decoded as image bytes and rendered — if the
+// bytes are not a valid image, nothing happens. The same URI in an <a
+// href> is a document the browser will NAVIGATE to, which for
+// data:text/html means running attacker-authored markup on a page the
+// reader believes is ours. Same scheme, completely different exposure.
+//
+// Checked against a copy with the whitespace and control characters
+// browsers ignore stripped out — not as a defence (this is an allowlist,
+// so stripping only ever widens what it accepts) but because exporters
+// pad a long URI out from the quote and wrap its base64 across lines to
+// keep the file readable. A browser ignores that whitespace when it
+// decodes; rejecting the image over its formatting would be pure loss.
+func safeImageDataURI(val string) bool {
+	return imageDataURI.MatchString(stripURLNoise(val))
 }

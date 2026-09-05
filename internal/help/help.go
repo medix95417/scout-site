@@ -344,6 +344,7 @@ var Topics = []Topic{
 			"You can write to prospective families in bulk from this page, choosing who by where they've got to — everyone still at \"new\" and \"contacted\" when sign-up night comes round, say. You write it in a formatting editor, and you can save a letter as a template to start from next time.",
 			"These families gave their address to ask about joining, so every message carries an unsubscribe link and anyone who uses it is left out of everything afterwards. You can also take somebody off the list yourself, for when they ask in person or by reply. Opting out never deletes the enquiry — the record stays, so the next campaign doesn't quietly add them back.",
 			"Each message you send is kept: what it said, who it went to, and whether it arrived. That's what lets you answer a family who says they never heard from you.",
+			"If you start from an HTML file you built elsewhere, any pictures inside it are moved into the file library when you save and the message is pointed at them. Gmail and Outlook won't show a picture that travels inside an email, so one left in the file arrives as a blank gap. A picture used this way is fetched by each family's email provider without signing in, so treat it as public — the same as a photo on the homepage.",
 		},
 	},
 	{
@@ -355,6 +356,7 @@ var Topics = []Topic{
 		Body: []string{
 			"Newsletters are written in a formatting editor and sent by email to the unit. Save a draft and come back to it; nothing sends until you choose to send.",
 			"If email hasn't been configured for the site, sending will tell you so plainly rather than silently failing — the draft is kept.",
+			"If you start from an HTML file you built elsewhere, any pictures inside it are moved into the file library when you save and the newsletter is pointed at them. Gmail and Outlook won't show a picture that travels inside an email, so one left in the file arrives as a blank gap. A picture used this way is fetched by each reader's email provider without signing in, so treat it as public — the same as a photo on the homepage.",
 			"Once a newsletter has gone out, opening it from the list shows what was sent and every address it reached, with anything that failed marked as failed. The list is the addresses as they were on the roster that day, so a family who has since left still appears — because they did receive it.",
 		},
 	},

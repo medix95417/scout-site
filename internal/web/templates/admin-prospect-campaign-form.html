@@ -99,6 +99,12 @@
           <span class="font-mono">&lt;style&gt;</span> block, so anything that must survive everywhere belongs in a
           <span class="font-mono">style="…"</span> attribute.
         </p>
+        <p class="text-xs text-gray-500 mt-2">
+          Images your design tool embedded in the file are moved into the file library when you save, and the
+          message is pointed at them instead. That is deliberate: Gmail and Outlook refuse to display an embedded
+          image, so a logo left inside the file arrives as a blank gap. Note that a hosted image is fetched by
+          each recipient's mail provider without signing in, so it is public in the same way a homepage photo is.
+        </p>
       </div>
 
       <textarea id="body-initial" style="display:none">{{.Campaign.Body}}</textarea>

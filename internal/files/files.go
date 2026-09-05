@@ -7,10 +7,12 @@ package files
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -62,12 +64,18 @@ func NewStorageKey(unitID, filename string) string {
 // calls storage.Put first — a row with no matching object would be worse
 // than an orphaned object with no row, since the latter is at least
 // harmless).
+//
+// f.Public is honoured, so a caller that needs the file readable without
+// a login can say so at insert time rather than creating it private and
+// flipping it a moment later — see internal/web/inline_images.go, the
+// only caller that does. Every other caller leaves it false, which is
+// what it was before and still the default.
 func Create(ctx context.Context, pool *pgxpool.Pool, f File) (File, error) {
 	err := pool.QueryRow(ctx, `
-		INSERT INTO files (unit_id, filename, display_name, content_type, size_bytes, storage_key, category, uploaded_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO files (unit_id, filename, display_name, content_type, size_bytes, storage_key, category, uploaded_by, is_public)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at
-	`, f.UnitID, f.Filename, f.DisplayName, f.ContentType, f.SizeBytes, f.StorageKey, f.Category, f.UploadedBy,
+	`, f.UnitID, f.Filename, f.DisplayName, f.ContentType, f.SizeBytes, f.StorageKey, f.Category, f.UploadedBy, f.Public,
 	).Scan(&f.ID, &f.CreatedAt)
 	if err != nil {
 		return File{}, err
@@ -170,6 +178,28 @@ func Get(ctx context.Context, pool *pgxpool.Pool, fileID, unitID string) (File, 
 	`, fileID, unitID).Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public)
 	if err != nil {
 		return File{}, false, nil //nolint:nilerr // "no such file in this unit" is a normal, expected outcome
+	}
+	return f, true, nil
+}
+
+// ByStorageKey looks up a file by the storage key its bytes live under,
+// scoped to a unit. Storage keys are ordinarily unguessable one-offs (see
+// NewStorageKey), so this exists for the one caller that derives a key
+// from the CONTENT instead — internal/web/inline_images.go keys an image
+// pulled out of an email body by its own hash, which makes re-saving the
+// same draft, or reusing the same logo in next month's newsletter, find
+// the copy already stored rather than pile up a new one every time.
+func ByStorageKey(ctx context.Context, pool *pgxpool.Pool, unitID, storageKey string) (File, bool, error) {
+	var f File
+	err := pool.QueryRow(ctx, `
+		SELECT id, unit_id, filename, display_name, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
+		FROM files WHERE unit_id = $1 AND storage_key = $2
+	`, unitID, storageKey).Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return File{}, false, nil
+	}
+	if err != nil {
+		return File{}, false, err
 	}
 	return f, true, nil
 }

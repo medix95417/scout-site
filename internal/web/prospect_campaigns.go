@@ -27,6 +27,7 @@ import (
 	"github.com/47-yonkers/scout-site/internal/emailtemplate"
 	"github.com/47-yonkers/scout-site/internal/newsletter"
 	"github.com/47-yonkers/scout-site/internal/prospect"
+	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/units"
 )
 
@@ -178,8 +179,17 @@ func (h *Handlers) AdminCampaignCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Same ceiling the newsletter composer enforces (see
+	// settings.MaxEmailTemplateBytes) — this path had none, which
+	// mattered little while the body was only ever stored, and matters
+	// now that images inside it get decoded and written to storage.
+	if len(r.FormValue("body")) > settings.MaxEmailTemplateBytes {
+		http.Error(w, settings.ErrTemplateTooLarge.Error(), http.StatusBadRequest)
+		return
+	}
+	body := h.hostInlineImages(r.Context(), unit.ID, h.siteURL(r), &actor.ID, r.FormValue("body"))
 	c, err := prospect.CreateCampaign(r.Context(), h.Pool, unit.ID,
-		r.FormValue("subject"), newsletter.Sanitize(r.FormValue("body")),
+		r.FormValue("subject"), body,
 		r.Form["statuses"], actor.ID)
 	if err != nil {
 		writeProspectError(w, err)
@@ -195,9 +205,18 @@ func (h *Handlers) AdminCampaignUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Same ceiling the newsletter composer enforces (see
+	// settings.MaxEmailTemplateBytes) — this path had none, which
+	// mattered little while the body was only ever stored, and matters
+	// now that images inside it get decoded and written to storage.
+	if len(r.FormValue("body")) > settings.MaxEmailTemplateBytes {
+		http.Error(w, settings.ErrTemplateTooLarge.Error(), http.StatusBadRequest)
+		return
+	}
 	id := r.PathValue("id")
+	body := h.hostInlineImages(r.Context(), unit.ID, h.siteURL(r), &actor.ID, r.FormValue("body"))
 	c, err := prospect.UpdateCampaign(r.Context(), h.Pool, id, unit.ID,
-		r.FormValue("subject"), newsletter.Sanitize(r.FormValue("body")),
+		r.FormValue("subject"), body,
 		r.Form["statuses"], actor.ID)
 	switch {
 	case errors.Is(err, prospect.ErrCampaignNotFound):
