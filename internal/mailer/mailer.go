@@ -16,8 +16,10 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"mime"
+	"mime/quotedprintable"
 	"net"
 	"net/mail"
 	"net/smtp"
@@ -291,6 +293,16 @@ func extractAddr(from string) (string, error) {
 // that's just ".") — client.Data() returns a textproto DotWriter, which
 // already does that transparently for whatever well-formed, CRLF-terminated
 // message it's given. Doing it here too would double-escape.
+//
+// The body is quoted-printable, not the "8bit" this used to declare, and
+// the reason is line length: SMTP caps a line at 1000 octets including
+// the CRLF (RFC 5321 §4.5.3.1.6), and an HTML email that embeds its logo
+// as a data: URI carries that whole base64 blob on ONE line — 17 KB of it
+// in the template that surfaced this. A server is entitled to reject or
+// fold a line that long, and folding inside base64 corrupts the image.
+// Quoted-printable soft-wraps at 76 characters, so no line can run over,
+// and it is 7-bit clean besides — where "8bit" needed the server to
+// advertise 8BITMIME before a body with an emoji in it was even legal.
 func buildMessage(contentType, from, to, subject, body string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\n", from)
@@ -299,11 +311,31 @@ func buildMessage(contentType, from, to, subject, body string) string {
 	fmt.Fprintf(&b, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))
 	b.WriteString("MIME-Version: 1.0\r\n")
 	fmt.Fprintf(&b, "Content-Type: %s; charset=\"utf-8\"\r\n", contentType)
-	b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
+	b.WriteString("Content-Transfer-Encoding: quoted-printable\r\n")
 	b.WriteString("\r\n")
-	for _, line := range strings.Split(body, "\n") {
-		b.WriteString(strings.TrimSuffix(line, "\r"))
-		b.WriteString("\r\n")
-	}
+	b.WriteString(quotedPrintable(body))
 	return b.String()
+}
+
+// quotedPrintable encodes a body for transport, normalising line endings
+// to CRLF on the way through — the encoder emits whatever it is given, so
+// a body with bare LFs (every template stored in the database) would
+// otherwise produce a message with mixed endings.
+func quotedPrintable(body string) string {
+	var out strings.Builder
+	w := quotedprintable.NewWriter(&out)
+	for i, line := range strings.Split(body, "\n") {
+		if i > 0 {
+			io.WriteString(w, "\r\n")
+		}
+		io.WriteString(w, strings.TrimSuffix(line, "\r"))
+	}
+	// Writes to a strings.Builder cannot fail, so the only error Close
+	// could report is one from those writes.
+	w.Close()
+	s := out.String()
+	if !strings.HasSuffix(s, "\r\n") {
+		s += "\r\n"
+	}
+	return s
 }

@@ -1,6 +1,7 @@
 package newsletter
 
 import (
+	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -164,8 +165,12 @@ func renderSanitized(b *strings.Builder, n *html.Node) {
 // enough on its own.
 func sanitizeAttrValue(key, val string) bool {
 	switch key {
-	case "href", "src":
+	case "href":
 		return safeURL(val)
+	case "src":
+		// An image may also be embedded in the document itself. See
+		// safeImageDataURI for why that is allowed here and NOT on href.
+		return safeURL(val) || safeImageDataURI(val)
 	case "style":
 		lower := strings.ToLower(stripURLNoise(val))
 		if strings.Contains(lower, "expression(") || strings.Contains(lower, "javascript:") || strings.Contains(lower, "vbscript:") {
@@ -274,4 +279,36 @@ func sanitizeCSS(css string) (string, bool) {
 		}
 	}
 	return css, true
+}
+
+// imageDataURI matches an embedded raster image: the form a design tool
+// produces when it inlines a logo rather than hosting it.
+//
+// Deliberately an enumeration of raster types rather than "data:image/".
+// SVG is an image by MIME type and a scripted document by capability — it
+// can carry <script> and event handlers — so data:image/svg+xml is not on
+// this list and must not be added to it.
+//
+// The payload is base64 only. A plain (non-base64) data: URI can hold
+// arbitrary text, which is a harder thing to reason about for no benefit:
+// every tool that inlines an image base64-encodes it.
+var imageDataURI = regexp.MustCompile(`^(?i:data:image/(png|jpeg|jpg|gif|webp|bmp);base64,)[a-zA-Z0-9+/=]+$`)
+
+// safeImageDataURI reports whether a src is an embedded image.
+//
+// Allowed on src, and NOT on href, and the distinction is the whole point.
+// A data: URI in an <img> is decoded as image bytes and rendered — if the
+// bytes are not a valid image, nothing happens. The same URI in an <a
+// href> is a document the browser will NAVIGATE to, which for
+// data:text/html means running attacker-authored markup on a page the
+// reader believes is ours. Same scheme, completely different exposure.
+//
+// Checked against a copy with the whitespace and control characters
+// browsers ignore stripped out — not as a defence (this is an allowlist,
+// so stripping only ever widens what it accepts) but because exporters
+// pad a long URI out from the quote and wrap its base64 across lines to
+// keep the file readable. A browser ignores that whitespace when it
+// decodes; rejecting the image over its formatting would be pure loss.
+func safeImageDataURI(val string) bool {
+	return imageDataURI.MatchString(stripURLNoise(val))
 }

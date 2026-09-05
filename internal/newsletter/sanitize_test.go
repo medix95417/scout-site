@@ -253,3 +253,100 @@ func TestSanitizeStillDropsExecutableTags(t *testing.T) {
 		}
 	}
 }
+
+// TestSanitizeKeepsEmbeddedImages covers the case that sent a leader's
+// open-house template out with a hole where the Pack logo should have
+// been: a design tool inlines the logo as a base64 data: URI, and a
+// strict scheme allowlist dropped the src while leaving the <img>, so
+// the email arrived a quarter of its original size with a broken image.
+func TestSanitizeKeepsEmbeddedImages(t *testing.T) {
+	// A real (tiny) GIF, base64-encoded — not a placeholder string, so
+	// this test would still be meaningful if the payload were ever
+	// validated as image bytes.
+	const gif = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+
+	for _, mime := range []string{"png", "jpeg", "jpg", "gif", "webp", "bmp"} {
+		uri := "data:image/" + mime + ";base64," + gif
+		out := Sanitize(`<img src="` + uri + `" alt="Pack 47">`)
+		if !strings.Contains(out, uri) {
+			t.Errorf("embedded %s image was stripped:\n%s", mime, out)
+		}
+	}
+
+	// Case in the MIME type is a formatting choice, not a signal.
+	upper := "DATA:IMAGE/PNG;BASE64," + gif
+	if out := Sanitize(`<img src="` + upper + `">`); !strings.Contains(out, upper) {
+		t.Errorf("uppercase data URI was stripped:\n%s", out)
+	}
+
+	// And the payload must survive byte-for-byte: a truncated base64
+	// blob decodes to a corrupt image, which looks the same to a reader
+	// as no image at all.
+	big := strings.Repeat("QUJDRA==", 500)
+	out := Sanitize(`<img src="data:image/jpeg;base64,` + big + `">`)
+	if !strings.Contains(out, big) {
+		t.Errorf("long data URI payload was truncated or altered:\n%.200s", out)
+	}
+}
+
+// TestSanitizeRejectsDangerousDataURIs is the other half of the widening
+// above. data: is allowed on src ONLY, and only for raster images —
+// everything here is a way that could be turned back into script.
+func TestSanitizeRejectsDangerousDataURIs(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		bad  string
+	}{
+		// An <a> the reader clicks navigates to attacker-authored markup.
+		{"html in href", `<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">x</a>`, "data:text/html"},
+		// Even an image type is pointless on an href and it is not worth
+		// reasoning about what a browser sniffs it as.
+		{"image in href", `<a href="data:image/png;base64,QUJD">x</a>`, "data:image"},
+		// SVG is a scripted document wearing an image MIME type.
+		{"svg in src", `<img src="data:image/svg+xml;base64,PHN2Zz48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+PC9zdmc+">`, "svg"},
+		{"svg unencoded", `<img src="data:image/svg+xml,<svg onload=alert(1)>">`, "svg"},
+		// Non-base64 payloads can hold arbitrary text, including markup.
+		{"plain text payload", `<img src="data:image/png,<script>alert(1)</script>">`, "script"},
+		// A made-up image subtype is not on the list.
+		{"unknown subtype", `<img src="data:image/x-evil;base64,QUJD">`, "x-evil"},
+		// Only base64 payloads are recognised — a plain data: URI can
+		// hold arbitrary text and no exporter produces one for an image.
+		{"unencoded payload", `<img src="data:image/png,QUJD">`, "data:image/png"},
+		// A valid-looking image URI tacked onto the END of a dangerous
+		// one must not vouch for what comes before it.
+		{"image URI smuggled after a scheme", `<img src="javascript:alert(1)//data:image/png;base64,QUJD">`, "javascript"},
+		// Not an image at all, however it is dressed up.
+		{"html as src", `<img src="data:text/html;base64,PGI+eDwvYj4=">`, "text/html"},
+		{"script as src", `<img src="data:application/javascript;base64,YWxlcnQoMSk=">`, "javascript"},
+		// The scheme itself broken up the way safeURL already guards against.
+		{"split scheme", `<img src="da` + "\t" + `ta:text/html;base64,PGI+eDwvYj4=">`, "text/html"},
+		// A second URI smuggled after a valid-looking one.
+		{"trailing junk", `<img src="data:image/png;base64,QUJD data:text/html,<b>x</b>">`, "text/html"},
+	}
+	for _, c := range cases {
+		out := strings.ToLower(Sanitize(c.in))
+		if strings.Contains(out, strings.ToLower(c.bad)) {
+			t.Errorf("%s: dangerous data URI survived:\n in: %q\nout: %q", c.name, c.in, out)
+		}
+	}
+}
+
+// TestSanitizeKeepsPaddedAndWrappedDataURIs covers the two cosmetic
+// things an HTML exporter does to a long data: URI — pad it out from the
+// quote, and wrap the base64 across lines to keep the file readable.
+// Browsers ignore that whitespace when decoding, so rejecting it would
+// throw away a perfectly good image over its formatting.
+func TestSanitizeKeepsPaddedAndWrappedDataURIs(t *testing.T) {
+	const gif = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+
+	padded := `<img src="  data:image/gif;base64,` + gif + `  ">`
+	if out := Sanitize(padded); !strings.Contains(out, gif) {
+		t.Errorf("data URI padded with spaces was stripped:\n%s", out)
+	}
+
+	wrapped := `<img src="data:image/gif;base64,` + gif[:20] + "\n      " + gif[20:] + `">`
+	if out := Sanitize(wrapped); !strings.Contains(out, gif[20:]) {
+		t.Errorf("line-wrapped data URI was stripped:\n%s", out)
+	}
+}
