@@ -16,4 +16,4 @@ package version
 // constant that lives next to the changelog entry it corresponds to,
 // and travels with the commit that set it, is the simplest thing that
 // works for that.
-const Version = "2.7.1"
+const Version = "2.7.2"

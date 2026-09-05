@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.7.2] — 2026-09-05
+
 ### Fixed
 
 - **"Start from an HTML file" silently discarded the file.** On both the
