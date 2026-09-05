@@ -229,6 +229,15 @@ func DeleteCampaign(ctx context.Context, pool *pgxpool.Pool, id, unitID, actorID
 // that depends on the caller remembering to check it is not an opt-out.
 // Addresses are de-duplicated because one family can enquire twice, and
 // being written to twice is how a recruiting email becomes a complaint.
+//
+// The two interact, and the obvious way to write it is wrong. Filtering
+// out opted-out ROWS and then de-duplicating by address lets a family who
+// enquired twice keep receiving mail: the opt-out is recorded against one
+// row, and the de-duplication happily picks the other. So the exclusion
+// is by ADDRESS — if any enquiry from this address has opted out, the
+// address is out, including one added after the opt-out. That is what a
+// person means when they unsubscribe, and it took a two-enquiry test
+// against a real database to notice the difference.
 func RecipientsForStatuses(ctx context.Context, pool *pgxpool.Pool, unitID string, statuses []string) ([]Recipient, error) {
 	wanted := filterStatuses(statuses)
 	if len(wanted) == 0 {
@@ -236,13 +245,19 @@ func RecipientsForStatuses(ctx context.Context, pool *pgxpool.Pool, unitID strin
 	}
 
 	rows, err := pool.Query(ctx, `
-		SELECT DISTINCT ON (lower(parent_email))
-		       id::text, parent_name, parent_email
-		FROM prospects
-		WHERE unit_id = $1
-		  AND status::text = ANY($2)
-		  AND NOT email_opt_out
-		ORDER BY lower(parent_email), created_at DESC
+		SELECT DISTINCT ON (lower(p.parent_email))
+		       p.id::text, p.parent_name, p.parent_email
+		FROM prospects p
+		WHERE p.unit_id = $1
+		  AND p.status::text = ANY($2)
+		  AND NOT p.email_opt_out
+		  AND NOT EXISTS (
+		      SELECT 1 FROM prospects q
+		      WHERE q.unit_id = p.unit_id
+		        AND lower(q.parent_email) = lower(p.parent_email)
+		        AND q.email_opt_out
+		  )
+		ORDER BY lower(p.parent_email), p.created_at DESC
 	`, unitID, wanted)
 	if err != nil {
 		return nil, err

@@ -316,6 +316,7 @@ var Topics = []Topic{
 			"Imported calendars brings events in from somewhere else — the council's calendar, or one a leader keeps in Google — so they appear here without anybody retyping them.",
 			"In Google Calendar, go to Settings, pick the calendar, open Integrate calendar, and copy the \"Secret address in iCal format\". Paste that here. The plain sharing page won't work; it has to be the .ics address.",
 			"Events refresh on their own. Changes made in the source calendar follow through, and anything removed there is removed here too — so imported events can't be edited on this site. Removing a calendar removes the events that came from it, and leaves events created here untouched.",
+			"When an incoming event clashes with something already on the calendar — the same camporee, typed here in January and arriving from the council in February — it isn't imported. It waits at the top of the Imported calendars page for you to choose: keep both, keep yours and never import that one, or delete yours and take theirs. Nothing changes until you pick, and it keeps waiting through every refresh.",
 		},
 	},
 	{
@@ -340,6 +341,9 @@ var Topics = []Topic{
 			"Move each one along as you go — contacted, visited a meeting, joined, or not joining — and note what was said. That's what stops an enquiry going cold because everyone assumed somebody else had called.",
 			"An Admin sets who gets emailed about a new enquiry in Site Settings. Nobody has to be: the enquiry is recorded either way, so the list is the record rather than somebody's inbox.",
 			"Joining is still a separate step. When a family signs up, add them on the Manage Roster page and mark the enquiry as joined — a prospect deliberately isn't a roster member until you make them one.",
+			"You can write to prospective families in bulk from this page, choosing who by where they've got to — everyone still at \"new\" and \"contacted\" when sign-up night comes round, say. You write it in a formatting editor, and you can save a letter as a template to start from next time.",
+			"These families gave their address to ask about joining, so every message carries an unsubscribe link and anyone who uses it is left out of everything afterwards. You can also take somebody off the list yourself, for when they ask in person or by reply. Opting out never deletes the enquiry — the record stays, so the next campaign doesn't quietly add them back.",
+			"Each message you send is kept: what it said, who it went to, and whether it arrived. That's what lets you answer a family who says they never heard from you.",
 		},
 	},
 	{
@@ -351,6 +355,7 @@ var Topics = []Topic{
 		Body: []string{
 			"Newsletters are written in a formatting editor and sent by email to the unit. Save a draft and come back to it; nothing sends until you choose to send.",
 			"If email hasn't been configured for the site, sending will tell you so plainly rather than silently failing — the draft is kept.",
+			"Once a newsletter has gone out, opening it from the list shows what was sent and every address it reached, with anything that failed marked as failed. The list is the addresses as they were on the roster that day, so a family who has since left still appears — because they did receive it.",
 		},
 	},
 
@@ -434,7 +439,9 @@ var Topics = []Topic{
 		RequiredCapability: units.CapSuperAdmin,
 		Body: []string{
 			"Roles are granted per unit, not site-wide. Someone who leads in the Pack doesn't automatically lead in the Troop.",
-			"Beyond the built-in roles you can create custom ones and choose exactly which abilities they carry — editing content, approving submissions, managing the treasury, authorizing expenses.",
+			"Roles & Permissions lists every built-in role and exactly what it grants, so you can check it against how your unit actually works. If it doesn't match, change it — the change applies to this unit only, and anything you leave alone keeps following the site's default. The one thing you can't do is take site settings away from the Site Administrator role, since that's the role that would have to put it back.",
+			"Beyond the built-in roles you can create custom ones and choose exactly which abilities they carry — editing content, approving submissions, managing the treasury, authorizing expenses. A custom role can be renamed and its abilities changed later; both take effect at once for everyone holding it.",
+			"Two roles granting the same ability are treated identically everywhere on the site. What matters is the ticks, not the name.",
 			"Anyone who can move money is required to use two-factor authentication; everyone else can turn it on for themselves under Security.",
 		},
 	},

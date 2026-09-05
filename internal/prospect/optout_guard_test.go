@@ -21,13 +21,20 @@ import (
 // who has opted out.
 func TestRecipientQueryExcludesOptOuts(t *testing.T) {
 	body := functionSource(t, "campaign.go", "RecipientsForStatuses")
-	if !strings.Contains(body, "NOT email_opt_out") {
+	if !strings.Contains(body, "NOT p.email_opt_out") {
 		t.Fatal("RecipientsForStatuses no longer filters out opted-out prospects — " +
 			"every campaign would email families who asked not to be emailed")
 	}
+	// Excluding opted-out ROWS is not enough on its own: a family who
+	// enquired twice has two rows, the opt-out sits on one, and
+	// de-duplication picks the other. The exclusion has to be by address.
+	if !strings.Contains(body, "NOT EXISTS") || !strings.Contains(body, "q.email_opt_out") {
+		t.Error("RecipientsForStatuses no longer excludes by address — a family who enquired twice " +
+			"would keep receiving mail after unsubscribing")
+	}
 	// De-duplication is the other half: one family enquiring twice must
 	// not be written to twice.
-	if !strings.Contains(body, "DISTINCT ON (lower(parent_email))") {
+	if !strings.Contains(body, "DISTINCT ON (lower(p.parent_email))") {
 		t.Error("RecipientsForStatuses no longer de-duplicates addresses, so a family who enquired twice gets two copies")
 	}
 }

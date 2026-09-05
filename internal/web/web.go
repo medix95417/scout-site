@@ -134,6 +134,7 @@ type Handlers struct {
 
 	newsletterList *template.Template
 	newsletterForm *template.Template
+	newsletterView *template.Template
 
 	rosterImport        *template.Template
 	rosterImportResults *template.Template
@@ -463,6 +464,9 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.newsletterForm, err = parse("admin-newsletter-form.html"); err != nil {
 		return nil, err
 	}
+	if h.newsletterView, err = parse("admin-newsletter-view.html"); err != nil {
+		return nil, err
+	}
 	if h.rosterImport, err = parse("admin-roster-import.html"); err != nil {
 		return nil, err
 	}
@@ -636,18 +640,23 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/prospects/{id}/delete", h.ProspectDelete)
 	mux.HandleFunc("POST /admin/prospects/{id}/opt-out", h.ProspectOptOut)
 
-	// Mass email to prospects. Registered before the {id} routes above
-	// would be ambiguous — Go's ServeMux prefers the more specific
-	// literal segment, so "campaigns" never gets read as a prospect id.
-	mux.HandleFunc("GET /admin/prospects/campaigns/new", h.AdminCampaignNew)
-	mux.HandleFunc("POST /admin/prospects/campaigns", h.AdminCampaignCreate)
-	mux.HandleFunc("GET /admin/prospects/campaigns/{id}", h.AdminCampaignView)
-	mux.HandleFunc("GET /admin/prospects/campaigns/{id}/edit", h.AdminCampaignEdit)
-	mux.HandleFunc("POST /admin/prospects/campaigns/{id}", h.AdminCampaignUpdate)
-	mux.HandleFunc("POST /admin/prospects/campaigns/{id}/send", h.AdminCampaignSend)
-	mux.HandleFunc("POST /admin/prospects/campaigns/{id}/delete", h.AdminCampaignDelete)
-	mux.HandleFunc("GET /admin/prospects/templates/{id}", h.AdminCampaignTemplate)
-	mux.HandleFunc("POST /admin/prospects/templates/{id}/delete", h.AdminCampaignTemplateDelete)
+	// Mass email to prospects.
+	//
+	// On their own path rather than under /admin/prospects/, because
+	// "/admin/prospects/campaigns/{id}" and "/admin/prospects/{id}/delete"
+	// are ambiguous to Go's ServeMux — both match
+	// "/admin/prospects/campaigns/delete" and neither is more specific —
+	// and an ambiguous pair is a panic at registration, i.e. a server
+	// that won't boot. See TestRoutesRegisterWithoutPanic.
+	mux.HandleFunc("GET /admin/prospect-campaigns/new", h.AdminCampaignNew)
+	mux.HandleFunc("POST /admin/prospect-campaigns", h.AdminCampaignCreate)
+	mux.HandleFunc("GET /admin/prospect-campaigns/{id}", h.AdminCampaignView)
+	mux.HandleFunc("GET /admin/prospect-campaigns/{id}/edit", h.AdminCampaignEdit)
+	mux.HandleFunc("POST /admin/prospect-campaigns/{id}", h.AdminCampaignUpdate)
+	mux.HandleFunc("POST /admin/prospect-campaigns/{id}/send", h.AdminCampaignSend)
+	mux.HandleFunc("POST /admin/prospect-campaigns/{id}/delete", h.AdminCampaignDelete)
+	mux.HandleFunc("GET /admin/prospect-templates/{id}", h.AdminCampaignTemplate)
+	mux.HandleFunc("POST /admin/prospect-templates/{id}/delete", h.AdminCampaignTemplateDelete)
 
 	// Public, and deliberately outside every auth check: the people who
 	// need it are members of the public with no login, and the HMAC in
@@ -660,6 +669,11 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/calendar-feeds/{id}/refresh", h.AdminCalendarFeedRefresh)
 	mux.HandleFunc("POST /admin/calendar-feeds/{id}/toggle", h.AdminCalendarFeedToggle)
 	mux.HandleFunc("POST /admin/calendar-feeds/{id}/delete", h.AdminCalendarFeedDelete)
+	// Same ambiguity trap as the campaign routes above: under
+	// /admin/calendar-feeds/, "conflicts/{id}" and "{id}/refresh" both
+	// match "/admin/calendar-feeds/conflicts/refresh" and neither wins,
+	// which is a registration panic rather than a 404.
+	mux.HandleFunc("POST /admin/calendar-conflicts/{id}", h.AdminCalendarConflictResolve)
 	mux.HandleFunc("GET /settings/calendar", h.CalendarSubscribe)
 	mux.HandleFunc("POST /settings/calendar/regenerate", h.CalendarSubscribeRegenerate)
 	mux.HandleFunc("POST /settings/calendar/remove", h.CalendarSubscribeRemove)
@@ -764,6 +778,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/newsletters", h.AdminNewsletterList)
 	mux.HandleFunc("GET /admin/newsletters/new", h.AdminNewsletterNew)
 	mux.HandleFunc("POST /admin/newsletters", h.AdminNewsletterCreate)
+	mux.HandleFunc("GET /admin/newsletters/{id}", h.AdminNewsletterView)
 	mux.HandleFunc("GET /admin/newsletters/{id}/edit", h.AdminNewsletterEdit)
 	mux.HandleFunc("POST /admin/newsletters/{id}", h.AdminNewsletterUpdate)
 	mux.HandleFunc("POST /admin/newsletters/{id}/send", h.AdminNewsletterSend)

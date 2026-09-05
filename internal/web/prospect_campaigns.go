@@ -106,7 +106,7 @@ func (h *Handlers) AdminCampaignEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	// A sent campaign is a record, not a draft — it opens read-only.
 	if c.Sent() {
-		http.Redirect(w, r, "/admin/prospects/campaigns/"+c.ID, http.StatusSeeOther)
+		http.Redirect(w, r, "/admin/prospect-campaigns/"+c.ID, http.StatusSeeOther)
 		return
 	}
 	h.renderCampaignForm(w, r, unit, c, true)
@@ -186,7 +186,7 @@ func (h *Handlers) AdminCampaignCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.maybeSaveCampaignTemplate(r, unit.ID, actor.ID, c.Subject, c.Body)
-	http.Redirect(w, r, "/admin/prospects/campaigns/"+c.ID+"/edit", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/prospect-campaigns/"+c.ID+"/edit", http.StatusSeeOther)
 }
 
 func (h *Handlers) AdminCampaignUpdate(w http.ResponseWriter, r *http.Request) {
@@ -211,7 +211,7 @@ func (h *Handlers) AdminCampaignUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.maybeSaveCampaignTemplate(r, unit.ID, actor.ID, c.Subject, c.Body)
-	http.Redirect(w, r, "/admin/prospects/campaigns/"+id+"/edit", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/prospect-campaigns/"+id+"/edit", http.StatusSeeOther)
 }
 
 // maybeSaveCampaignTemplate honours the "also save this as a template"
@@ -307,7 +307,7 @@ func (h *Handlers) AdminCampaignSend(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: campaign %s sent: %d succeeded, %d failed", id, sent, failed)
 	}()
 
-	http.Redirect(w, r, "/admin/prospects/campaigns/"+id, http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/prospect-campaigns/"+id, http.StatusSeeOther)
 }
 
 // AdminCampaignView is the record of a campaign: what was sent, to whom,

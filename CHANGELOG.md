@@ -27,6 +27,60 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **Every role's permissions are visible, and changeable.** The Custom
+  Roles page is now Roles & Permissions, and lists all nine built-in roles
+  with exactly what each one grants, so a leader can check them against
+  how their unit actually works. If they don't match, they can be changed
+  — per unit, so the Troop deciding its Assistant Scoutmasters may
+  authorize spending says nothing about the Pack. A change is stored as a
+  delta rather than a copy, so a role a unit never touches keeps following
+  the site's default. The one refusal is removing site settings from the
+  Site Administrator role, which would lock every Admin out of the page
+  that could put it back.
+- **Custom roles can be edited.** Rename one, or change what it grants,
+  without deleting and recreating it. Its internal slug stays fixed, so
+  everyone holding the role keeps it.
+- **Mass email to prospective families.** Write to prospects from the
+  Prospects page, choosing the audience by where each family has got to
+  (still enquiring, contacted, visited, and so on), in the same formatting
+  editor the newsletter uses. Start from a built-in letter or save your
+  own as a template to reuse. Every message is recorded: what it said, who
+  it went to, and whether it arrived.
+- **Consent and opt-out for prospect email.** The join form now says the
+  address will only be used to talk about membership and that this can be
+  withdrawn at any time. Every campaign carries a per-recipient
+  unsubscribe link that works with no login, and a leader can also take
+  somebody off the list by hand for when they ask in person. An opt-out
+  never deletes the enquiry, so the next campaign can't quietly add them
+  back — and it applies to the address, so a family who enquired twice
+  only has to say it once.
+- **Newsletters keep their delivery record.** A sent newsletter now shows
+  what went out and every address it reached, with failures marked as
+  failures. Newsletters sent before this say so, rather than appearing to
+  have reached nobody.
+- **Calendar imports hold back clashes for review.** An incoming event
+  that overlaps something already on the calendar — the same camporee,
+  typed by hand in January and arriving from the council in February — is
+  no longer imported silently alongside it. It waits on the Imported
+  calendars page until a leader chooses: keep both, keep ours and never
+  import that one, or delete ours and take theirs. "Never import this" is
+  remembered, so the next refresh doesn't ask again.
+
+### Fixed
+
+- **The capability that had no checkbox.** `approve_expenses` was added to
+  the capability set and to the database constraint in 2.4.0 but never to
+  the custom-role form, so the documented way to let an Assistant
+  Scoutmaster authorize spending could not actually be ticked. The
+  checkbox list is now derived from the capability set, so a new
+  capability appears on the form as soon as it exists.
+- **"Who can authorize spending" now agrees with who actually can.** The
+  approver list was built from the code's default role definitions rather
+  than the unit's, so a unit that changes what a role grants would have
+  seen a list that disagreed with the permission check.
+
 ## [2.6.1] — 2026-09-04
 
 ### Security

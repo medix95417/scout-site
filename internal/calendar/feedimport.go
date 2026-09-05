@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -167,7 +168,15 @@ type ImportResult struct {
 	Created  int
 	Updated  int
 	Removed  int // previously imported events no longer in the source
-	Err      error
+	// Conflicts is how many incoming events were held back because they
+	// clash with something already on the calendar. They are not counted
+	// as Created — nothing was written to the calendar for them; they are
+	// waiting on a leader. See feedconflict.go.
+	Conflicts int
+	// Ignored is how many the feed offered that a leader has previously
+	// told it to stop bringing in.
+	Ignored int
+	Err     error
 }
 
 // RefreshFeed fetches one feed and reconciles this unit's copy of it.
@@ -180,14 +189,24 @@ type ImportResult struct {
 // duplicates — and why icalendar.Parse folds a recurrence's date into the
 // UID it returns.
 func RefreshFeed(ctx context.Context, pool *pgxpool.Pool, client *http.Client, f Feed) ImportResult {
-	res := ImportResult{FeedID: f.ID, FeedName: f.Name}
-
 	events, err := fetchFeed(ctx, client, f.URL)
 	if err != nil {
-		res.Err = err
 		recordFeedStatus(ctx, pool, f.ID, statusMessage(err), nil)
-		return res
+		return ImportResult{FeedID: f.ID, FeedName: f.Name, Err: err}
 	}
+	return reconcile(ctx, pool, f, events)
+}
+
+// reconcile is RefreshFeed with the network already done — everything
+// from "here is what the source offers" onwards.
+//
+// Split out so the interesting half can be exercised against a real
+// database with a handwritten event list, rather than only through an
+// HTTP round trip. The conflict rules in particular are the kind of thing
+// that reads correctly and behaves otherwise, and they are unreachable
+// from a unit test that can't reach Postgres.
+func reconcile(ctx context.Context, pool *pgxpool.Pool, f Feed, events []icalendar.Event) ImportResult {
+	res := ImportResult{FeedID: f.ID, FeedName: f.Name}
 	res.Fetched = len(events)
 
 	// What we already hold for this feed.
@@ -213,6 +232,15 @@ func RefreshFeed(ctx context.Context, pool *pgxpool.Pool, client *http.Client, f
 		return res
 	}
 
+	// Decisions a leader has already made about this feed. Loaded once
+	// rather than per event: a council calendar the unit has pruned may
+	// have dozens.
+	ignored, err := ignoredUIDs(ctx, pool, f.ID)
+	if err != nil {
+		res.Err = err
+		return res
+	}
+
 	seen := make(map[string]bool, len(events))
 	for _, ev := range events {
 		if ev.Cancelled {
@@ -222,6 +250,14 @@ func RefreshFeed(ctx context.Context, pool *pgxpool.Pool, client *http.Client, f
 			continue
 		}
 		seen[ev.UID] = true
+
+		if ignored[ev.UID] {
+			// A leader has ruled on this one already. Marked seen above
+			// so the delete pass doesn't treat it as withdrawn, which
+			// would be harmless but would churn the log every refresh.
+			res.Ignored++
+			continue
+		}
 
 		var endsAt *time.Time
 		if !ev.End.IsZero() {
@@ -250,6 +286,24 @@ func RefreshFeed(ctx context.Context, pool *pgxpool.Pool, client *http.Client, f
 			continue
 		}
 
+		// Only a brand-new import is checked for clashes. One already
+		// imported is matched by external_uid and updated in place — it
+		// is on the calendar because somebody agreed to it, and asking
+		// again every time it moves by ten minutes would be noise.
+		clashesWith, err := findConflict(ctx, pool, f.UnitID, f.ID, ev)
+		if err != nil {
+			res.Err = err
+			return res
+		}
+		if clashesWith != "" {
+			if err := recordConflict(ctx, pool, f.UnitID, f.ID, clashesWith, ev, title); err != nil {
+				res.Err = err
+				return res
+			}
+			res.Conflicts++
+			continue
+		}
+
 		_, err = pool.Exec(ctx, `
 			INSERT INTO events (unit_id, title, description, location, starts_at, ends_at,
 			                    visibility, status, created_by, feed_id, external_uid)
@@ -262,6 +316,15 @@ func RefreshFeed(ctx context.Context, pool *pgxpool.Pool, client *http.Client, f
 			return res
 		}
 		res.Created++
+	}
+
+	// A conflict the source has stopped offering is no longer a decision
+	// anybody needs to make.
+	if _, err := pool.Exec(ctx, `
+		DELETE FROM calendar_feed_conflicts
+		WHERE feed_id = $1 AND NOT (external_uid = ANY($2))
+	`, f.ID, seenUIDs(seen)); err != nil {
+		log.Printf("calendar: clearing stale conflicts for feed %s: %v", f.ID, err)
 	}
 
 	// Anything we hold that the source no longer offers.
@@ -277,8 +340,27 @@ func RefreshFeed(ctx context.Context, pool *pgxpool.Pool, client *http.Client, f
 	}
 
 	count := res.Created + res.Updated
-	recordFeedStatus(ctx, pool, f.ID, "ok", &count)
+	status := "ok"
+	if res.Conflicts > 0 {
+		// Surfaced in the feed's own status line, because a conflict that
+		// is only visible on a page nobody has a reason to open is a
+		// conflict nobody resolves — and until it is resolved the event
+		// is simply missing from the calendar.
+		status = fmt.Sprintf("ok — %d event(s) held for review", res.Conflicts)
+	}
+	recordFeedStatus(ctx, pool, f.ID, status, &count)
 	return res
+}
+
+// seenUIDs flattens the seen set for the stale-conflict delete above.
+// Postgres has no set type to pass, and an empty slice is correct: a feed
+// that offered nothing this time has no live conflicts either.
+func seenUIDs(seen map[string]bool) []string {
+	out := make([]string, 0, len(seen))
+	for uid := range seen {
+		out = append(out, uid)
+	}
+	return out
 }
 
 // RefreshAllFeeds refreshes every enabled feed across every unit. Called

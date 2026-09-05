@@ -296,3 +296,95 @@ func newsletterSentOn(t *time.Time) string {
 	}
 	return t.Format("Mon Jan 2, 2006 3:04 PM")
 }
+
+// AdminNewsletterView is the record of a sent newsletter: what went out
+// and who received it.
+//
+// A separate page from the edit form because it answers a different
+// question. The form is for changing a draft; this is for looking back at
+// something that can no longer change — which is why it renders the body
+// as the families saw it rather than in an editor, and why it lists every
+// address rather than a count.
+func (h *Handlers) AdminNewsletterView(w http.ResponseWriter, r *http.Request) {
+	unit, _, ok := h.requireContentEditor(w, r, "/admin/newsletters")
+	if !ok {
+		return
+	}
+	if !h.requireNewsletterEnabled(w, r, unit.ID) {
+		return
+	}
+
+	n, err := newsletter.GetNewsletter(r.Context(), h.Pool, r.PathValue("id"), unit.ID)
+	if errors.Is(err, newsletter.ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		log.Printf("web: loading newsletter: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	// A draft has nothing to look back at, so send it to the editor
+	// instead of showing an empty record.
+	if n.Status == "draft" {
+		http.Redirect(w, r, "/admin/newsletters/"+n.ID+"/edit", http.StatusSeeOther)
+		return
+	}
+
+	recipients, err := newsletter.RecipientsFor(r.Context(), h.Pool, n.ID)
+	if err != nil {
+		log.Printf("web: loading newsletter recipients: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	rows := make([]newsletterRecipientRow, 0, len(recipients))
+	delivered := 0
+	for _, rec := range recipients {
+		row := newsletterRecipientRow{Email: rec.Email, Err: rec.Err}
+		if rec.SentAt != nil {
+			row.SentOn = rec.SentAt.Format("Mon Jan 2, 2006 3:04 PM")
+			delivered++
+		}
+		rows = append(rows, row)
+	}
+
+	// Newsletters sent before per-recipient recording existed have a
+	// count but no rows. Saying so is better than an empty table that
+	// reads as "it reached nobody".
+	legacy := len(rows) == 0 && n.RecipientCount != nil && *n.RecipientCount > 0
+
+	data := struct {
+		baseData
+		Newsletter newsletter.Newsletter
+		// Body went through newsletter.Sanitize before it was stored and
+		// before it was emailed — the same allowlist that made it safe to
+		// send makes it safe to show here.
+		Body           template.HTML
+		Recipients     []newsletterRecipientRow
+		Delivered      int
+		Failed         int
+		SentOn         string
+		RecipientCount int
+		LegacySend     bool
+	}{
+		baseData:   h.base(r, "Newsletter"),
+		Newsletter: n,
+		Body:       template.HTML(n.Body), //nolint:gosec // sanitized by newsletter.Sanitize before storage
+		Recipients: rows,
+		Delivered:  delivered,
+		Failed:     len(rows) - delivered,
+		SentOn:     newsletterSentOn(n.SentAt),
+		LegacySend: legacy,
+	}
+	if n.RecipientCount != nil {
+		data.RecipientCount = *n.RecipientCount
+	}
+	h.render(w, h.newsletterView, data)
+}
+
+type newsletterRecipientRow struct {
+	Email  string
+	SentOn string
+	Err    string
+}

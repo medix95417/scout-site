@@ -22,7 +22,7 @@
   {{end}}
 
   <form id="campaign-form" method="post"
-        action="{{if .IsEdit}}/admin/prospects/campaigns/{{.Campaign.ID}}{{else}}/admin/prospects/campaigns{{end}}"
+        action="{{if .IsEdit}}/admin/prospect-campaigns/{{.Campaign.ID}}{{else}}/admin/prospect-campaigns{{end}}"
         class="space-y-5 max-w-2xl">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
@@ -119,7 +119,7 @@
 
   {{if .IsEdit}}
     <div class="mt-8 max-w-2xl flex flex-wrap items-start gap-4">
-      <form method="post" action="/admin/prospects/campaigns/{{.Campaign.ID}}/send"
+      <form method="post" action="/admin/prospect-campaigns/{{.Campaign.ID}}/send"
             data-confirm="Send this to {{.RecipientCount}} prospective families now? This can't be undone.">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: #b91c1c;"
@@ -129,7 +129,7 @@
         <p class="text-xs text-gray-500 mt-2">Sends once. Can't be undone or edited afterwards.</p>
       </form>
 
-      <form method="post" action="/admin/prospects/campaigns/{{.Campaign.ID}}/delete"
+      <form method="post" action="/admin/prospect-campaigns/{{.Campaign.ID}}/delete"
             data-confirm="Delete this draft?">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit" class="text-sm text-red-600 hover:underline">Delete draft</button>
@@ -224,7 +224,7 @@
           if (t) { applyTemplate(t.Subject, t.Body); }
           return;
         }
-        fetch('/admin/prospects/templates/' + v.slice('saved:'.length), { headers: { 'Accept': 'application/json' } })
+        fetch('/admin/prospect-templates/' + v.slice('saved:'.length), { headers: { 'Accept': 'application/json' } })
           .then(function (r) { return r.ok ? r.json() : null; })
           .then(function (t) { if (t) { applyTemplate(t.Subject, t.Body); } })
           .catch(function () { /* leave the composer as it was */ });
