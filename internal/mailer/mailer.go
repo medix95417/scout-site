@@ -74,6 +74,11 @@ func (c Config) Enabled() bool {
 type Mailer struct {
 	cfg  Config
 	pool *pgxpool.Pool
+
+	// jmapRoutes caches the JMAP session/identity/mailbox lookup so a
+	// batch send resolves it once rather than once per recipient. Unused
+	// on the SMTP path. See jmap.go.
+	jmapRoutes jmapRouteCache
 }
 
 // New builds a Mailer from its environment-sourced fallback Config and a
@@ -180,7 +185,7 @@ func (m *Mailer) deliver(ctx context.Context, to, subject, body, contentType str
 	}
 
 	if cfg.Provider == ProviderFastmailJMAP {
-		return sendViaFastmailJMAP(ctx, cfg, to, subject, body, contentType)
+		return m.sendViaFastmailJMAP(ctx, cfg, to, subject, body, contentType)
 	}
 	return deliverSMTP(ctx, cfg, to, subject, body, contentType)
 }

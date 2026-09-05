@@ -27,6 +27,18 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Bulk email over the Fastmail API no longer re-authenticates for every
+  recipient.** Sending through the JMAP HTTP API resolved the session,
+  sending identity and Drafts mailbox on every single message — three
+  requests per recipient, so a newsletter to a whole roster or a campaign
+  to fifty prospects made hundreds of calls where it needed dozens. That
+  cost nothing when the only senders were password resets and event
+  reminders; mass email changed it. The lookup is now reused across a
+  batch, keyed on the API token and From address so rotating either still
+  takes effect on the very next send with no restart.
+
 ## [2.7.0] — 2026-09-05
 
 ### Added
