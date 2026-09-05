@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/47-yonkers/scout-site/internal/db"
 )
 
 // Saved templates against a real database. The behaviour worth pinning
@@ -21,9 +23,21 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	if url == "" {
 		t.Skip("TEST_DATABASE_URL not set — skipping email template integration tests")
 	}
-	pool, err := pgxpool.New(context.Background(), url)
+	// db.Connect + db.Migrate, not a bare pgxpool.New: `go test ./...`
+	// runs packages concurrently, so this package may be the first to
+	// reach the database and cannot assume another one has migrated it.
+	// Connecting without migrating raced the package that does — the
+	// symptom was "relation \"units\" does not exist" here and deadlocks
+	// between this package's DELETEs and another's in-flight ALTER TABLE.
+	// db.Migrate takes an advisory lock, so concurrent callers serialize
+	// and every one of them returns to a fully migrated schema.
+	ctx := context.Background()
+	pool, err := db.Connect(ctx, url)
 	if err != nil {
 		t.Fatalf("connecting to test database: %v", err)
+	}
+	if err := db.Migrate(ctx, pool); err != nil {
+		t.Fatalf("migrating test database: %v", err)
 	}
 	t.Cleanup(pool.Close)
 	return pool
