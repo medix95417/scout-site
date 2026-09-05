@@ -27,6 +27,49 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.8.0] — 2026-09-05
+
+### Added
+
+- **Images embedded in an email template are hosted automatically.** A
+  design tool asked to export a standalone HTML file puts every image
+  inside it, encoded in the file — sensible for a file on disk, and wrong
+  for an email: Gmail and Outlook refuse to display an image carried that
+  way, so a logo arrives as a blank gap. Saving a newsletter or a prospect
+  campaign now moves those images into the unit's file library and points
+  the message at them. On the template that prompted this, the body sent
+  to each recipient dropped from 23,500 characters to 5,800 — which
+  matters twice over, because Gmail hides a message past roughly 100 KB
+  behind a "View entire message" link, and an embedded photo or two is
+  enough to reach that and take the unsubscribe footer with it. An image
+  used this way is fetched by each recipient's mail provider without
+  signing in, so it is public in the same way a homepage photo is; both
+  composers and the help page now say so. The same image reused across
+  messages is stored once, and the two units never share a copy.
+
+### Fixed
+
+- **An uploaded email template arrived with its images missing.** The
+  sanitizer's list of URL schemes it would keep had no entry for an image
+  embedded in the document itself, so the picture was dropped while the
+  space it occupied stayed — a broken image, and a message a quarter of
+  its intended size. Embedded images are kept now, restricted to actual
+  photo formats and only where an image belongs; a link is still never
+  allowed to point at document content the same way, since a browser
+  would navigate to it.
+- **A long line in an email could be cut short in transit.** Messages
+  were sent declaring an encoding that passes body lines through
+  untouched, but an image embedded in a template is one enormous line and
+  SMTP allows no line over 1000 characters. A mail server is entitled to
+  reject such a message or break the line itself, and a break in the
+  middle of an encoded image corrupts it. Messages are now encoded so no
+  line can run over, which also removes a requirement that the receiving
+  server support 8-bit content before a message containing an emoji could
+  legally be sent. Sites sending over the Fastmail API were never
+  affected.
+- **A prospect campaign now has the same 5 MB ceiling on its body** that
+  the newsletter composer already enforced.
+
 ## [2.7.2] — 2026-09-05
 
 ### Fixed
