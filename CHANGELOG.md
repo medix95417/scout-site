@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.7.1] — 2026-09-05
+
 ### Fixed
 
 - **Newsletters and campaigns are sent at a paced rate.** A batch used to
