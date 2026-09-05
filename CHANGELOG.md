@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.7.0] — 2026-09-05
+
 ### Added
 
 - **Every role's permissions are visible, and changeable.** The Custom
