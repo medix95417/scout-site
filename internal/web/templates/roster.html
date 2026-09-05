@@ -23,7 +23,7 @@
             <td class="px-4 py-2">{{.FirstName}} {{.LastName}}</td>
             <td class="px-4 py-2 capitalize">{{.MemberType}}</td>
             <td class="px-4 py-2">{{if .SubGroupName}}{{.SubGroupName}}{{else}}—{{end}}</td>
-            <td class="px-4 py-2">{{range .Roles}}<span class="inline-block rounded-full bg-gray-100 px-2 py-0.5 mr-1 text-xs">{{.}}</span>{{end}}</td>
+            <td class="px-4 py-2">{{range .RoleLabels}}<span class="inline-block rounded-full bg-gray-100 px-2 py-0.5 mr-1 text-xs">{{.}}</span>{{end}}</td>
             <td class="px-4 py-2 whitespace-nowrap">
               {{if .Email}}<a href="mailto:{{.Email}}" class="underline" style="color: var(--unit-color);">{{.Email}}</a><br>{{end}}
               {{if .HomePhone}}<span class="text-xs text-gray-500">home {{.HomePhone}}</span><br>{{end}}

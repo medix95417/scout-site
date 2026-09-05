@@ -32,7 +32,8 @@ import (
 type myFamilyMember struct {
 	roster.MemberDetail
 	SubGroupName string
-	Roles        []string
+	// RoleLabels, not slugs: this page is read by families.
+	RoleLabels []string
 }
 
 func (h *Handlers) MyFamily(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +65,7 @@ func (h *Handlers) MyFamily(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	unitRoster = h.labelRoster(r.Context(), unit.ID, unitRoster)
 	onFile := make(map[string]family.RosterEntry, len(unitRoster))
 	for _, e := range unitRoster {
 		onFile[e.ID] = e
@@ -82,7 +84,7 @@ func (h *Handlers) MyFamily(w http.ResponseWriter, r *http.Request) {
 		m := myFamilyMember{MemberDetail: d}
 		if e, ok := onFile[id]; ok {
 			m.SubGroupName = e.SubGroupName
-			m.Roles = e.Roles
+			m.RoleLabels = e.RoleLabels
 		}
 		details = append(details, m)
 	}

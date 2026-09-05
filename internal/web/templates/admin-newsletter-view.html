@@ -1,0 +1,83 @@
+{{define "extrahead"}}
+  {{if eq .Newsletter.Status "sending"}}
+    <!-- The background send finishes on its own; a refresh picks it up. -->
+    <meta http-equiv="refresh" content="5">
+  {{end}}
+{{end}}
+
+{{define "content"}}
+  <div class="mb-4">
+    <a href="/admin/newsletters" class="text-sm underline">&larr; Back to newsletters</a>
+  </div>
+
+  <h1 class="text-2xl font-bold mb-1">{{.Newsletter.Subject}}</h1>
+  <p class="text-sm text-gray-600 mb-6">
+    {{if eq .Newsletter.Status "sending"}}
+      Sending now — this page updates on its own.
+    {{else}}
+      Sent {{.SentOn}}.
+    {{end}}
+  </p>
+
+  <div class="mb-8 flex flex-wrap gap-6 text-sm">
+    <div>
+      <p class="text-2xl font-semibold">{{if .Recipients}}{{.Delivered}}{{else}}{{.RecipientCount}}{{end}}</p>
+      <p class="text-gray-500">delivered</p>
+    </div>
+    {{if .Failed}}
+      <div>
+        <p class="text-2xl font-semibold text-red-700">{{.Failed}}</p>
+        <p class="text-gray-500">failed</p>
+      </div>
+    {{end}}
+  </div>
+
+  <section class="mb-8">
+    <h2 class="text-lg font-semibold mb-2">What was sent</h2>
+    <p class="text-xs text-gray-500 mb-3">Exactly the message the families received.</p>
+    <div class="rounded-lg border border-gray-200 bg-white p-6 prose prose-sm max-w-none overflow-x-auto">
+      {{.Body}}
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold mb-2">Who received it</h2>
+    {{if .Recipients}}
+      <div class="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+            <tr>
+              <th class="px-4 py-2 font-medium">Email</th>
+              <th class="px-4 py-2 font-medium">Sent</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {{range .Recipients}}
+              <tr>
+                <td class="px-4 py-2 font-mono text-xs">{{.Email}}</td>
+                <td class="px-4 py-2">
+                  {{if .SentOn}}
+                    {{.SentOn}}
+                  {{else}}
+                    <span class="text-red-700">Failed{{if .Err}} — {{.Err}}{{end}}</span>
+                  {{end}}
+                </td>
+              </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">
+        The addresses as they were on the roster when this went out — a family who has left the unit since still
+        appears here, because they did receive it.
+      </p>
+    {{else if .LegacySend}}
+      <p class="text-sm text-gray-500">
+        This went to {{.RecipientCount}} {{if eq .RecipientCount 1}}address{{else}}addresses{{end}}, but it was
+        sent before the site started keeping the list. Newsletters sent from now on record every address.
+      </p>
+    {{else}}
+      <p class="text-sm text-gray-500">Nothing recorded yet.</p>
+    {{end}}
+  </section>
+{{end}}

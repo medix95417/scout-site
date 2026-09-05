@@ -11,6 +11,68 @@
     <div class="rounded-md border border-red-300 bg-red-50 text-red-800 px-4 py-3 mb-6 max-w-2xl text-sm">{{.Error}}</div>
   {{end}}
 
+  {{if .Conflicts}}
+    <section class="rounded-lg border border-amber-300 bg-amber-50 p-4 mb-8 max-w-3xl">
+      <h2 class="text-lg font-semibold mb-1">
+        {{len .Conflicts}} event{{if ne (len .Conflicts) 1}}s{{end}} waiting on you
+      </h2>
+      <p class="text-sm text-amber-900 mb-4">
+        These clash with something already on the calendar, so they haven&#39;t been imported. Nothing changes
+        until you choose. They&#39;ll keep waiting through every refresh until then.
+      </p>
+
+      <div class="space-y-4">
+        {{range .Conflicts}}
+          <div class="rounded-lg border border-amber-200 bg-white p-4">
+            <p class="text-xs uppercase tracking-wide text-gray-500 mb-2">From {{.FeedName}}</p>
+
+            <div class="grid gap-3 sm:grid-cols-2 mb-4">
+              <div class="rounded-md border border-gray-200 p-3">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Coming in</p>
+                <p class="font-medium text-sm">{{.Title}}</p>
+                <p class="text-xs text-gray-600">{{.When}}</p>
+                {{if .Location}}<p class="text-xs text-gray-600">{{.Location}}</p>{{end}}
+              </div>
+              <div class="rounded-md border border-gray-200 p-3">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                  Already on the calendar{{if .ExistingIsImported}} (from another feed){{end}}
+                </p>
+                <p class="font-medium text-sm">{{.ExistingTitle}}</p>
+                <p class="text-xs text-gray-600">{{.ExistingWhen}}</p>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              <form method="post" action="/admin/calendar-conflicts/{{.ID}}">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <input type="hidden" name="decision" value="import">
+                <button type="submit" class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50">
+                  Keep both
+                </button>
+              </form>
+              <form method="post" action="/admin/calendar-conflicts/{{.ID}}"
+                    data-confirm="Stop importing &quot;{{.Title}}&quot; from {{.FeedName}}? It won&#39;t be offered again, and your own event stays as it is.">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <input type="hidden" name="decision" value="skip">
+                <button type="submit" class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50">
+                  Keep ours, never import this
+                </button>
+              </form>
+              <form method="post" action="/admin/calendar-conflicts/{{.ID}}"
+                    data-confirm="Delete &quot;{{.ExistingTitle}}&quot; from the calendar and import &quot;{{.Title}}&quot; in its place? Deleting your event can&#39;t be undone.">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <input type="hidden" name="decision" value="replace">
+                <button type="submit" class="rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50">
+                  Take theirs, delete ours
+                </button>
+              </form>
+            </div>
+          </div>
+        {{end}}
+      </div>
+    </section>
+  {{end}}
+
   <section class="rounded-lg border border-gray-200 bg-white p-4 mb-8 max-w-2xl">
     <h2 class="text-lg font-semibold mb-3">Add a calendar</h2>
     <form method="post" action="/admin/calendar-feeds" class="space-y-3">

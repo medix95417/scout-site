@@ -169,6 +169,7 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("web: computing manageable members: %v", err)
 	}
+	entries = h.labelRoster(r.Context(), unit.ID, entries)
 	rows := make([]rosterRow, 0, len(entries))
 	for _, e := range entries {
 		rows = append(rows, rosterRow{RosterEntry: e, Editable: scope.UnitWide || manageable[e.ID]})
@@ -181,6 +182,7 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("web: loading inactive roster: %v", err)
 	}
+	inactiveEntries = h.labelRoster(r.Context(), unit.ID, inactiveEntries)
 	inactiveRows := make([]rosterRow, 0, len(inactiveEntries))
 	for _, e := range inactiveEntries {
 		inactiveRows = append(inactiveRows, rosterRow{RosterEntry: e, Editable: scope.UnitWide || manageable[e.ID]})
@@ -581,13 +583,15 @@ func (h *Handlers) AdminRosterMemberEdit(w http.ResponseWriter, r *http.Request)
 		log.Printf("web: loading other-unit roles: %v", err)
 	}
 
+	labeler := h.roleLabeler(r.Context(), unit.ID)
+
 	data := struct {
 		baseData
 		Scope                roster.Scope
 		SubGroupNoun         string
 		Member               roster.MemberDetail
-		Roles                []roster.RoleAssignment
-		OtherUnitRoles       []roster.OtherUnitRoles
+		Roles                []roleAssignmentView
+		OtherUnitRoles       []otherUnitRolesView
 		AllowedRoles         []roster.RoleOption
 		AddableSubGroups     []roster.SubGroup
 		HasIndividualLogin   bool
@@ -597,8 +601,8 @@ func (h *Handlers) AdminRosterMemberEdit(w http.ResponseWriter, r *http.Request)
 		Scope:                scope,
 		SubGroupNoun:         subGroupNoun(unit.UnitType),
 		Member:               member,
-		Roles:                memberRoles,
-		OtherUnitRoles:       otherUnitRoles,
+		Roles:                labelAssignments(labeler, memberRoles),
+		OtherUnitRoles:       h.labelOtherUnitRoles(r.Context(), otherUnitRoles),
 		AllowedRoles:         allowedRoles,
 		AddableSubGroups:     addableSubGroups,
 		HasIndividualLogin:   hasIndividualLogin,

@@ -22,6 +22,7 @@ a container), but Go 1.25+ is needed for local build/test/vet.
 go build ./...              # compile everything
 go vet ./...                # static checks
 go test ./...                # run all tests (pure unit tests, no live DB required)
+TEST_DATABASE_URL=postgres://... go test ./...   # also runs the integration tests, which skip without it
 go test ./internal/calendar/...              # test a single package
 go test ./internal/calendar/... -run TestName -v   # run a single test
 gofmt -l .                   # list files needing formatting (this codebase is gofmt-clean)
@@ -88,6 +89,24 @@ family" — every permission check in `internal/web` goes through the
 than assuming a family-wide login, so any new permission-sensitive
 handler should use those too, not roll its own family/member resolution.
 
+**Route patterns can be ambiguous, and that's a panic, not a 404.** Go's
+`ServeMux` refuses to register two patterns where both match some path and
+neither is more specific — `/admin/x/{id}/delete` and `/admin/x/thing/{id}`
+collide on `/admin/x/thing/delete`. The result is a server that does not
+start, and it is invisible on inspection because the two patterns look
+nothing alike. `TestRoutesRegisterWithoutPanic` in `internal/web` registers
+every route the way `New` does, so this is caught in CI rather than on
+deploy; when it fires, move the new route to its own top-level path rather
+than nesting it.
+
+**Every role's capabilities are per-unit overridable.** `systemRoleCapabilities`
+in `internal/units` is the *default*, not the answer. `role_capability_overrides`
+holds a unit's deltas, and `CapabilitiesForRoles` applies them — so any new
+code asking "what does this role grant" must go through that function (or
+`SystemRolesWithCapabilityForUnit` for the inverse question), never the map
+directly. Reading the map is how the approver list and the permission check
+came to disagree.
+
 **Migrations.** Plain SQL files embedded from `internal/db/migrations/`
 and applied in order by `internal/db.Migrate` — it runs automatically on
 every server startup (and via `-migrate`) and needs no separate tool.
@@ -115,6 +134,10 @@ elsewhere. Follow this pattern for any new optional external dependency.
 - `internal/settings` — small generic key/value store for site-wide
   on/off toggles (`system_settings` table); add a new toggle here rather
   than inventing a one-off settings mechanism.
+- `internal/emailtemplate` — email bodies a unit saved to reuse, for both
+  prospect campaigns and newsletters (`kind` distinguishes them). Distinct
+  from `newsletter.StarterTemplates`, which are code-defined starting
+  points identical for every unit.
 - `internal/prospect` — enquiries from families interested in joining,
   captured by the public `/join` form and tracked by leaders on
   `/admin/prospects`. Deliberately not part of `internal/roster`: a

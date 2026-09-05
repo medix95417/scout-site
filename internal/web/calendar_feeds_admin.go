@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/47-yonkers/scout-site/internal/calendar"
 )
@@ -22,6 +23,19 @@ type calendarFeedsData struct {
 	baseData
 	Feeds []feedRow
 	Error string
+	// Conflicts are imports held back because they clash with something
+	// already on the calendar. Shown on this page rather than one of
+	// their own: this is where a leader comes when a feed isn't behaving
+	// as expected, and "three events aren't importing" is exactly that.
+	Conflicts []conflictRow
+}
+
+// conflictRow is one held-back import, with both events' times already
+// formatted — html/template can't format a *time.Time in an action.
+type conflictRow struct {
+	calendar.Conflict
+	When         string
+	ExistingWhen string
 }
 
 func (h *Handlers) AdminCalendarFeeds(w http.ResponseWriter, r *http.Request) {
@@ -45,11 +59,68 @@ func (h *Handlers) renderCalendarFeeds(w http.ResponseWriter, r *http.Request, u
 		}
 		rows = append(rows, row)
 	}
+	conflicts, err := calendar.ConflictsForUnit(r.Context(), h.Pool, unitID)
+	if err != nil {
+		log.Printf("web: listing calendar import conflicts: %v", err)
+	}
+	conflictRows := make([]conflictRow, 0, len(conflicts))
+	for _, c := range conflicts {
+		conflictRows = append(conflictRows, conflictRow{
+			Conflict:     c,
+			When:         formatEventRange(c.StartsAt, c.EndsAt),
+			ExistingWhen: formatEventRange(c.ExistingStartsAt, c.ExistingEndsAt),
+		})
+	}
+
 	h.render(w, h.calendarFeeds, calendarFeedsData{
-		baseData: h.base(r, "Imported calendars"),
-		Feeds:    rows,
-		Error:    errMsg,
+		baseData:  h.base(r, "Imported calendars"),
+		Feeds:     rows,
+		Error:     errMsg,
+		Conflicts: conflictRows,
 	})
+}
+
+// formatEventRange renders one event's time as a leader reads it, with
+// the end time only when there is one and only the clock part when it
+// falls on the same day.
+func formatEventRange(start time.Time, end *time.Time) string {
+	s := start.Format("Mon 2 Jan 2006, 15:04")
+	if end == nil {
+		return s
+	}
+	if end.Year() == start.Year() && end.YearDay() == start.YearDay() {
+		return s + "–" + end.Format("15:04")
+	}
+	return s + " – " + end.Format("Mon 2 Jan 2006, 15:04")
+}
+
+// AdminCalendarConflictResolve carries out one decision.
+func (h *Handlers) AdminCalendarConflictResolve(w http.ResponseWriter, r *http.Request) {
+	unit, actor, ok := h.requireContentEditor(w, r, "/admin/calendar-feeds")
+	if !ok {
+		return
+	}
+
+	decision := r.FormValue("decision")
+	if !calendar.ValidResolution(decision) {
+		http.Error(w, "pick one of: keep both, keep ours, or take theirs", http.StatusBadRequest)
+		return
+	}
+
+	err := calendar.ResolveConflict(r.Context(), h.Pool, r.PathValue("id"), unit.ID,
+		calendar.Resolution(decision), actor.ID)
+	switch {
+	case errors.Is(err, calendar.ErrConflictNotFound):
+		// Most likely somebody else in the unit dealt with it, or the
+		// event it clashed with was deleted, which resolves it too.
+		http.Redirect(w, r, "/admin/calendar-feeds", http.StatusSeeOther)
+		return
+	case err != nil:
+		log.Printf("web: resolving calendar import conflict: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin/calendar-feeds", http.StatusSeeOther)
 }
 
 func (h *Handlers) AdminCalendarFeedAdd(w http.ResponseWriter, r *http.Request) {

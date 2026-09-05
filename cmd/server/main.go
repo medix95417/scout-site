@@ -165,8 +165,8 @@ func main() {
 				log.Printf("refresh-calendar-feeds: %s: %v", res.FeedName, res.Err)
 				continue
 			}
-			log.Printf("refresh-calendar-feeds: %s: %d new, %d updated, %d removed",
-				res.FeedName, res.Created, res.Updated, res.Removed)
+			log.Printf("refresh-calendar-feeds: %s: %d new, %d updated, %d removed, %d held for review, %d ignored",
+				res.FeedName, res.Created, res.Updated, res.Removed, res.Conflicts, res.Ignored)
 		}
 		log.Printf("refresh-calendar-feeds: %d feeds, %d failed", len(results), failed)
 		return
@@ -270,6 +270,7 @@ func main() {
 		log.Fatalf("web: %v", err)
 	}
 	handlers.TrustProxyHeaders = cfg.TrustProxyHeaders
+	handlers.UnsubscribeSecret = []byte(cfg.SessionSecret)
 
 	mux := http.NewServeMux()
 	handlers.Routes(mux)

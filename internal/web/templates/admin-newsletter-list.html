@@ -22,7 +22,7 @@
                 <a href="/admin/newsletters/{{.ID}}/edit" class="font-medium hover:underline truncate" style="color: var(--unit-color);">{{.Subject}}</a>
                 <span class="rounded-full bg-amber-100 text-amber-800 text-xs font-medium px-2 py-0.5">Sending</span>
               {{else}}
-                <span class="font-medium truncate">{{.Subject}}</span>
+                <a href="/admin/newsletters/{{.ID}}" class="font-medium hover:underline truncate" style="color: var(--unit-color);">{{.Subject}}</a>
                 <span class="rounded-full bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5">Sent</span>
               {{end}}
             </div>
@@ -36,11 +36,15 @@
               <div class="text-xs text-gray-400 mt-1">Not sent yet</div>
             {{end}}
           </div>
-          {{if eq .Status "draft"}}
-            <div class="flex-shrink-0">
+          <div class="flex-shrink-0">
+            {{if eq .Status "draft"}}
               <a href="/admin/newsletters/{{.ID}}/edit" class="text-sm underline" style="color: var(--unit-color);">Edit</a>
-            </div>
-          {{end}}
+            {{else}}
+              <a href="/admin/newsletters/{{.ID}}" class="text-sm underline" style="color: var(--unit-color);">
+                What was sent
+              </a>
+            {{end}}
+          </div>
         </div>
       {{end}}
     </div>

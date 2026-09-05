@@ -1,0 +1,263 @@
+{{define "extrahead"}}
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/2.0.2/quill.snow.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/2.0.2/quill.min.js"></script>
+  {{if eq .Campaign.Status "sending"}}
+    <!-- The background send transitions this to "sent" on its own; a
+         plain refresh picks that up with no JS polling. -->
+    <meta http-equiv="refresh" content="5">
+  {{end}}
+{{end}}
+
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-2">{{if .IsEdit}}Edit{{else}}New{{end}} Message to Prospects — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-6 max-w-2xl">
+    Goes to families who filled in the join form, chosen by where they've got to. Everyone who has asked not to
+    be emailed is left out automatically, and every message carries a link letting them opt out.
+  </p>
+
+  {{if not .MailerReady}}
+    <div class="mb-6 max-w-2xl rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+      Email isn't configured for this site yet, so nothing can be sent. You can still write and save a draft.
+    </div>
+  {{end}}
+
+  <form id="campaign-form" method="post"
+        action="{{if .IsEdit}}/admin/prospect-campaigns/{{.Campaign.ID}}{{else}}/admin/prospect-campaigns{{end}}"
+        class="space-y-5 max-w-2xl">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+    <fieldset class="rounded-lg border border-gray-200 bg-white p-4">
+      <legend class="px-1 text-sm font-medium">Who gets this</legend>
+      <div class="space-y-2 mt-1">
+        {{range .Statuses}}
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="statuses" value="{{.Value}}" {{if .Selected}}checked{{end}}>
+            <span>{{.Label}}</span>
+            <span class="text-xs text-gray-500">({{.Count}} {{if eq .Count 1}}family{{else}}families{{end}} who can be emailed)</span>
+          </label>
+        {{end}}
+      </div>
+      <p class="text-xs text-gray-500 mt-3">
+        Counts exclude anyone who has opted out. As saved, this message reaches
+        <strong>{{.RecipientCount}}</strong> {{if eq .RecipientCount 1}}family{{else}}families{{end}}.
+      </p>
+    </fieldset>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="subject">Subject</label>
+      <input id="subject" name="subject" type="text" required value="{{.Campaign.Subject}}"
+             maxlength="200"
+             class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="starter-template">Start from a template (optional)</label>
+      <select id="starter-template" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+        <option value="">Blank</option>
+        {{if .SavedTemplates}}
+          <optgroup label="Saved by {{.Unit.Name}}">
+            {{range .SavedTemplates}}
+              <option value="saved:{{.ID}}">{{.Name}}</option>
+            {{end}}
+          </optgroup>
+        {{end}}
+      </select>
+      <p class="text-xs text-gray-500 mt-1">Replaces the subject and body below with the template's.</p>
+    </div>
+
+    <div>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+        <label class="block text-sm font-medium">Message</label>
+        <div class="flex items-center gap-1 text-xs" role="group" aria-label="Editor mode">
+          <button type="button" id="mode-design" class="rounded-md border px-2 py-1">Design</button>
+          <button type="button" id="mode-source" class="rounded-md border px-2 py-1">HTML source</button>
+        </div>
+      </div>
+      <p class="text-xs text-gray-500 mb-2" id="mode-help">Full formatting supported — bold, lists, links, images, colors.</p>
+
+      <div id="design-pane">
+        <div id="quill-editor" style="height: 300px; background: white;"></div>
+      </div>
+      <div id="source-pane" class="hidden">
+        <textarea id="body-source" rows="18"
+                  class="w-full rounded-md border border-gray-300 px-3 py-2 text-xs font-mono"
+                  spellcheck="false">{{.Campaign.Body}}</textarea>
+      </div>
+
+      <div class="mt-2 rounded-md bg-gray-50 border border-gray-200 p-3">
+        <label class="block text-sm font-medium mb-1" for="html-file">Start from an HTML file</label>
+        <input type="file" id="html-file" accept=".html,.htm,text/html"
+               data-html-file-target="body-source" class="block w-full text-sm">
+        <p class="text-xs text-gray-500 mt-1">
+          Loads a template you built elsewhere straight into the HTML source above. Nothing is uploaded — the file
+          is read here in your browser. On save the document wrapper and any
+          <span class="font-mono">&lt;style&gt;</span> block are removed; put styling in
+          <span class="font-mono">style="…"</span> attributes, which are kept.
+        </p>
+      </div>
+
+      <textarea id="body-initial" style="display:none">{{.Campaign.Body}}</textarea>
+      <input type="hidden" id="body-input" name="body">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" for="save_as_template">Also save this as a template (optional)</label>
+      <input id="save_as_template" name="save_as_template" type="text" maxlength="120"
+             placeholder="e.g. Autumn sign-up letter"
+             class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+      <p class="text-xs text-gray-500 mt-1">
+        Saves the subject and body under this name so you can start from it next time. Reusing a name replaces
+        the template of that name.
+      </p>
+    </div>
+
+    <div>
+      <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Save Draft</button>
+      <a href="/admin/prospects" class="text-sm underline ml-2">Cancel</a>
+    </div>
+  </form>
+
+  {{if .IsEdit}}
+    <div class="mt-8 max-w-2xl flex flex-wrap items-start gap-4">
+      <form method="post" action="/admin/prospect-campaigns/{{.Campaign.ID}}/send"
+            data-confirm="Send this to {{.RecipientCount}} prospective families now? This can't be undone.">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="rounded-md px-4 py-2 text-white text-sm" style="background-color: #b91c1c;"
+                {{if not .MailerReady}}disabled{{end}}>
+          Send to {{.RecipientCount}} {{if eq .RecipientCount 1}}family{{else}}families{{end}}
+        </button>
+        <p class="text-xs text-gray-500 mt-2">Sends once. Can't be undone or edited afterwards.</p>
+      </form>
+
+      <form method="post" action="/admin/prospect-campaigns/{{.Campaign.ID}}/delete"
+            data-confirm="Delete this draft?">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="text-sm text-red-600 hover:underline">Delete draft</button>
+      </form>
+    </div>
+  {{end}}
+
+  <script nonce="{{.CSPNonce}}">
+    document.addEventListener('DOMContentLoaded', function () {
+      var designPane = document.getElementById('design-pane');
+      var sourcePane = document.getElementById('source-pane');
+      var source = document.getElementById('body-source');
+      var modeDesign = document.getElementById('mode-design');
+      var modeSource = document.getElementById('mode-source');
+      var help = document.getElementById('mode-help');
+      var initial = document.getElementById('body-initial').value;
+
+      // Same arrangement as the newsletter composer: Quill comes from a
+      // CDN, the body is submitted by script, and an editor that
+      // half-initialises would silently save nothing. So everything works
+      // without Quill and the rich editor is layered on only if it loaded.
+      var quill = null;
+      var sourceMode = false;
+
+      function paintMode() {
+        if (designPane) { designPane.classList.toggle('hidden', sourceMode); }
+        sourcePane.classList.toggle('hidden', !sourceMode);
+        if (modeDesign) {
+          modeDesign.className = 'rounded-md border px-2 py-1' + (sourceMode ? '' : ' bg-gray-200 font-medium');
+          modeDesign.setAttribute('aria-pressed', String(!sourceMode));
+        }
+        modeSource.className = 'rounded-md border px-2 py-1' + (sourceMode ? ' bg-gray-200 font-medium' : '');
+        modeSource.setAttribute('aria-pressed', String(sourceMode));
+        help.textContent = sourceMode
+          ? 'Editing the raw HTML. Kept exactly as written — nothing here is rewritten.'
+          : 'Full formatting supported — bold, lists, links, images, colors.';
+      }
+
+      function toSource() {
+        if (sourceMode) { return; }
+        if (quill) { source.value = quill.root.innerHTML; }
+        sourceMode = true;
+        paintMode();
+      }
+
+      function toDesign() {
+        if (!sourceMode || !quill) { return; }
+        var risky = /<(table|style|head|meta|!doctype|html|body)\b/i.test(source.value);
+        if (risky && !window.confirm('The design editor only understands basic formatting, so switching will simplify this HTML — tables, style blocks and document structure will be dropped.\n\nSwitch anyway?')) {
+          return;
+        }
+        quill.root.innerHTML = source.value;
+        sourceMode = false;
+        paintMode();
+      }
+
+      modeSource.addEventListener('click', toSource);
+      if (modeDesign) { modeDesign.addEventListener('click', toDesign); }
+      source.addEventListener('input', function () {
+        if (!sourceMode) { toSource(); }
+      });
+
+      document.getElementById('campaign-form').addEventListener('submit', function () {
+        document.getElementById('body-input').value =
+          (sourceMode || !quill) ? source.value : quill.root.innerHTML;
+      });
+
+      // Both kinds of starting point go through one picker: the built-in
+      // ones are already here as JSON, the unit's own are fetched when
+      // picked so the page doesn't carry every saved body it might not use.
+      var starterTemplates = {{.StarterTemplates}};
+      var picker = document.getElementById('starter-template');
+      starterTemplates.forEach(function (t) {
+        var opt = document.createElement('option');
+        opt.textContent = t.Name;
+        opt.value = 'builtin:' + t.Name;
+        picker.appendChild(opt);
+      });
+
+      function applyTemplate(subject, body) {
+        document.getElementById('subject').value = subject;
+        source.value = body;
+        if (quill) { quill.root.innerHTML = body; }
+      }
+
+      picker.addEventListener('change', function () {
+        var v = picker.value;
+        if (!v) { return; }
+        if (v.indexOf('builtin:') === 0) {
+          var name = v.slice('builtin:'.length);
+          var t = starterTemplates.find(function (t) { return t.Name === name; });
+          if (t) { applyTemplate(t.Subject, t.Body); }
+          return;
+        }
+        fetch('/admin/prospect-templates/' + v.slice('saved:'.length), { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (t) { if (t) { applyTemplate(t.Subject, t.Body); } })
+          .catch(function () { /* leave the composer as it was */ });
+      });
+
+      if (typeof Quill === 'undefined') {
+        if (modeDesign) { modeDesign.remove(); }
+        if (designPane) { designPane.remove(); }
+        designPane = null;
+        modeDesign = null;
+        sourceMode = true;
+        paintMode();
+        help.textContent = "The formatting editor couldn't load (it comes from an external service). You can still write and edit the HTML directly below.";
+        return;
+      }
+
+      quill = new Quill('#quill-editor', {
+        theme: 'snow',
+        modules: {
+          toolbar: [
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ list: 'ordered' }, { list: 'bullet' }],
+            [{ header: [1, 2, 3, false] }],
+            ['link', 'image'],
+            [{ color: [] }, { background: [] }],
+            [{ align: [] }],
+            ['blockquote'],
+            ['clean']
+          ]
+        }
+      });
+      if (initial) { quill.root.innerHTML = initial; }
+      paintMode();
+    });
+  </script>
+{{end}}

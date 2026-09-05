@@ -73,6 +73,14 @@ type Handlers struct {
 	// clientIP.
 	TrustProxyHeaders bool
 
+	// UnsubscribeSecret signs the one-click unsubscribe links in prospect
+	// campaign emails. Set from config.SessionSecret, whose doc comment
+	// has always said it is the secret to use once something needed
+	// signing — this is that something. Deriving the link means no
+	// unsubscribe token is ever stored next to the address it protects.
+	// See internal/prospect.UnsubscribeToken.
+	UnsubscribeSecret []byte
+
 	// orderLimiter bounds how many fundraiser orders one address can place.
 	// The storefront order form is the only place an anonymous visitor can
 	// write to the database, so it's the only one that needs this.
@@ -126,6 +134,7 @@ type Handlers struct {
 
 	newsletterList *template.Template
 	newsletterForm *template.Template
+	newsletterView *template.Template
 
 	rosterImport        *template.Template
 	rosterImportResults *template.Template
@@ -153,6 +162,10 @@ type Handlers struct {
 
 	joinPage      *template.Template
 	prospectsPage *template.Template
+
+	campaignForm *template.Template
+	campaignView *template.Template
+	unsubscribed *template.Template
 
 	treasuryReports    *template.Template
 	treasuryReportView *template.Template
@@ -451,6 +464,9 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.newsletterForm, err = parse("admin-newsletter-form.html"); err != nil {
 		return nil, err
 	}
+	if h.newsletterView, err = parse("admin-newsletter-view.html"); err != nil {
+		return nil, err
+	}
 	if h.rosterImport, err = parse("admin-roster-import.html"); err != nil {
 		return nil, err
 	}
@@ -497,6 +513,15 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 		return nil, err
 	}
 	if h.joinPage, err = parse("join.html"); err != nil {
+		return nil, err
+	}
+	if h.campaignForm, err = parse("admin-prospect-campaign-form.html"); err != nil {
+		return nil, err
+	}
+	if h.campaignView, err = parse("admin-prospect-campaign-view.html"); err != nil {
+		return nil, err
+	}
+	if h.unsubscribed, err = parse("unsubscribed.html"); err != nil {
 		return nil, err
 	}
 	if h.prospectsPage, err = parse("admin-prospects.html"); err != nil {
@@ -613,12 +638,42 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/prospects", h.ProspectsList)
 	mux.HandleFunc("POST /admin/prospects/{id}", h.ProspectUpdate)
 	mux.HandleFunc("POST /admin/prospects/{id}/delete", h.ProspectDelete)
+	mux.HandleFunc("POST /admin/prospects/{id}/opt-out", h.ProspectOptOut)
+
+	// Mass email to prospects.
+	//
+	// On their own path rather than under /admin/prospects/, because
+	// "/admin/prospects/campaigns/{id}" and "/admin/prospects/{id}/delete"
+	// are ambiguous to Go's ServeMux — both match
+	// "/admin/prospects/campaigns/delete" and neither is more specific —
+	// and an ambiguous pair is a panic at registration, i.e. a server
+	// that won't boot. See TestRoutesRegisterWithoutPanic.
+	mux.HandleFunc("GET /admin/prospect-campaigns/new", h.AdminCampaignNew)
+	mux.HandleFunc("POST /admin/prospect-campaigns", h.AdminCampaignCreate)
+	mux.HandleFunc("GET /admin/prospect-campaigns/{id}", h.AdminCampaignView)
+	mux.HandleFunc("GET /admin/prospect-campaigns/{id}/edit", h.AdminCampaignEdit)
+	mux.HandleFunc("POST /admin/prospect-campaigns/{id}", h.AdminCampaignUpdate)
+	mux.HandleFunc("POST /admin/prospect-campaigns/{id}/send", h.AdminCampaignSend)
+	mux.HandleFunc("POST /admin/prospect-campaigns/{id}/delete", h.AdminCampaignDelete)
+	mux.HandleFunc("GET /admin/prospect-templates/{id}", h.AdminCampaignTemplate)
+	mux.HandleFunc("POST /admin/prospect-templates/{id}/delete", h.AdminCampaignTemplateDelete)
+
+	// Public, and deliberately outside every auth check: the people who
+	// need it are members of the public with no login, and the HMAC in
+	// the link is the whole of the authorization. See
+	// internal/web/prospect_unsubscribe.go.
+	mux.HandleFunc("GET /unsubscribe", h.ProspectUnsubscribe)
 	mux.HandleFunc("GET /help", h.Help)
 	mux.HandleFunc("GET /admin/calendar-feeds", h.AdminCalendarFeeds)
 	mux.HandleFunc("POST /admin/calendar-feeds", h.AdminCalendarFeedAdd)
 	mux.HandleFunc("POST /admin/calendar-feeds/{id}/refresh", h.AdminCalendarFeedRefresh)
 	mux.HandleFunc("POST /admin/calendar-feeds/{id}/toggle", h.AdminCalendarFeedToggle)
 	mux.HandleFunc("POST /admin/calendar-feeds/{id}/delete", h.AdminCalendarFeedDelete)
+	// Same ambiguity trap as the campaign routes above: under
+	// /admin/calendar-feeds/, "conflicts/{id}" and "{id}/refresh" both
+	// match "/admin/calendar-feeds/conflicts/refresh" and neither wins,
+	// which is a registration panic rather than a 404.
+	mux.HandleFunc("POST /admin/calendar-conflicts/{id}", h.AdminCalendarConflictResolve)
 	mux.HandleFunc("GET /settings/calendar", h.CalendarSubscribe)
 	mux.HandleFunc("POST /settings/calendar/regenerate", h.CalendarSubscribeRegenerate)
 	mux.HandleFunc("POST /settings/calendar/remove", h.CalendarSubscribeRemove)
@@ -723,6 +778,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/newsletters", h.AdminNewsletterList)
 	mux.HandleFunc("GET /admin/newsletters/new", h.AdminNewsletterNew)
 	mux.HandleFunc("POST /admin/newsletters", h.AdminNewsletterCreate)
+	mux.HandleFunc("GET /admin/newsletters/{id}", h.AdminNewsletterView)
 	mux.HandleFunc("GET /admin/newsletters/{id}/edit", h.AdminNewsletterEdit)
 	mux.HandleFunc("POST /admin/newsletters/{id}", h.AdminNewsletterUpdate)
 	mux.HandleFunc("POST /admin/newsletters/{id}/send", h.AdminNewsletterSend)
@@ -750,7 +806,12 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	// Custom roles — super_admin only (internal/web/admin_roles.go).
 	mux.HandleFunc("GET /admin/custom-roles", h.AdminCustomRolesList)
 	mux.HandleFunc("POST /admin/custom-roles", h.AdminCustomRolesCreate)
+	mux.HandleFunc("POST /admin/custom-roles/{id}", h.AdminCustomRolesUpdate)
 	mux.HandleFunc("POST /admin/custom-roles/{id}/delete", h.AdminCustomRolesDelete)
+	// Built-in roles live on the same page but a different path: they have
+	// no id of their own, only a slug, and they can never be created or
+	// deleted — only re-pointed at a different capability set.
+	mux.HandleFunc("POST /admin/system-roles/{slug}", h.AdminSystemRoleUpdate)
 
 	// Self-service contact info and the family directory it feeds (internal/web/my_family.go).
 	mux.HandleFunc("GET /my-family", h.MyFamily)
@@ -1735,7 +1796,7 @@ func (h *Handlers) Roster(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		baseData
 		Roster []family.RosterEntry
-	}{baseData: h.base(r, "Roster"), Roster: roster}
+	}{baseData: h.base(r, "Roster"), Roster: h.labelRoster(r.Context(), unit.ID, roster)}
 	h.render(w, h.roster, data)
 }
 
@@ -1753,6 +1814,7 @@ func (h *Handlers) RosterExportPDF(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	roster = h.labelRoster(r.Context(), unit.ID, roster)
 
 	rows := make([][]string, 0, len(roster))
 	for _, e := range roster {
@@ -1768,7 +1830,7 @@ func (h *Handlers) RosterExportPDF(w http.ResponseWriter, r *http.Request) {
 		if address == "" {
 			address = "—"
 		}
-		rows = append(rows, []string{e.FirstName + " " + e.LastName, e.MemberType, subGroup, strings.Join(e.Roles, ", "), contact, address})
+		rows = append(rows, []string{e.FirstName + " " + e.LastName, e.MemberType, subGroup, strings.Join(e.RoleLabels, ", "), contact, address})
 	}
 
 	data, err := simpleTablePDF(unit.Name+" — Roster", "",

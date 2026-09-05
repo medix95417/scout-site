@@ -118,7 +118,7 @@
         <ul class="space-y-2 mb-4">
           {{range .Roles}}
             <li class="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-sm">
-              <span>{{.Role}}{{if .SubGroupName}} — {{.SubGroupName}}{{end}}</span>
+              <span>{{.Label}}{{if .SubGroupName}} — {{.SubGroupName}}{{end}}</span>
               <form method="post" action="/admin/roster/roles/{{.ID}}/delete">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button type="submit" class="text-xs text-red-600 hover:underline">Remove</button>
@@ -134,7 +134,7 @@
         <div class="mb-4 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
           <p class="font-semibold text-gray-500 uppercase tracking-wide mb-1">Also holds roles elsewhere</p>
           {{range .OtherUnitRoles}}
-            <p>{{.UnitName}}: {{range $i, $r := .Roles}}{{if $i}}, {{end}}{{$r}}{{end}}</p>
+            <p>{{.UnitName}}: {{range $i, $r := .RoleLabels}}{{if $i}}, {{end}}{{$r}}{{end}}</p>
           {{end}}
           <p class="mt-1 text-gray-400">Read-only here — manage those from {{if eq (len .OtherUnitRoles) 1}}that unit's{{else}}the other units'{{end}} own admin roster page.</p>
         </div>

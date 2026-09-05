@@ -84,6 +84,13 @@ type Prospect struct {
 	Message     string
 	Status      string
 	Notes       string
+	// EmailOptOut is set when this family has asked not to be included in
+	// recruiting emails — by themselves through the unsubscribe link, or
+	// by a leader on the admin page. Either way RecipientsForStatuses
+	// skips them, and the record stays so the next campaign doesn't
+	// quietly add them back.
+	EmailOptOut bool
+	OptOutAt    *time.Time
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -190,13 +197,13 @@ func Create(ctx context.Context, pool *pgxpool.Pool, in New) (Prospect, error) {
 
 const columns = `id::text, unit_id::text, parent_name, parent_email, parent_phone,
 	child_name, child_age, child_grade, child_school, message, status::text, notes,
-	created_at, updated_at`
+	email_opt_out, opt_out_at, created_at, updated_at`
 
 func scan(row pgx.Row) (Prospect, error) {
 	var p Prospect
 	err := row.Scan(&p.ID, &p.UnitID, &p.ParentName, &p.ParentEmail, &p.ParentPhone,
 		&p.ChildName, &p.ChildAge, &p.ChildGrade, &p.ChildSchool, &p.Message,
-		&p.Status, &p.Notes, &p.CreatedAt, &p.UpdatedAt)
+		&p.Status, &p.Notes, &p.EmailOptOut, &p.OptOutAt, &p.CreatedAt, &p.UpdatedAt)
 	return p, err
 }
 

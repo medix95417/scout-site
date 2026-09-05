@@ -25,7 +25,7 @@
           {{range .Members}}
             <li class="rounded-md bg-gray-50 px-3 py-2 text-sm flex items-center justify-between">
               <span>{{.FirstName}} {{.LastName}}</span>
-              <span class="text-xs text-gray-500">{{range $i, $r := .Roles}}{{if $i}}, {{end}}{{$r}}{{end}}</span>
+              <span class="text-xs text-gray-500">{{range $i, $r := .RoleLabels}}{{if $i}}, {{end}}{{$r}}{{end}}</span>
             </li>
           {{end}}
         </ul>

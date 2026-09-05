@@ -219,6 +219,45 @@ var ReservedRoleSlugs = func() map[string]bool {
 // capability, in sorted order. The inverse of the systemRoleCapabilities
 // map above, for callers asking "who can do this" rather than "what can
 // this person do" — see roster.MembersWithCapability.
+// SystemRolesWithCapabilityForUnit is SystemRolesWithCapability with this
+// unit's overrides applied — the answer that matters for "who here can do
+// this", as opposed to "what does the code say this role means".
+//
+// A unit that grants approve_expenses to its Den Leaders has Den Leaders
+// who can authorize spending, and a list built from the code's defaults
+// would not name them; one that takes it away from its Cubmaster has a
+// Cubmaster who can't, and the same list would name them wrongly. Both
+// are the kind of quiet disagreement that only shows up as "why isn't my
+// approver in the dropdown".
+func SystemRolesWithCapabilityForUnit(ctx context.Context, pool *pgxpool.Pool, unitID, capability string) ([]string, error) {
+	overrides, err := systemRoleOverrides(ctx, pool, unitID)
+	if err != nil {
+		return nil, err
+	}
+	var slugs []string
+	for slug, def := range systemRoleCapabilities {
+		granted := def
+		if o, ok := overrides[slug]; ok {
+			granted = o
+		}
+		if containsCap(granted, capability) {
+			slugs = append(slugs, slug)
+		}
+	}
+	// A role granting nothing by default can still be overridden into
+	// granting something, and would be missed by the loop above.
+	for slug, granted := range overrides {
+		if _, isDefault := systemRoleCapabilities[slug]; isDefault {
+			continue
+		}
+		if isKnownSystemRole(slug) && containsCap(granted, capability) {
+			slugs = append(slugs, slug)
+		}
+	}
+	sort.Strings(slugs)
+	return slugs, nil
+}
+
 func SystemRolesWithCapability(capability string) []string {
 	var slugs []string
 	for slug, granted := range systemRoleCapabilities {
@@ -253,15 +292,34 @@ func (c Capabilities) Has(capability string) bool { return c.has(capability) }
 // custom_roles lookup scoped to unitID.
 func CapabilitiesForRoles(ctx context.Context, pool *pgxpool.Pool, unitID string, roles []string) (Capabilities, error) {
 	caps := make(Capabilities)
+
+	// A unit may have changed what a built-in role grants (see
+	// system_roles.go). Loaded once per call rather than per role, and
+	// only when a built-in role is actually in play — most permission
+	// checks resolve without touching this table at all.
+	var overrides map[string][]string
+	overridesLoaded := false
+
 	var customSlugs []string
 	for _, role := range roles {
-		if granted, ok := systemRoleCapabilities[role]; ok {
-			for _, c := range granted {
-				caps[c] = true
-			}
+		granted, isSystem := systemRoleCapabilities[role]
+		if !isSystem && !isKnownSystemRole(role) {
+			customSlugs = append(customSlugs, role)
 			continue
 		}
-		customSlugs = append(customSlugs, role)
+		if !overridesLoaded {
+			var err error
+			if overrides, err = systemRoleOverrides(ctx, pool, unitID); err != nil {
+				return nil, err
+			}
+			overridesLoaded = true
+		}
+		if o, ok := overrides[role]; ok {
+			granted = o
+		}
+		for _, c := range granted {
+			caps[c] = true
+		}
 	}
 	if len(customSlugs) == 0 {
 		return caps, nil

@@ -38,7 +38,13 @@
               <label class="block text-sm font-medium mb-1" for="parent_email">Email</label>
               <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="email"
                      id="parent_email" name="parent_email" maxlength="200" required
+                     aria-describedby="email-use"
                      value="{{index .Values "parent_email"}}">
+              <p class="text-xs text-gray-500 mt-1" id="email-use">
+                We'll only use this to reach out to you about membership with Cub Scouts or Scouts BSA — never
+                for anything else, and never shared with anyone outside {{.Unit.Name}}. You can tell us to stop
+                at any time, either by replying to any email we send or with the unsubscribe link on it.
+              </p>
             </div>
             <div>
               <label class="block text-sm font-medium mb-1" for="parent_phone">Phone <span class="font-normal text-gray-500">(optional)</span></label>

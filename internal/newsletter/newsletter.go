@@ -289,12 +289,36 @@ func SendNow(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, n Newsle
 	}
 
 	for _, email := range emails {
+		var sendErr string
 		if err := m.SendHTML(ctx, email, n.Subject, n.Body); err != nil {
 			log.Printf("newsletter: sending %s to %s: %v", n.ID, email, err)
+			sendErr = truncateError(err.Error())
 			res.Failed++
-			continue
+		} else {
+			res.Sent++
 		}
-		res.Sent++
+
+		// Recorded per address, not just counted.
+		//
+		// recipient_count already said how many; it could never say
+		// which, so "did our newsletter reach the Okonkwos?" had no
+		// answer, and neither did "which addresses are bouncing". A
+		// failure to write this row is logged but doesn't stop the send:
+		// the email has already gone, and abandoning the rest of the
+		// batch over a bookkeeping error would be the worse outcome.
+		var sentAt *time.Time
+		if sendErr == "" {
+			now := time.Now()
+			sentAt = &now
+		}
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO newsletter_recipients (newsletter_id, email, sent_at, error)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (newsletter_id, email)
+			DO UPDATE SET sent_at = EXCLUDED.sent_at, error = EXCLUDED.error
+		`, n.ID, email, sentAt, sendErr); err != nil {
+			log.Printf("newsletter: recording %s recipient %s: %v", n.ID, email, err)
+		}
 	}
 
 	if _, err := pool.Exec(ctx, `
@@ -313,4 +337,48 @@ func SendNow(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, n Newsle
 	})
 
 	return res
+}
+
+// Recipient is one address a newsletter went to, and what happened.
+type Recipient struct {
+	Email  string
+	SentAt *time.Time
+	Err    string
+}
+
+// RecipientsFor reads back who a newsletter actually reached.
+//
+// Ordered by address rather than by send time: a leader looking at this
+// is nearly always checking whether one particular family got it, and a
+// list in alphabetical order is one they can scan.
+func RecipientsFor(ctx context.Context, pool *pgxpool.Pool, newsletterID string) ([]Recipient, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT email, sent_at, error FROM newsletter_recipients
+		WHERE newsletter_id = $1
+		ORDER BY email
+	`, newsletterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Recipient
+	for rows.Next() {
+		var r Recipient
+		if err := rows.Scan(&r.Email, &r.SentAt, &r.Err); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// truncateError keeps a delivery failure short enough for a table cell
+// without losing the part that says what went wrong.
+func truncateError(s string) string {
+	const max = 200
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "\u2026"
 }

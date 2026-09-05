@@ -1,0 +1,32 @@
+{{define "content"}}
+  <div class="max-w-lg mx-auto py-12">
+    {{if .OK}}
+      <h1 class="text-2xl font-bold mb-3">
+        {{if .AlreadyDone}}You're already unsubscribed{{else}}You've been unsubscribed{{end}}
+      </h1>
+      <p class="text-sm text-gray-700 mb-4">
+        {{if .Email}}
+          We won't send any more emails about joining to <strong>{{.Email}}</strong>.
+        {{else}}
+          We won't send you any more emails about joining.
+        {{end}}
+      </p>
+      <p class="text-sm text-gray-600">
+        If you change your mind, or you'd still like to hear about {{.Unit.Name}}, just get in touch with us
+        directly and we'll pick it back up.
+      </p>
+    {{else}}
+      <h1 class="text-2xl font-bold mb-3">This link didn't work</h1>
+      <p class="text-sm text-gray-700 mb-4">
+        The unsubscribe link may have been cut short by your email program, or it may have expired.
+      </p>
+      <p class="text-sm text-gray-600">
+        Try copying the whole link from the email into your browser. If it still doesn't work, reply to any email
+        we've sent you and ask to be taken off the list — we'll do it by hand.
+      </p>
+    {{end}}
+    <p class="mt-8">
+      <a href="/" class="text-sm underline">Go to the {{.Unit.Name}} home page</a>
+    </p>
+  </div>
+{{end}}
