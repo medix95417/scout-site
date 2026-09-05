@@ -159,6 +159,15 @@ const entityScopeSQL = `
 	SELECT id FROM prospects WHERE unit_id = $1
 	UNION
 	SELECT id FROM calendar_feeds WHERE unit_id = $1
+	UNION
+	SELECT id FROM prospect_campaigns WHERE unit_id = $1
+	UNION
+	SELECT id FROM email_templates WHERE unit_id = $1
+	UNION
+	-- A built-in role override is logged against the unit itself: the
+	-- role has no id of its own (see units.logRoleChange), and it is the
+	-- unit's configuration that changed.
+	SELECT id FROM units WHERE id = $1
 `
 
 // SystemActor is the Filter.ActorID sentinel for "system-initiated

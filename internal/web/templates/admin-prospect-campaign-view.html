@@ -1,0 +1,75 @@
+{{define "content"}}
+  <div class="mb-4">
+    <a href="/admin/prospects" class="text-sm underline">&larr; Back to prospects</a>
+  </div>
+
+  <h1 class="text-2xl font-bold mb-1">{{.Campaign.Subject}}</h1>
+  <p class="text-sm text-gray-600 mb-6">
+    {{if .Campaign.Sent}}
+      Sent {{.SentOn}} to families marked <em>{{.Campaign.StatusLabels}}</em>.
+    {{else if eq .Campaign.Status "sending"}}
+      Sending now to families marked <em>{{.Campaign.StatusLabels}}</em> — this page updates on its own.
+    {{else}}
+      Draft, aimed at families marked <em>{{.Campaign.StatusLabels}}</em>.
+    {{end}}
+  </p>
+
+  {{if .Campaign.Sent}}
+    <div class="mb-8 flex flex-wrap gap-6 text-sm">
+      <div>
+        <p class="text-2xl font-semibold">{{.Delivered}}</p>
+        <p class="text-gray-500">delivered</p>
+      </div>
+      {{if .Failed}}
+        <div>
+          <p class="text-2xl font-semibold text-red-700">{{.Failed}}</p>
+          <p class="text-gray-500">failed</p>
+        </div>
+      {{end}}
+    </div>
+  {{end}}
+
+  <section class="mb-8">
+    <h2 class="text-lg font-semibold mb-2">What was sent</h2>
+    <p class="text-xs text-gray-500 mb-3">
+      Exactly the message the families received, minus the unsubscribe footer added to each copy.
+    </p>
+    <div class="rounded-lg border border-gray-200 bg-white p-6 prose prose-sm max-w-none overflow-x-auto">
+      {{.Body}}
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold mb-2">Who it went to</h2>
+    {{if .Recipients}}
+      <div class="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+            <tr>
+              <th class="px-4 py-2 font-medium">Name</th>
+              <th class="px-4 py-2 font-medium">Email</th>
+              <th class="px-4 py-2 font-medium">Sent</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {{range .Recipients}}
+              <tr>
+                <td class="px-4 py-2">{{.Name}}</td>
+                <td class="px-4 py-2 font-mono text-xs">{{.Email}}</td>
+                <td class="px-4 py-2">
+                  {{if .SentOn}}
+                    {{.SentOn}}
+                  {{else}}
+                    <span class="text-red-700">Failed{{if .Err}} — {{.Err}}{{end}}</span>
+                  {{end}}
+                </td>
+              </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    {{else}}
+      <p class="text-sm text-gray-500">Nothing recorded yet — this hasn't been sent.</p>
+    {{end}}
+  </section>
+{{end}}

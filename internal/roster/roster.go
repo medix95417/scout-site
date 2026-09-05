@@ -719,23 +719,13 @@ func CreateCustomRole(ctx context.Context, pool *pgxpool.Pool, unitID, label str
 		return CustomRole{}, ErrReservedRoleSlug
 	}
 
-	var granted []string
-	valid := make(map[string]bool, len(units.AllCapabilities))
-	for _, c := range units.AllCapabilities {
-		valid[c] = true
-	}
-	for _, c := range capabilities {
-		if valid[c] {
-			granted = append(granted, c)
-		}
-	}
+	granted := filterToKnownCapabilities(capabilities)
 
-	var cr CustomRole
-	err := pool.QueryRow(ctx, `
+	cr, err := scanCustomRole(pool.QueryRow(ctx, `
 		INSERT INTO custom_roles (unit_id, slug, label, capabilities, created_by)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, unit_id, slug, label, capabilities, created_at::text
-	`, unitID, slug, label, granted, actorID).Scan(&cr.ID, &cr.UnitID, &cr.Slug, &cr.Label, &cr.Capabilities, &cr.CreatedAt)
+	`, unitID, slug, label, granted, actorID))
 	if err != nil {
 		return CustomRole{}, err
 	}
@@ -748,6 +738,94 @@ func CreateCustomRole(ctx context.Context, pool *pgxpool.Pool, unitID, label str
 		After:      cr,
 	})
 	return cr, nil
+}
+
+// UpdateCustomRole changes what an existing custom role is called and
+// what it grants.
+//
+// The slug is deliberately not editable. It is the value stored in every
+// role_assignments row using this role, so changing it would silently
+// strip the role from everyone holding it — the label is what people
+// read, and the slug only ever needed to be stable. That does mean a
+// renamed role keeps a slug reflecting its old name; harmless, since
+// nothing but this table's own lookup ever reads it.
+func UpdateCustomRole(ctx context.Context, pool *pgxpool.Pool, roleID, unitID, label string, capabilities []string, actorID string) (CustomRole, error) {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return CustomRole{}, fmt.Errorf("roster: a role name is required")
+	}
+
+	before, err := getCustomRole(ctx, pool, roleID, unitID)
+	if err != nil {
+		return CustomRole{}, err
+	}
+
+	granted := filterToKnownCapabilities(capabilities)
+
+	cr, err := scanCustomRole(pool.QueryRow(ctx, `
+		UPDATE custom_roles SET label = $1, capabilities = $2
+		WHERE id = $3 AND unit_id = $4
+		RETURNING id, unit_id, slug, label, capabilities, created_at::text
+	`, label, granted, roleID, unitID))
+	if err != nil {
+		return CustomRole{}, err
+	}
+
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "custom_role",
+		EntityID:   cr.ID,
+		ActorID:    &actorID,
+		Action:     "update",
+		Before:     before,
+		After:      cr,
+	})
+	return cr, nil
+}
+
+// ErrCustomRoleNotFound is returned when a role id doesn't name a custom
+// role belonging to this unit — a stale bookmark, or one unit reaching
+// for another's role.
+var ErrCustomRoleNotFound = fmt.Errorf("roster: no such custom role in this unit")
+
+// GetCustomRole loads one custom role, scoped to its unit.
+func GetCustomRole(ctx context.Context, pool *pgxpool.Pool, roleID, unitID string) (CustomRole, error) {
+	return getCustomRole(ctx, pool, roleID, unitID)
+}
+
+func getCustomRole(ctx context.Context, pool *pgxpool.Pool, roleID, unitID string) (CustomRole, error) {
+	cr, err := scanCustomRole(pool.QueryRow(ctx, `
+		SELECT id, unit_id, slug, label, capabilities, created_at::text
+		FROM custom_roles WHERE id = $1 AND unit_id = $2
+	`, roleID, unitID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CustomRole{}, ErrCustomRoleNotFound
+	}
+	return cr, err
+}
+
+func scanCustomRole(row interface{ Scan(...any) error }) (CustomRole, error) {
+	var cr CustomRole
+	err := row.Scan(&cr.ID, &cr.UnitID, &cr.Slug, &cr.Label, &cr.Capabilities, &cr.CreatedAt)
+	return cr, err
+}
+
+// filterToKnownCapabilities drops anything that isn't a real capability
+// name. The admin form can't produce one, but a hand-written POST can,
+// and the CHECK constraint's error is not something to show a leader.
+func filterToKnownCapabilities(in []string) []string {
+	valid := make(map[string]bool, len(units.AllCapabilities))
+	for _, c := range units.AllCapabilities {
+		valid[c] = true
+	}
+	seen := map[string]bool{}
+	granted := []string{}
+	for _, c := range in {
+		if valid[c] && !seen[c] {
+			seen[c] = true
+			granted = append(granted, c)
+		}
+	}
+	return granted
 }
 
 // ListCustomRoles returns every custom role defined for a unit, most
@@ -1529,6 +1607,15 @@ func SetMemberActive(ctx context.Context, pool *pgxpool.Pool, memberID string, a
 // Scoutmaster on the roster gets told plainly instead of accumulating
 // entries nobody can act on.
 func MembersWithCapability(ctx context.Context, pool *pgxpool.Pool, unitID, capability string) ([]MemberOption, error) {
+	// Unit-aware rather than the code's defaults: this unit may have
+	// changed what a built-in role grants (see units.SystemRolesForUnit),
+	// and a list of approvers that disagrees with the permission check is
+	// worse than no list.
+	systemRoles, err := units.SystemRolesWithCapabilityForUnit(ctx, pool, unitID, capability)
+	if err != nil {
+		return nil, err
+	}
+
 	rows, err := pool.Query(ctx, `
 		SELECT DISTINCT members.id, members.first_name, members.last_name, families.name
 		FROM role_assignments
@@ -1544,7 +1631,7 @@ func MembersWithCapability(ctx context.Context, pool *pgxpool.Pool, unitID, capa
 				OR $3 = ANY(COALESCE(custom_roles.capabilities, ARRAY[]::text[]))
 			)
 		ORDER BY members.last_name, members.first_name
-	`, unitID, units.SystemRolesWithCapability(capability), capability)
+	`, unitID, systemRoles, capability)
 	if err != nil {
 		return nil, err
 	}

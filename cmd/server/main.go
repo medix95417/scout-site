@@ -270,6 +270,7 @@ func main() {
 		log.Fatalf("web: %v", err)
 	}
 	handlers.TrustProxyHeaders = cfg.TrustProxyHeaders
+	handlers.UnsubscribeSecret = []byte(cfg.SessionSecret)
 
 	mux := http.NewServeMux()
 	handlers.Routes(mux)

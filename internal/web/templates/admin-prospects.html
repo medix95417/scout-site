@@ -14,6 +14,77 @@
     <a href="/admin/settings" class="underline" style="color: var(--unit-color);">Site Settings</a> page.
   </p>
 
+  <section class="mb-8 rounded-lg border border-gray-200 bg-white p-4">
+    <div class="flex flex-wrap items-baseline justify-between gap-3 mb-2">
+      <h2 class="text-lg font-semibold">Emails to prospects</h2>
+      <a href="/admin/prospects/campaigns/new" class="rounded-md px-3 py-1.5 text-sm btn-accent">Write a new message</a>
+    </div>
+    <p class="text-sm text-gray-600 mb-4 max-w-2xl">
+      Write to prospective families in bulk, picking who by where they've got to. Anyone who has opted out is
+      left out automatically{{if .OptedOutCount}} — {{.OptedOutCount}} in the list below {{if eq .OptedOutCount 1}}has{{else}}have{{end}}{{else}}; nobody has so far{{end}}.
+    </p>
+
+    {{if .Campaigns}}
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="text-left text-xs uppercase tracking-wide text-gray-500">
+            <tr>
+              <th class="py-2 pr-4 font-medium">Subject</th>
+              <th class="py-2 pr-4 font-medium">Sent to</th>
+              <th class="py-2 pr-4 font-medium">When</th>
+              <th class="py-2 font-medium"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {{range .Campaigns}}
+              <tr>
+                <td class="py-2 pr-4">
+                  <a href="/admin/prospects/campaigns/{{.ID}}" class="underline" style="color: var(--unit-color);">{{.Subject}}</a>
+                  {{if not .Sent}}
+                    <span class="ml-2 rounded bg-gray-200 px-1.5 py-0.5 text-[11px] text-gray-700">
+                      {{if eq .Status "sending"}}Sending{{else}}Draft{{end}}
+                    </span>
+                  {{end}}
+                </td>
+                <td class="py-2 pr-4 text-gray-600">
+                  {{if .Sent}}{{.RecipientCount}} {{if eq .RecipientCount 1}}family{{else}}families{{end}}{{else}}{{.Audience}}{{end}}
+                </td>
+                <td class="py-2 pr-4 text-gray-600">{{if .SentOn}}{{.SentOn}}{{else}}—{{end}}</td>
+                <td class="py-2 text-right">
+                  {{if not .Sent}}
+                    <a href="/admin/prospects/campaigns/{{.ID}}/edit" class="text-xs underline" style="color: var(--unit-color);">Edit</a>
+                  {{end}}
+                </td>
+              </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    {{else}}
+      <p class="text-sm text-gray-500">Nothing sent yet.</p>
+    {{end}}
+
+    {{if .SavedTemplates}}
+      <details class="mt-4 border-t border-gray-100 pt-3">
+        <summary class="cursor-pointer text-sm text-gray-600 hover:text-gray-900">
+          Saved templates ({{len .SavedTemplates}})
+        </summary>
+        <ul class="mt-2 space-y-1">
+          {{range .SavedTemplates}}
+            <li class="flex items-baseline justify-between gap-3 text-sm">
+              <span>{{.Name}} <span class="text-gray-500">— {{.Subject}}</span></span>
+              <form method="post" action="/admin/prospects/templates/{{.ID}}/delete"
+                    data-confirm="Delete the &quot;{{.Name}}&quot; template? Messages already written from it are unaffected.">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
+              </form>
+            </li>
+          {{end}}
+        </ul>
+      </details>
+    {{end}}
+  </section>
+
   {{if .Prospects}}
     <div class="space-y-4">
       {{range .Prospects}}
@@ -31,7 +102,16 @@
           </div>
 
           <dl class="grid gap-x-6 gap-y-1 sm:grid-cols-2 text-sm mb-3">
-            <div><dt class="inline text-gray-500">Email:</dt> <dd class="inline"><a href="mailto:{{.ParentEmail}}" class="underline" style="color: var(--unit-color);">{{.ParentEmail}}</a></dd></div>
+            <div>
+              <dt class="inline text-gray-500">Email:</dt>
+              <dd class="inline">
+                <a href="mailto:{{.ParentEmail}}" class="underline" style="color: var(--unit-color);">{{.ParentEmail}}</a>
+                {{if .EmailOptOut}}
+                  <span class="ml-1 rounded bg-gray-300 px-1.5 py-0.5 text-[11px] text-gray-800"
+                        title="Left out of every mass email. You can still write to them one to one.">No mass emails</span>
+                {{end}}
+              </dd>
+            </div>
             {{if .ParentPhone}}<div><dt class="inline text-gray-500">Phone:</dt> <dd class="inline">{{.ParentPhone}}</dd></div>{{end}}
             {{if .ChildAge}}<div><dt class="inline text-gray-500">Age:</dt> <dd class="inline">{{.ChildAge}}</dd></div>{{end}}
             {{if .ChildGrade}}<div><dt class="inline text-gray-500">Grade:</dt> <dd class="inline">{{.ChildGrade}}</dd></div>{{end}}
@@ -63,14 +143,28 @@
             </div>
           </form>
 
-          <div class="flex items-baseline justify-between gap-3 mt-3 pt-3 border-t border-black/10">
-            <p class="text-xs text-gray-500">Enquired {{.CreatedAt.Format "Jan 2, 2006"}}</p>
+          <div class="flex flex-wrap items-baseline justify-between gap-3 mt-3 pt-3 border-t border-black/10">
+            <p class="text-xs text-gray-500">
+              Enquired {{.CreatedAt.Format "Jan 2, 2006"}}
+              {{if .OptOutAt}} · asked not to be emailed {{.OptOutAt.Format "Jan 2, 2006"}}{{end}}
+            </p>
+            <div class="flex items-baseline gap-4">
+            <form method="post" action="/admin/prospects/{{.ID}}/opt-out"
+                  {{if not .EmailOptOut}}data-confirm="Stop including {{.ParentName}} in mass emails? Use this when they've asked to be taken off the list."{{end}}>
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              {{if $.ShowAll}}<input type="hidden" name="all" value="1">{{end}}
+              <input type="hidden" name="opt_out" value="{{if .EmailOptOut}}0{{else}}1{{end}}">
+              <button type="submit" class="text-xs text-gray-600 hover:underline">
+                {{if .EmailOptOut}}Put back on the email list{{else}}Take off the email list{{end}}
+              </button>
+            </form>
             <form method="post" action="/admin/prospects/{{.ID}}/delete"
                   data-confirm="Delete this enquiry from {{.ParentName}}? Use this for spam — for a family who decided not to join, set the status to &quot;Not joining&quot; instead so you keep the record.">
               <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
               {{if $.ShowAll}}<input type="hidden" name="all" value="1">{{end}}
               <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
             </form>
+            </div>
           </div>
         </section>
       {{end}}

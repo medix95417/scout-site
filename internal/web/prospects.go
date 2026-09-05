@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/47-yonkers/scout-site/internal/emailtemplate"
 	"github.com/47-yonkers/scout-site/internal/prospect"
 	"github.com/47-yonkers/scout-site/internal/settings"
 	"github.com/47-yonkers/scout-site/internal/units"
@@ -263,20 +264,93 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: counting open prospects: %v", err)
 	}
 
+	// The campaign history sits on this page rather than one of its own:
+	// "who have we written to, and did they get it" is the same question
+	// as "where is this family up to", and splitting them across two
+	// pages means a leader has to remember to check the second.
+	campaigns, err := prospect.ListCampaigns(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: listing prospect campaigns: %v", err)
+	}
+	campaignRows := make([]campaignRow, 0, len(campaigns))
+	for _, c := range campaigns {
+		campaignRows = append(campaignRows, campaignRow{
+			ID: c.ID, Subject: c.Subject, Status: c.Status, Sent: c.Sent(),
+			Audience: c.StatusLabels(), SentOn: newsletterSentOn(c.SentAt),
+			RecipientCount: c.RecipientCount,
+		})
+	}
+
+	saved, err := emailtemplate.ListForUnit(r.Context(), h.Pool, unit.ID, emailtemplate.KindProspect)
+	if err != nil {
+		log.Printf("web: listing saved prospect templates: %v", err)
+	}
+
+	// How many opted-out prospects there are, so the page can say so
+	// rather than a leader wondering why a campaign reached fewer people
+	// than the status counts suggest.
+	optedOut := 0
+	for _, p := range list {
+		if p.EmailOptOut {
+			optedOut++
+		}
+	}
+
 	data := struct {
 		baseData
-		Prospects []prospect.Prospect
-		Statuses  []prospect.StatusOption
-		ShowAll   bool
-		OpenCount int
+		Prospects      []prospect.Prospect
+		Statuses       []prospect.StatusOption
+		ShowAll        bool
+		OpenCount      int
+		OptedOutCount  int
+		Campaigns      []campaignRow
+		SavedTemplates []emailtemplate.Template
 	}{
-		baseData:  h.base(r, "Prospects"),
-		Prospects: list,
-		Statuses:  prospect.Statuses,
-		ShowAll:   showAll,
-		OpenCount: openCount,
+		baseData:       h.base(r, "Prospects"),
+		Prospects:      list,
+		Statuses:       prospect.Statuses,
+		ShowAll:        showAll,
+		OpenCount:      openCount,
+		OptedOutCount:  optedOut,
+		Campaigns:      campaignRows,
+		SavedTemplates: saved,
 	}
 	h.render(w, h.prospectsPage, data)
+}
+
+// campaignRow is one past or pending campaign as the prospects page lists
+// it. Flattened out of prospect.Campaign because html/template can't
+// compare a *time.Time in an action — the same reason newsletterRow
+// exists (see newsletter.go).
+type campaignRow struct {
+	ID             string
+	Subject        string
+	Status         string
+	Sent           bool
+	Audience       string
+	SentOn         string
+	RecipientCount int
+}
+
+// ProspectOptOut is the leader-operated side of email consent — for a
+// family who asked to come off the list by replying, or in person, rather
+// than through the link.
+func (h *Handlers) ProspectOptOut(w http.ResponseWriter, r *http.Request) {
+	unit, actor, ok := h.requireContentEditor(w, r, "/admin/prospects")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	optOut := r.FormValue("opt_out") == "1"
+	if _, err := prospect.SetEmailOptOut(r.Context(), h.Pool, unit.ID, r.PathValue("id"), optOut, actor.ID); err != nil {
+		writeProspectError(w, err)
+		return
+	}
+	http.Redirect(w, r, prospectReturnTo(r), http.StatusSeeOther)
 }
 
 // ProspectUpdate records where an enquiry has got to and what was said.
