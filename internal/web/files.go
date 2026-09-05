@@ -71,9 +71,25 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 	canManage := units.CanEditUnitContent(caps)
 
+	// Two lists, because the page asks two different questions of them.
+	//
+	// events is every event, and feeds the "link this file to an event"
+	// checkboxes: linking is how a file GETS attached to an event, so
+	// offering only events that already have something attached would
+	// make the first attachment impossible.
+	//
+	// filterEvents is only the events that have something attached, and
+	// feeds the filter. Offering the rest there was the bug: a leader
+	// picked an event off a list of every campout the unit had ever run
+	// and got an empty page, with nothing to say whether the filter was
+	// broken or the event simply had no photos.
 	events, err := calendar.ListAllForUnit(r.Context(), h.Pool, unit.ID)
 	if err != nil {
 		log.Printf("web: listing events for file library: %v", err)
+	}
+	filterEvents, err := calendar.ListWithFilesForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: listing events with files for file library: %v", err)
 	}
 
 	decorate := func(f files.File) fileRow {
@@ -147,19 +163,12 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 		selectedEventSet[id] = true
 	}
 
-	data := struct {
-		baseData
-		EventGroups       []eventFileGroupView
-		GroupedByEvent    bool
-		Events            []calendar.Event
-		SelectedEventIDs  map[string]bool
-		CanManage         bool
-		StorageConfigured bool
-	}{
+	data := fileLibraryData{
 		baseData:          h.base(r, "Files"),
 		EventGroups:       groups,
 		GroupedByEvent:    len(selectedEventIDs) > 0,
 		Events:            events,
+		FilterEvents:      filterEvents,
 		SelectedEventIDs:  selectedEventSet,
 		CanManage:         canManage,
 		StorageConfigured: h.Storage != nil,
@@ -172,6 +181,21 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 		data.Flash = strconv.Itoa(len(skipped)) + " file(s) were too large (50 MB max each) and were skipped: " + strings.Join(skipped, ", ")
 	}
 	h.render(w, h.fileLibrary, data)
+}
+
+// fileLibraryData is what files.html renders. Named rather than an
+// anonymous literal so a test can build one — the two event lists it
+// carries feed different controls, and nothing but a rendered page can
+// show that they are still wired to the right ones.
+type fileLibraryData struct {
+	baseData
+	EventGroups       []eventFileGroupView
+	GroupedByEvent    bool
+	Events            []calendar.Event
+	FilterEvents      []calendar.Event
+	SelectedEventIDs  map[string]bool
+	CanManage         bool
+	StorageConfigured bool
 }
 
 // eventFileGroupView is one event's files, decorated for the template —

@@ -207,6 +207,27 @@ func ListAllForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]E
 	`, unitID)
 }
 
+// ListWithFilesForUnit returns only the events that actually have a file
+// or photo attached — what the file library's "filter by event" control
+// offers, so a leader picking from it cannot choose an event and be shown
+// nothing.
+//
+// Deliberately NOT restricted to status = 'published', unlike
+// ListAllForUnit. The point of this list is to match, exactly, the groups
+// the file library renders — and those come from files.ListForUnitGroupedByEvent*,
+// which joins events without caring about status. Filtering by status here
+// would produce the opposite of the intended bug: a group visible on the
+// page with no way to filter to it.
+func ListWithFilesForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Event, error) {
+	return queryEvents(ctx, pool, `
+		SELECT `+eventColumns+`
+		FROM events
+		WHERE unit_id = $1
+		  AND EXISTS (SELECT 1 FROM event_files WHERE event_files.event_id = events.id)
+		ORDER BY starts_at DESC
+	`, unitID)
+}
+
 // GetEvent looks up a single event, scoped to a unit — used by the
 // event page to resolve which
 // event a slip is being attached to/viewed for. Deliberately not

@@ -27,6 +27,17 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The file library's event filter listed every event, including ones
+  with nothing attached.** Picking a campout off a list of every campout
+  the unit had ever run and getting an empty page gave no clue whether
+  the filter was broken or the campout simply had no photos. The filter
+  now offers only events that actually have a file or photo attached, and
+  disappears entirely when none do. Linking is unchanged and still offers
+  every event — that is how a file gets attached in the first place, so a
+  list of "events that already have files" could never grow.
+
 ### Changed
 
 - **The "Emails to prospects" section folds away.** Every campaign a unit
