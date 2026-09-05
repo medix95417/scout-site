@@ -29,6 +29,17 @@ tagged commit with an accurate date.
 
 ### Fixed
 
+- **Newsletters and campaigns are sent at a paced rate.** A batch used to
+  go out as fast as the network allowed. Mail providers count one message
+  per recipient and enforce a short-window limit as well as a daily one —
+  Fastmail's ten-minute window is a quarter of the daily allowance, so a
+  burst runs into that first — and a hundred messages in a few seconds
+  also looks like a spam burst to the receiving side, which matters most
+  for exactly the recruiting mail it would be hurting. Bulk sends now
+  default to 60 a minute, configurable with `MAIL_BULK_PER_MINUTE`, and a
+  message the provider rate-limits anyway is retried once after a backoff
+  instead of being recorded as failed. Password resets, event reminders
+  and welcome emails are never paced — they go out immediately, as before.
 - **Bulk email over the Fastmail API no longer re-authenticates for every
   recipient.** Sending through the JMAP HTTP API resolved the session,
   sending identity and Drafts mailbox on every single message — three

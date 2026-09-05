@@ -288,9 +288,15 @@ func SendNow(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, n Newsle
 		log.Printf("newsletter: re-resolving recipients for %s: %v", n.ID, err)
 	}
 
+	// Paced so a whole roster doesn't go out as one burst — see
+	// internal/mailer/pace.go for both reasons (the provider's
+	// short-window rate limit, and how a burst looks to the receiving
+	// side). One pacer for this send, not one per message.
+	pacer := m.BulkPacer()
+
 	for _, email := range emails {
 		var sendErr string
-		if err := m.SendHTML(ctx, email, n.Subject, n.Body); err != nil {
+		if err := m.SendHTMLPaced(ctx, pacer, email, n.Subject, n.Body); err != nil {
 			log.Printf("newsletter: sending %s to %s: %v", n.ID, email, err)
 			sendErr = truncateError(err.Error())
 			res.Failed++

@@ -26,6 +26,10 @@ type countingJMAPServer struct {
 	// rejectSubmits, while true, makes every submit fail with 401 — the
 	// "credentials rejected at the door" case.
 	rejectSubmits atomic.Bool
+	// rateLimitAlways / rateLimitOnce make submits fail with 429, either
+	// forever or just for the first attempt.
+	rateLimitAlways atomic.Bool
+	rateLimitOnce   atomic.Bool
 }
 
 func newCountingJMAPServer(t *testing.T, identityEmail string) *countingJMAPServer {
@@ -61,6 +65,11 @@ func newCountingJMAPServer(t *testing.T, identityEmail string) *countingJMAPServ
 			]}`, identityEmail)
 		case "Email/set":
 			c.submits.Add(1)
+			if c.rateLimitAlways.Load() || c.rateLimitOnce.CompareAndSwap(true, false) {
+				w.WriteHeader(http.StatusTooManyRequests)
+				fmt.Fprint(w, `{"type":"about:blank","status":429,"detail":"slow down"}`)
+				return
+			}
 			if c.rejectSubmits.Load() {
 				w.WriteHeader(http.StatusUnauthorized)
 				fmt.Fprint(w, `{"type":"about:blank","status":401,"detail":"token rejected"}`)
