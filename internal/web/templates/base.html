@@ -260,8 +260,21 @@
       var reader = new FileReader();
       reader.onload = function () {
         target.value = reader.result;
-        // Let whatever owns the field know it changed \u2014 the newsletter
-        // form uses this to switch itself into HTML-source mode.
+        // A dedicated event, not just 'input'.
+        //
+        // The composers listen for 'input' on this textarea to mean "the
+        // leader is typing raw HTML, switch to source mode" — and their
+        // switch carries the rich editor's current content ACROSS into
+        // the textarea, which is right when a person clicks the button
+        // and catastrophic here: it overwrote the file that had just been
+        // loaded, with the empty editor, before anybody saw it. The file
+        // vanished silently on both composers.
+        //
+        // So a file load says so specifically, and the composers can
+        // switch mode without clobbering what was just put there. 'input'
+        // and 'change' still fire for anything else listening (the
+        // settings page's plain textareas want them).
+        target.dispatchEvent(new CustomEvent('html-file-loaded', { bubbles: true }));
         target.dispatchEvent(new Event('input', { bubbles: true }));
         target.dispatchEvent(new Event('change', { bubbles: true }));
       };

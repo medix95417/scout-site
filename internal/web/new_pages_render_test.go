@@ -91,7 +91,7 @@ func TestCampaignViewRenders(t *testing.T) {
 	out := renderPage(t, "admin-prospect-campaign-view.html", struct {
 		baseData
 		Campaign   prospect.Campaign
-		Body       template.HTML
+		Body       string
 		Recipients []campaignRecipientRow
 		Delivered  int
 		Failed     int
@@ -102,7 +102,7 @@ func TestCampaignViewRenders(t *testing.T) {
 			ID: "camp-1", Subject: "Come and visit", Status: "sent",
 			TargetStatuses: []string{prospect.StatusNew}, SentAt: &sent, RecipientCount: 2,
 		},
-		Body: template.HTML("<p>Hello there</p>"),
+		Body: "<p>Hello there</p>",
 		Recipients: []campaignRecipientRow{
 			{Name: "Robin", Email: "robin@example.com", SentOn: "Wed Mar 4, 2026 10:00 AM"},
 			{Name: "Sam", Email: "sam@example.com", Err: "mailbox full"},
@@ -123,7 +123,7 @@ func TestNewsletterViewRenders(t *testing.T) {
 	out := renderPage(t, "admin-newsletter-view.html", struct {
 		baseData
 		Newsletter     newsletter.Newsletter
-		Body           template.HTML
+		Body           string
 		Recipients     []newsletterRecipientRow
 		Delivered      int
 		Failed         int
@@ -135,7 +135,7 @@ func TestNewsletterViewRenders(t *testing.T) {
 		Newsletter: newsletter.Newsletter{
 			ID: "n-1", Subject: "March update", Status: "sent", SentAt: &sent, RecipientCount: &count,
 		},
-		Body:           template.HTML("<p>What we did</p>"),
+		Body:           "<p>What we did</p>",
 		Recipients:     []newsletterRecipientRow{{Email: "a@example.com", SentOn: "Wed Mar 4"}},
 		Delivered:      1,
 		SentOn:         "Wed Mar 4, 2026 10:00 AM",
@@ -156,7 +156,7 @@ func TestNewsletterViewExplainsAnOlderSend(t *testing.T) {
 	out := renderPage(t, "admin-newsletter-view.html", struct {
 		baseData
 		Newsletter     newsletter.Newsletter
-		Body           template.HTML
+		Body           string
 		Recipients     []newsletterRecipientRow
 		Delivered      int
 		Failed         int
@@ -166,7 +166,7 @@ func TestNewsletterViewExplainsAnOlderSend(t *testing.T) {
 	}{
 		baseData:       testBase("Newsletter"),
 		Newsletter:     newsletter.Newsletter{ID: "n-0", Subject: "Old one", Status: "sent", RecipientCount: &count},
-		Body:           template.HTML("<p>x</p>"),
+		Body:           "<p>x</p>",
 		RecipientCount: 11,
 		LegacySend:     true,
 	})
@@ -244,4 +244,83 @@ func TestCalendarConflictsRender(t *testing.T) {
 	if got := strings.Count(out, `name="csrf_token" value="tok"`); got < 3 {
 		t.Errorf("only %d of the three decision forms carry a CSRF token", got)
 	}
+}
+
+// The sent message is shown in a sandboxed iframe, not rendered into the
+// admin page.
+//
+// Both halves matter. A <style> block now survives sanitizing (see
+// newsletter.Sanitize), so rendering an email inline would apply its CSS
+// to the admin page around it. And srcdoc must be attribute-escaped, or
+// a body containing a quote would break out of the attribute — which
+// would be a straightforward XSS against the leader viewing it.
+func TestSentMessageIsShownInASandboxedFrame(t *testing.T) {
+	// A body that would escape a naively-built srcdoc attribute.
+	hostile := `<p>hi</p>" onload="alert(1)" x="<script>alert(2)</script>`
+
+	for _, tc := range []struct {
+		page string
+		data any
+	}{
+		{"admin-prospect-campaign-view.html", struct {
+			baseData
+			Campaign   prospect.Campaign
+			Body       string
+			Recipients []campaignRecipientRow
+			Delivered  int
+			Failed     int
+			SentOn     string
+		}{
+			baseData: testBase("Message"),
+			Campaign: prospect.Campaign{ID: "c1", Subject: "S", Status: "sent"},
+			Body:     hostile,
+		}},
+		{"admin-newsletter-view.html", struct {
+			baseData
+			Newsletter     newsletter.Newsletter
+			Body           string
+			Recipients     []newsletterRecipientRow
+			Delivered      int
+			Failed         int
+			SentOn         string
+			RecipientCount int
+			LegacySend     bool
+		}{
+			baseData:   testBase("Newsletter"),
+			Newsletter: newsletter.Newsletter{ID: "n1", Subject: "S", Status: "sent"},
+			Body:       hostile,
+		}},
+	} {
+		out := renderPage(t, tc.page, tc.data)
+
+		if !strings.Contains(out, `sandbox=""`) {
+			t.Errorf("%s: the preview iframe is not sandboxed", tc.page)
+		}
+		if !strings.Contains(out, "srcdoc=") {
+			t.Errorf("%s: no srcdoc preview found", tc.page)
+		}
+		// The body must appear only in escaped form. A live <script> or a
+		// bare quote-then-attribute means it escaped the attribute.
+		if strings.Contains(out, `" onload="alert(1)"`) {
+			t.Errorf("%s: the body broke out of the srcdoc attribute:\n%s", tc.page, around(out, "srcdoc"))
+		}
+		if strings.Contains(out, "<script>alert(2)</script>") {
+			t.Errorf("%s: an unescaped script tag reached the page", tc.page)
+		}
+		if !strings.Contains(out, "&lt;p&gt;hi&lt;/p&gt;") && !strings.Contains(out, "&lt;p>hi&lt;/p>") {
+			t.Errorf("%s: the body does not appear escaped inside srcdoc:\n%s", tc.page, around(out, "srcdoc"))
+		}
+	}
+}
+
+func around(s, marker string) string {
+	i := strings.Index(s, marker)
+	if i < 0 {
+		return "(not found)"
+	}
+	end := i + 300
+	if end > len(s) {
+		end = len(s)
+	}
+	return s[i:end]
 }

