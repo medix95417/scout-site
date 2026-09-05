@@ -434,3 +434,69 @@ Quill and QRious loads were never observed succeeding under the policy.
 What was proven is the enforcement rule that governs them. A first deploy
 should still be spot-checked with the browser console open on
 `/admin/newsletters/new` (Quill) and `/settings/2fa` (QRious).
+
+---
+
+# Design note: automatically hosting images out of an email body
+*(added alongside the change, not a finding)*
+
+## What the code now does
+
+When a leader saves a prospect campaign or a newsletter, any image the
+body carries as a `data:` URI is decoded, stored in the unit's file
+library, and the body is rewritten to point at
+`/files/{id}/download`. The row is created with **`is_public = true`**.
+See `internal/web/inline_images.go` and
+`internal/newsletter/inline_images.go`.
+
+The motive is not security: Gmail and Outlook refuse to render a `data:`
+URI image, so a logo embedded in an exported template arrived as a blank
+gap, and the whole body was carried once per recipient.
+
+## Why a public file is the correct outcome here, and what it costs
+
+A mail client fetching an image has no session — it is an anonymous
+stranger with a URL. There is no version of "image in an email" that is
+members-only, so marking these public is not a weakening of the model,
+it is stating what the feature already requires. It is the same act a
+leader performs by hand today when they pick a library photo for the
+public homepage.
+
+The cost is real and worth naming: **an image put in an email is public
+to anyone holding its URL**, and the URL is held by every recipient and
+their mail provider. The id is an unguessable UUID and nothing links to
+it, so this is not enumeration-exposed, but it is not a secret either. A
+photo that should not be on the public site should not be in an email.
+This is stated in both composers and in the help catalog rather than
+left for a leader to infer.
+
+## The constraints around it
+
+- **Only images the sanitizer already accepted.** Hosting runs inside the
+  sanitizing pass, and `sanitizer.hosted` re-derives the check itself
+  (`imageDataURI`), so a src that would be rejected cannot be laundered
+  into a hosted URL regardless of ordering. `data:` on `href` is still
+  refused outright.
+- **The declared type is never trusted.** `sniffContentType` re-derives
+  the type from the bytes, and the result must be a format
+  `writeUserFileHeaders` renders in place. SVG cannot reach storage: it
+  is excluded from the data-URI pattern *and* absent from
+  `inlineRenderableTypes`.
+- **Bounded.** 10 MB per image, 40 images per save.
+- **Per unit.** The storage key is `<unit id>/email-images/<sha256>`, and
+  `files.ByStorageKey` is scoped by unit, so the Troop and the Pack keep
+  separate copies of an identical image rather than sharing one owned by
+  whoever saved first.
+- **Never fatal.** Every failure leaves the image embedded and the draft
+  intact.
+
+## Verification
+
+Guards were mutation-tested: creating the file private, dropping either
+half of the type check, trusting the declared type, removing the size or
+count cap, dropping the unit from the storage key or from the lookup,
+swallowing a storage or insert error, and skipping the safety check on
+the URL a store returns — each fails a test. The two SQL changes
+(`files.Create` honouring `Public`, and `files.ByStorageKey`) are covered
+by integration tests against a real Postgres, including a cross-unit
+lookup that must not resolve.

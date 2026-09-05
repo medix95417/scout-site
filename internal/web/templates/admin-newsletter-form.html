@@ -88,9 +88,12 @@
             must survive everywhere belongs in a <span class="font-mono">style="…"</span> attribute.
           </p>
           <p class="text-xs text-gray-500 mt-1">
-            Up to 5 MB, which is room for images embedded in the file itself. Worth knowing that Gmail hides
-            anything past roughly 100 KB behind a &ldquo;View entire message&rdquo; link — so for a newsletter people
-            will actually read top to bottom, linking to images beats embedding them.
+            Up to 5 MB, which is room for images embedded in the file itself. Those are moved into the file library
+            on save and the newsletter is pointed at them instead — Gmail and Outlook refuse to display an embedded
+            image, so a logo left inside the file arrives as a blank gap, and the message would count its full size
+            against the roughly 100 KB after which Gmail hides the rest behind a &ldquo;View entire message&rdquo;
+            link. A hosted image is fetched by each reader&rsquo;s mail provider without signing in, so it is public
+            in the same way a homepage photo is.
           </p>
         </div>
       {{end}}

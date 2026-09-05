@@ -19,7 +19,7 @@ var allowedTags = map[string]bool{
 	"ul": true, "ol": true, "li": true, "a": true, "img": true,
 	"table": true, "thead": true, "tbody": true, "tr": true, "td": true, "th": true,
 	// <style> is allowed, with its CSS checked by sanitizeCSS and its
-	// content emitted raw rather than HTML-escaped — see renderSanitized.
+	// content emitted raw rather than HTML-escaped — see sanitizer.render.
 	//
 	// It was excluded originally, alongside script/iframe/object/embed/
 	// form/link/meta, and for that list that is still right. But a style
@@ -83,6 +83,23 @@ var globalAttrs = map[string]bool{"style": true, "class": true}
 // <script>) rather than unwrapped — simpler, and Quill's own output never
 // relies on a tag outside allowedTags carrying meaningful content.
 func Sanitize(rawHTML string) string {
+	return sanitize(rawHTML, nil)
+}
+
+// SanitizeHostingImages is Sanitize plus one step: an image the author
+// embedded in the body is handed to store, and if store gives back a URL
+// the body is pointed at that instead of carrying the image itself. See
+// ImageStore for why anyone would want that.
+//
+// Done during the sanitizing pass rather than as a second one because
+// this is the same decision, made once: the point where an embedded
+// image has been recognised as safe is the point where it can be moved.
+// A second pass would have to re-derive that, and could disagree.
+func SanitizeHostingImages(rawHTML string, store ImageStore) string {
+	return sanitize(rawHTML, store)
+}
+
+func sanitize(rawHTML string, store ImageStore) string {
 	nodes, err := html.ParseFragment(strings.NewReader(rawHTML), &html.Node{
 		Type:     html.ElementNode,
 		Data:     "body",
@@ -92,14 +109,20 @@ func Sanitize(rawHTML string) string {
 		return ""
 	}
 
+	s := sanitizer{store: store}
 	var b strings.Builder
 	for _, n := range nodes {
-		renderSanitized(&b, n)
+		s.render(&b, n)
 	}
 	return b.String()
 }
 
-func renderSanitized(b *strings.Builder, n *html.Node) {
+// sanitizer carries what the render walk needs beyond the node itself.
+type sanitizer struct {
+	store ImageStore // nil for a plain Sanitize
+}
+
+func (s sanitizer) render(b *strings.Builder, n *html.Node) {
 	switch n.Type {
 	case html.TextNode:
 		b.WriteString(html.EscapeString(n.Data))
@@ -140,16 +163,22 @@ func renderSanitized(b *strings.Builder, n *html.Node) {
 		if !sanitizeAttrValue(a.Key, a.Val) {
 			continue
 		}
+		// Checked for safety first, moved out second: hosting is only
+		// ever offered an image this sanitizer has already accepted.
+		val := a.Val
+		if a.Key == "src" {
+			val = s.hosted(val)
+		}
 		b.WriteString(" ")
 		b.WriteString(a.Key)
 		b.WriteString(`="`)
-		b.WriteString(html.EscapeString(a.Val))
+		b.WriteString(html.EscapeString(val))
 		b.WriteString(`"`)
 	}
 	b.WriteString(">")
 
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		renderSanitized(b, c)
+		s.render(b, c)
 	}
 
 	if tag != "br" && tag != "img" {
