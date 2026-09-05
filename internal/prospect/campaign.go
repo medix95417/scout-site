@@ -380,11 +380,17 @@ func SendCampaign(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, c C
 		return 0, 0
 	}
 
+	// Paced, same as the newsletter — and it matters more here: these go
+	// to members of the public at addresses the unit has no relationship
+	// with, so a burst that trips a receiving provider's spam heuristics
+	// costs the campaign its whole point. See internal/mailer/pace.go.
+	pacer := m.BulkPacer()
+
 	for _, r := range recipients {
 		body := personalize(c.Body, r)
 
 		var sendErr string
-		if err := m.SendHTML(ctx, r.Email, c.Subject, body); err != nil {
+		if err := m.SendHTMLPaced(ctx, pacer, r.Email, c.Subject, body); err != nil {
 			log.Printf("prospect: sending campaign %s to %s: %v", c.ID, r.Email, err)
 			sendErr = truncateError(err.Error())
 			failed++

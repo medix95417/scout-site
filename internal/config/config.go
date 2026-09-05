@@ -6,6 +6,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"strconv"
@@ -63,6 +64,14 @@ type Config struct {
 	MailProvider     string
 	FastmailAPIToken string
 
+	// MailBulkPerMinute caps how fast newsletters and prospect campaigns
+	// send, so a batch stays under the provider's short-window rate limit
+	// (Fastmail's ten-minute one, at a quarter of the daily allowance, is
+	// the one a burst hits) and doesn't look like a spam burst to the
+	// receiving side. 0 uses the mailer's default; negative disables
+	// pacing. Transactional mail is never paced.
+	MailBulkPerMinute int
+
 	// TrustProxyHeaders says whether X-Forwarded-For can be believed when
 	// working out a visitor's address for rate limiting (see
 	// internal/web.clientIP). Only turn this on when a reverse proxy is
@@ -107,7 +116,10 @@ func Load() (Config, error) {
 		SMTPFrom:     getenv("SMTP_FROM", ""),
 		SMTPTLSMode:  getenv("SMTP_TLS_MODE", "starttls"),
 
-		MailProvider:      getenv("MAIL_PROVIDER", ""),
+		MailProvider: getenv("MAIL_PROVIDER", ""),
+		// 0 means "use the mailer's default"; a negative value turns
+		// pacing off for a site that knows it doesn't need it.
+		MailBulkPerMinute: getenvInt("MAIL_BULK_PER_MINUTE", 0),
 		TrustProxyHeaders: getenv("TRUST_PROXY_HEADERS", "") == "true",
 		FastmailAPIToken:  getenv("FASTMAIL_API_TOKEN", ""),
 
@@ -143,6 +155,23 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// getenvInt reads an integer setting, falling back on anything
+// unparseable rather than refusing to start. A typo'd send rate should
+// mean "use the default", not a site that won't boot — unlike
+// SESSION_SECRET, nothing here is load-bearing enough to be worth that.
+func getenvInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		log.Printf("config: %s=%q is not a number, using %d", key, v, fallback)
+		return fallback
+	}
+	return n
 }
 
 // resolveDatabaseURL builds the Postgres connection string. DATABASE_URL,

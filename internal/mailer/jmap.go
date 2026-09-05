@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/mail"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -29,43 +31,165 @@ var fastmailSessionURL = "https://api.fastmail.com/jmap/session"
 // caller (a password-reset request, the reminders batch job) forever.
 var jmapHTTPTimeout = 15 * time.Second
 
-// sendViaFastmailJMAP sends one email through Fastmail's JMAP API
-// (https://www.fastmail.com/dev/) instead of SMTP — see
-// Config.Provider's doc comment for why a site would want this. Three
-// HTTP round trips: session discovery (fixed URL, bearer-token auth), a
-// lookup of the account's sending identity and Drafts mailbox, then a
-// single JMAP request that creates the email as a draft, submits it for
-// delivery, and destroys the draft again on success — so nothing
-// lingers in the account beyond what actually got sent, mirroring
-// SMTP's own "fire and forget, no copy kept" behavior.
+// jmapRoute is everything a send needs that isn't the message itself:
+// where to POST, which account, which sending identity, which Drafts
+// mailbox. Resolving it costs two HTTP round trips, and it is the same
+// answer for every message in a batch.
+type jmapRoute struct {
+	apiURL          string
+	accountID       string
+	identityID      string
+	draftsMailboxID string
+}
+
+// jmapRouteCache holds one resolved route, so a batch send resolves it
+// once instead of once per recipient.
 //
-// Deliberately re-resolves the session/identity/mailbox on every call
-// rather than caching them on the Mailer: this app's email volume
-// (password resets, event reminders) is far too low for the extra round
-// trips to matter, and it means a rotated API token or a changed From
-// address takes effect on the very next send rather than needing a
-// restart.
-func sendViaFastmailJMAP(ctx context.Context, cfg Config, to, subject, body, contentType string) error {
+// This used to be resolved on every single call, deliberately, and the
+// reasoning was sound at the time: the only senders were password resets
+// and event reminders, so the extra round trips cost nothing, and never
+// caching meant a rotated API token or a changed From address took effect
+// on the very next send with no restart.
+//
+// Mass email changed the first half of that. A campaign to fifty
+// prospects, or a newsletter to a whole roster, was three HTTP requests
+// per recipient where it needed one — slower than necessary and closer to
+// Fastmail's rate limits than necessary.
+//
+// The second half is kept rather than traded away: the cache is keyed on
+// the token and From address it was resolved with, so changing either
+// misses the cache and re-resolves immediately. Nothing needs restarting,
+// and a stale route can never be used against new credentials.
+type jmapRouteCache struct {
+	mu sync.Mutex
+
+	// The key: what this route was resolved for. A change in either
+	// invalidates it.
+	token string
+	from  string
+
+	cached     jmapRoute
+	resolved   bool
+	resolvedAt time.Time
+}
+
+// jmapRouteTTL bounds how long a resolved route is reused. Fastmail does
+// not document a session lifetime, and the session object can change
+// server-side (RFC 8620 §2 gives it a state string for exactly that
+// reason), so the route is re-resolved periodically rather than held for
+// the life of the process. Long enough that any realistic batch resolves
+// once; short enough that a server-side change heals on its own without
+// anybody noticing. A var so a test can shrink it.
+var jmapRouteTTL = 15 * time.Minute
+
+// route returns a usable jmapRoute, resolving it if the cache is empty,
+// keyed for different credentials, expired, or explicitly refreshed.
+//
+// The lock is held across the network fetch on purpose. Two goroutines
+// starting a batch at the same moment would otherwise both resolve;
+// serializing means the second waits briefly and then reuses the first's
+// answer, which is the whole point. Submits happen outside this lock, so
+// the batches themselves still overlap freely.
+func (c *jmapRouteCache) route(ctx context.Context, cfg Config, fromAddr string, refresh bool) (jmapRoute, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	fresh := c.resolved &&
+		c.token == cfg.APIToken &&
+		c.from == fromAddr &&
+		time.Since(c.resolvedAt) < jmapRouteTTL
+	if fresh && !refresh {
+		return c.cached, nil
+	}
+
+	session, err := fetchJMAPSession(ctx, cfg.APIToken)
+	if err != nil {
+		return jmapRoute{}, fmt.Errorf("mailer: fetching JMAP session: %w", err)
+	}
+	accountID := session.PrimaryAccounts["urn:ietf:params:jmap:mail"]
+	if accountID == "" {
+		return jmapRoute{}, fmt.Errorf("mailer: JMAP session has no mail account for this API token")
+	}
+
+	identityID, draftsMailboxID, err := fetchIdentityAndDrafts(ctx, session.APIURL, cfg.APIToken, accountID, fromAddr)
+	if err != nil {
+		// Leave any previous entry invalidated rather than serving a
+		// route the server has just disagreed with.
+		c.resolved = false
+		return jmapRoute{}, err
+	}
+
+	c.token, c.from = cfg.APIToken, fromAddr
+	c.cached = jmapRoute{
+		apiURL:          session.APIURL,
+		accountID:       accountID,
+		identityID:      identityID,
+		draftsMailboxID: draftsMailboxID,
+	}
+	c.resolved, c.resolvedAt = true, time.Now()
+	return c.cached, nil
+}
+
+// invalidate drops the cached route, so the next send re-resolves.
+func (c *jmapRouteCache) invalidate() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.resolved = false
+}
+
+// sendViaFastmailJMAP sends one email through Fastmail's JMAP API
+// (https://www.fastmail.com/dev/) instead of SMTP — see Config.Provider's
+// doc comment for why a site would want this.
+//
+// The final request creates the email as a draft, submits it for
+// delivery, and destroys the draft again on success — so nothing lingers
+// in the account beyond what actually got sent, mirroring SMTP's own
+// "fire and forget, no copy kept" behavior.
+//
+// A rejected-outright submit is retried once against a freshly resolved
+// route, for the case where the cached one went stale mid-batch. See
+// rejectedBeforeDelivery for why only that narrow class of failure is
+// retried: anything else might already have delivered, and a duplicate
+// recruiting email is worse than a reported failure.
+func (m *Mailer) sendViaFastmailJMAP(ctx context.Context, cfg Config, to, subject, body, contentType string) error {
 	fromAddr, err := extractAddr(cfg.From)
 	if err != nil {
 		return fmt.Errorf("mailer: invalid From address %q: %w", cfg.From, err)
 	}
 
-	session, err := fetchJMAPSession(ctx, cfg.APIToken)
-	if err != nil {
-		return fmt.Errorf("mailer: fetching JMAP session: %w", err)
-	}
-	accountID := session.PrimaryAccounts["urn:ietf:params:jmap:mail"]
-	if accountID == "" {
-		return fmt.Errorf("mailer: JMAP session has no mail account for this API token")
-	}
-
-	identityID, draftsMailboxID, err := fetchIdentityAndDrafts(ctx, session.APIURL, cfg.APIToken, accountID, fromAddr)
+	route, err := m.jmapRoutes.route(ctx, cfg, fromAddr, false)
 	if err != nil {
 		return err
 	}
 
-	return submitEmail(ctx, session.APIURL, cfg.APIToken, accountID, identityID, draftsMailboxID, cfg.From, to, subject, body, contentType)
+	err = submitEmail(ctx, route.apiURL, cfg.APIToken, route.accountID,
+		route.identityID, route.draftsMailboxID, cfg.From, to, subject, body, contentType)
+	if err == nil || !rejectedBeforeDelivery(err) {
+		return err
+	}
+
+	route, refreshErr := m.jmapRoutes.route(ctx, cfg, fromAddr, true)
+	if refreshErr != nil {
+		// Report what actually went wrong with the send, not the
+		// follow-up failure to re-resolve.
+		return err
+	}
+	return submitEmail(ctx, route.apiURL, cfg.APIToken, route.accountID,
+		route.identityID, route.draftsMailboxID, cfg.From, to, subject, body, contentType)
+}
+
+// rejectedBeforeDelivery reports whether the API refused the request
+// outright, which is the only failure safe to retry.
+//
+// submitEmail creates, submits and cleans up the draft in ONE JMAP
+// request. If that request fails at any point after the server began
+// acting on it, whether the mail went out is unknowable from here — so
+// retrying could send a second copy. A 401 or 403 is different in kind:
+// the server rejected the request at the door and did nothing, so no
+// message can have been delivered and a retry is free.
+func rejectedBeforeDelivery(err error) bool {
+	var se *jmapStatusError
+	return errors.As(err, &se) && (se.StatusCode == http.StatusUnauthorized || se.StatusCode == http.StatusForbidden)
 }
 
 // jmapSession is the subset of JMAP's session object (RFC 8620 §2) this
@@ -152,6 +276,20 @@ func (r jmapResponse) resultFor(wantID string) (json.RawMessage, error) {
 	return nil, fmt.Errorf("JMAP response has no result for call %q", wantID)
 }
 
+// jmapStatusError is a non-200 from the JMAP API, carrying the status
+// code so a caller can tell an outright rejection (401/403 — the server
+// did nothing) from a failure that may have had side effects. See
+// rejectedBeforeDelivery.
+type jmapStatusError struct {
+	StatusCode int
+	Status     string
+	Body       string
+}
+
+func (e *jmapStatusError) Error() string {
+	return fmt.Sprintf("API returned %s: %s", e.Status, e.Body)
+}
+
 func postJMAP(ctx context.Context, apiURL, token string, req jmapRequest) (jmapResponse, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, jmapHTTPTimeout)
 	defer cancel()
@@ -179,7 +317,11 @@ func postJMAP(ctx context.Context, apiURL, token string, req jmapRequest) (jmapR
 		return jmapResponse{}, fmt.Errorf("reading response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return jmapResponse{}, fmt.Errorf("API returned %s: %s", resp.Status, truncate(string(body), 500))
+		return jmapResponse{}, &jmapStatusError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Body:       truncate(string(body), 500),
+		}
 	}
 
 	var jr jmapResponse

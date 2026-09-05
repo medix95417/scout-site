@@ -51,6 +51,11 @@ type Config struct {
 	// outbound SMTP entirely — JMAP rides over ordinary HTTPS instead.
 	Provider string
 	APIToken string // Fastmail API token — only used when Provider == ProviderFastmailJMAP
+
+	// BulkPerMinute caps how fast the two bulk senders (newsletters and
+	// prospect campaigns) send. 0 uses defaultBulkPerMinute; negative
+	// turns pacing off. Transactional mail is never paced — see pace.go.
+	BulkPerMinute int
 }
 
 // Enabled reports whether enough configuration is present to attempt
@@ -74,6 +79,11 @@ func (c Config) Enabled() bool {
 type Mailer struct {
 	cfg  Config
 	pool *pgxpool.Pool
+
+	// jmapRoutes caches the JMAP session/identity/mailbox lookup so a
+	// batch send resolves it once rather than once per recipient. Unused
+	// on the SMTP path. See jmap.go.
+	jmapRoutes jmapRouteCache
 }
 
 // New builds a Mailer from its environment-sourced fallback Config and a
@@ -81,6 +91,9 @@ type Mailer struct {
 // in a test that only needs the env-var Config) — effective then simply
 // returns cfg unchanged.
 func New(cfg Config, pool *pgxpool.Pool) *Mailer {
+	if cfg.BulkPerMinute == 0 {
+		cfg.BulkPerMinute = defaultBulkPerMinute
+	}
 	return &Mailer{cfg: cfg, pool: pool}
 }
 
@@ -180,7 +193,7 @@ func (m *Mailer) deliver(ctx context.Context, to, subject, body, contentType str
 	}
 
 	if cfg.Provider == ProviderFastmailJMAP {
-		return sendViaFastmailJMAP(ctx, cfg, to, subject, body, contentType)
+		return m.sendViaFastmailJMAP(ctx, cfg, to, subject, body, contentType)
 	}
 	return deliverSMTP(ctx, cfg, to, subject, body, contentType)
 }

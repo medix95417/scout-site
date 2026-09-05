@@ -144,6 +144,8 @@ func main() {
 
 		Provider: cfg.MailProvider,
 		APIToken: cfg.FastmailAPIToken,
+
+		BulkPerMinute: cfg.MailBulkPerMinute,
 	}, pool)
 	if !mail.Enabled(ctx) {
 		log.Println("email is not configured (no SMTP_HOST or MAIL_PROVIDER environment variable and no host set on /admin/settings) — password reset and event reminders will report a clear error instead of sending")

@@ -173,7 +173,8 @@ func TestSendViaFastmailJMAP_Success(t *testing.T) {
 		APIToken: "test-token",
 		From:     "Troop 47 <sender@example.com>",
 	}
-	if err := sendViaFastmailJMAP(t.Context(), cfg, "family@example.com", "Subject", "Hello", "text/plain"); err != nil {
+	m := New(cfg, nil)
+	if err := m.sendViaFastmailJMAP(t.Context(), cfg, "family@example.com", "Subject", "Hello", "text/plain"); err != nil {
 		t.Fatalf("sendViaFastmailJMAP: %v", err)
 	}
 
@@ -204,7 +205,7 @@ func TestSendViaFastmailJMAP_IdentityMismatch(t *testing.T) {
 		APIToken: "test-token",
 		From:     "sender@example.com",
 	}
-	err := sendViaFastmailJMAP(t.Context(), cfg, "family@example.com", "Subject", "Hello", "text/plain")
+	err := New(cfg, nil).sendViaFastmailJMAP(t.Context(), cfg, "family@example.com", "Subject", "Hello", "text/plain")
 	if err == nil || !strings.Contains(err.Error(), "no Fastmail identity matches") {
 		t.Errorf("expected an identity-mismatch error, got %v", err)
 	}
