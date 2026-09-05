@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -243,6 +244,79 @@ func (h *Handlers) notifyProspect(r *http.Request, unit units.Unit, p prospect.P
 
 // --- Leader-facing tracking ------------------------------------------------
 
+// prospectsPageData is what admin-prospects.html renders. A named type
+// rather than a struct literal inside the handler so a render test can
+// build one — an anonymous struct can only be tested by declaring a copy
+// of it, and a copy is the thing that drifts.
+// prospectsView is every decision the prospects page makes about what to
+// show of itself: which slice of the campaign history, whether the
+// section starts open, and where each of its two view links points.
+//
+// A type of its own, built by newProspectsView, because these decisions
+// are the behaviour worth testing and a handler is an awkward place to
+// test anything. The alternative — recomputing them in a test — tests
+// the copy rather than the code, which is the failure this exists to
+// avoid.
+type prospectsView struct {
+	// Campaigns is what to render; CampaignTotal is how many exist. They
+	// differ whenever the history is longer than campaignsShown and the
+	// leader has not asked for all of it.
+	Campaigns       []campaignRow
+	CampaignTotal   int
+	CampaignsHidden int
+	// CanCollapse is "the leader is looking at the whole history and
+	// there is more of it than the page shows by default" — the only
+	// case where offering a way back to the short list means anything.
+	CanCollapse      bool
+	AllCampaignsURL  string
+	FewerCampaignURL string
+	// CampaignsOpen decides whether the accordion starts open. It does
+	// when the leader has just followed a link into it — otherwise they
+	// would click "view older" and land on a section that closed itself.
+	CampaignsOpen bool
+	// ToggleClosedURL flips the open/closed-enquiries filter while
+	// keeping the campaign view where the leader put it.
+	ToggleClosedURL string
+}
+
+// newProspectsView applies campaignsShown and builds the links.
+//
+// Every link carries BOTH toggles, because the two are independent: a
+// "view older messages" link that dropped ?all=1 would also silently
+// re-hide the closed enquiries, which is the kind of thing nobody
+// notices until they wonder where a family went.
+func newProspectsView(all []campaignRow, showClosed, showAllCampaigns bool) prospectsView {
+	shown := all
+	if !showAllCampaigns && len(shown) > campaignsShown {
+		shown = shown[:campaignsShown]
+	}
+	return prospectsView{
+		Campaigns:        shown,
+		CampaignTotal:    len(all),
+		CampaignsHidden:  len(all) - len(shown),
+		CanCollapse:      showAllCampaigns && len(all) > campaignsShown,
+		AllCampaignsURL:  prospectsURL(showClosed, true),
+		FewerCampaignURL: prospectsURL(showClosed, false),
+		CampaignsOpen:    showAllCampaigns,
+		ToggleClosedURL:  prospectsURL(!showClosed, showAllCampaigns),
+	}
+}
+
+// prospectsPageData is what admin-prospects.html renders. A named type
+// rather than a struct literal inside the handler so a render test can
+// build one — an anonymous struct can only be tested by declaring a copy
+// of it, and a copy is the thing that drifts.
+type prospectsPageData struct {
+	baseData
+	prospectsView
+	Prospects      []prospect.Prospect
+	Statuses       []prospect.StatusOption
+	ShowAll        bool
+	OpenCount      int
+	OptedOutCount  int
+	SavedTemplates []emailtemplate.Template
+}
+
 // ProspectsList shows this unit's enquiries and what's happened to them.
 // Leader-only — an enquiry carries a child's name, age and school, which
 // is not something the rest of the unit needs to read.
@@ -253,6 +327,7 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	showAll := r.URL.Query().Get("all") == "1"
+	showAllCampaigns := r.URL.Query().Get("campaigns") == "all"
 	list, err := prospect.ListForUnit(r.Context(), h.Pool, unit.ID, !showAll)
 	if err != nil {
 		log.Printf("web: listing prospects: %v", err)
@@ -280,6 +355,11 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 			RecipientCount: c.RecipientCount,
 		})
 	}
+	// Every campaign a unit ever sent is kept and listed here, so after a
+	// couple of recruiting seasons this is the longest thing on the page —
+	// above the enquiries it exists to support. newProspectsView decides
+	// how much of it to render; nothing is dropped, and the count in the
+	// accordion's summary still says how much history there is.
 
 	saved, err := emailtemplate.ListForUnit(r.Context(), h.Pool, unit.ID, emailtemplate.KindProspect)
 	if err != nil {
@@ -296,26 +376,46 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data := struct {
-		baseData
-		Prospects      []prospect.Prospect
-		Statuses       []prospect.StatusOption
-		ShowAll        bool
-		OpenCount      int
-		OptedOutCount  int
-		Campaigns      []campaignRow
-		SavedTemplates []emailtemplate.Template
-	}{
+	data := prospectsPageData{
 		baseData:       h.base(r, "Prospects"),
+		prospectsView:  newProspectsView(campaignRows, showAll, showAllCampaigns),
 		Prospects:      list,
 		Statuses:       prospect.Statuses,
 		ShowAll:        showAll,
 		OpenCount:      openCount,
 		OptedOutCount:  optedOut,
-		Campaigns:      campaignRows,
 		SavedTemplates: saved,
 	}
 	h.render(w, h.prospectsPage, data)
+}
+
+// campaignsShown is how many of the newest campaigns the page renders
+// before hiding the rest behind a link. Five is about a season's worth of
+// recruiting mail — enough that "did we already write to them" is
+// answerable at a glance, short enough that the section stays a header
+// rather than the page.
+const campaignsShown = 5
+
+// prospectsURL builds a link back to this page with both of its view
+// toggles set explicitly.
+//
+// Built in one place because the two are independent and each link has
+// to carry the other's current state: a "show all messages" link that
+// dropped ?all=1 would also silently re-hide the closed enquiries, which
+// is the kind of thing nobody notices until they wonder where a family
+// went.
+func prospectsURL(showAll, allCampaigns bool) string {
+	q := url.Values{}
+	if showAll {
+		q.Set("all", "1")
+	}
+	if allCampaigns {
+		q.Set("campaigns", "all")
+	}
+	if len(q) == 0 {
+		return "/admin/prospects"
+	}
+	return "/admin/prospects?" + q.Encode()
 }
 
 // campaignRow is one past or pending campaign as the prospects page lists
