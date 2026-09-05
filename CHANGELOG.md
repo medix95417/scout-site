@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.8.1] — 2026-09-05
+
 ### Fixed
 
 - **The file library's event filter listed every event, including ones
