@@ -70,6 +70,14 @@ tagged commit with an accurate date.
 
 ### Fixed
 
+- **A member with several roles appeared on the roster more than once.**
+  Anyone holding roles that differed in den/patrol — which is every Den
+  Leader who is also a parent, since one role is scoped to a den and the
+  other isn't — got a separate line per den, each showing only the roles
+  belonging to it. They now get one line, with all their roles and, if
+  they're in more than one, all their dens. The same fault, and the same
+  fix, applied to the list of deactivated members offered for
+  reactivation.
 - **The capability that had no checkbox.** `approve_expenses` was added to
   the capability set and to the database constraint in 2.4.0 but never to
   the custom-role form, so the documented way to let an Assistant

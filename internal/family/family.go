@@ -107,12 +107,17 @@ func ActingMemberForFamilyInUnit(ctx context.Context, pool *pgxpool.Pool, family
 // shows blank fields here, same as on that page.
 type RosterEntry struct {
 	Member
-	SubGroupName string // den/patrol name, if assigned; empty if unit-wide
-	Roles        []string
-	Email        string // "" if not released
-	HomePhone    string // "" if not released
-	CellPhone    string // "" if not released
-	Address      string // "" if not released — family-level, so shared by every member in the family
+	// SubGroupName is the den/patrol this member belongs to, empty if
+	// none. A member in more than one — a Den Leader who also has a Scout
+	// in another den — gets them comma-joined, because this is one line
+	// on a roster and they are one person.
+	SubGroupName string
+	// Roles is every role this member holds in the unit, on one entry.
+	Roles     []string
+	Email     string // "" if not released
+	HomePhone string // "" if not released
+	CellPhone string // "" if not released
+	Address   string // "" if not released — family-level, so shared by every member in the family
 }
 
 // RosterForUnit lists every active member with at least one role
@@ -129,11 +134,19 @@ type RosterEntry struct {
 //     family-facing roster. Anyone who holds super_admin alongside a real
 //     membership role (e.g. a Scoutmaster who's also been granted
 //     super_admin) still appears normally, tagged with their real role.
+//
+// One entry per member, never one per role. The GROUP BY deliberately
+// does NOT include sub_groups.name: it used to, and that split anybody
+// holding roles in different sub-groups — or one scoped role and one
+// unscoped, which is every Den Leader who is also a parent — into a
+// separate line per sub-group, each showing only the subset of their
+// roles that belonged to it. A person is one line on a roster, so the
+// den/patrol names are aggregated the same way the roles already were.
 func RosterForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]RosterEntry, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT
 			members.id, members.family_id, members.first_name, members.last_name, members.member_type::text,
-			COALESCE(sub_groups.name, ''),
+			COALESCE(string_agg(DISTINCT sub_groups.name, ', ' ORDER BY sub_groups.name), '') AS sub_groups,
 			array_agg(DISTINCT role_assignments.role::text) AS roles,
 			CASE WHEN members.release_email THEN COALESCE(members.email, '') ELSE '' END,
 			CASE WHEN members.release_phone THEN COALESCE(members.home_phone, '') ELSE '' END,
@@ -144,7 +157,7 @@ func RosterForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Ro
 		JOIN families ON families.id = members.family_id
 		LEFT JOIN sub_groups ON sub_groups.id = role_assignments.sub_group_id
 		WHERE role_assignments.unit_id = $1 AND members.active
-		GROUP BY members.id, members.family_id, members.first_name, members.last_name, members.member_type, sub_groups.name,
+		GROUP BY members.id, members.family_id, members.first_name, members.last_name, members.member_type,
 			members.release_email, members.release_phone, members.email, members.home_phone, members.cell_phone,
 			families.release_address, families.address
 		HAVING NOT bool_and(role_assignments.role::text = 'super_admin')
@@ -181,13 +194,13 @@ func InactiveRosterForUnit(ctx context.Context, pool *pgxpool.Pool, unitID strin
 	rows, err := pool.Query(ctx, `
 		SELECT
 			members.id, members.family_id, members.first_name, members.last_name, members.member_type::text,
-			COALESCE(sub_groups.name, ''),
+			COALESCE(string_agg(DISTINCT sub_groups.name, ', ' ORDER BY sub_groups.name), '') AS sub_groups,
 			array_agg(DISTINCT role_assignments.role::text) AS roles
 		FROM role_assignments
 		JOIN members ON members.id = role_assignments.member_id
 		LEFT JOIN sub_groups ON sub_groups.id = role_assignments.sub_group_id
 		WHERE role_assignments.unit_id = $1 AND NOT members.active
-		GROUP BY members.id, members.family_id, members.first_name, members.last_name, members.member_type, sub_groups.name
+		GROUP BY members.id, members.family_id, members.first_name, members.last_name, members.member_type
 		ORDER BY (members.member_type = 'youth'), members.last_name, members.first_name
 	`, unitID)
 	if err != nil {
