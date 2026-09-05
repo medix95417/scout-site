@@ -14,7 +14,7 @@
         <p class="text-xs text-gray-500 mb-3">
           <span class="capitalize">{{.MemberType}}</span>
           {{if .SubGroupName}} · {{.SubGroupName}}{{end}}
-          {{if .Roles}} · {{range $i, $r := .Roles}}{{if $i}}, {{end}}{{$r}}{{end}}{{end}}
+          {{if .RoleLabels}} · {{range $i, $r := .RoleLabels}}{{if $i}}, {{end}}{{$r}}{{end}}{{end}}
         </p>
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Update Contact Info</p>
         <form method="post" action="/my-family/members/{{.ID}}" class="space-y-2">

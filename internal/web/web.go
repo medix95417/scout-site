@@ -1796,7 +1796,7 @@ func (h *Handlers) Roster(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		baseData
 		Roster []family.RosterEntry
-	}{baseData: h.base(r, "Roster"), Roster: roster}
+	}{baseData: h.base(r, "Roster"), Roster: h.labelRoster(r.Context(), unit.ID, roster)}
 	h.render(w, h.roster, data)
 }
 
@@ -1814,6 +1814,7 @@ func (h *Handlers) RosterExportPDF(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	roster = h.labelRoster(r.Context(), unit.ID, roster)
 
 	rows := make([][]string, 0, len(roster))
 	for _, e := range roster {
@@ -1829,7 +1830,7 @@ func (h *Handlers) RosterExportPDF(w http.ResponseWriter, r *http.Request) {
 		if address == "" {
 			address = "—"
 		}
-		rows = append(rows, []string{e.FirstName + " " + e.LastName, e.MemberType, subGroup, strings.Join(e.Roles, ", "), contact, address})
+		rows = append(rows, []string{e.FirstName + " " + e.LastName, e.MemberType, subGroup, strings.Join(e.RoleLabels, ", "), contact, address})
 	}
 
 	data, err := simpleTablePDF(unit.Name+" — Roster", "",

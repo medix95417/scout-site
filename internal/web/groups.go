@@ -91,6 +91,7 @@ func (h *Handlers) GroupView(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("web: loading sub-group roster: %v", err)
 	}
+	members = h.labelRoster(r.Context(), unit.ID, members)
 
 	photos, err := files.ListForSubGroup(r.Context(), h.Pool, group.ID)
 	if err != nil {

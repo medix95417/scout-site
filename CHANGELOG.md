@@ -70,6 +70,14 @@ tagged commit with an accurate date.
 
 ### Fixed
 
+- **Roles are shown by name, not by their internal slug.** Every page
+  listing somebody's roles — the roster, the admin roster, a den/patrol
+  page, My Family, the member edit page and the roster PDF — printed the
+  database key, so families read "den_leader" and
+  "assistant_scoutmaster" instead of "Den Leader" and "Assistant
+  Scoutmaster". Custom roles now show the name the unit gave them, and a
+  role whose custom definition has since been deleted still reads as a
+  name rather than a key.
 - **A member with several roles appeared on the roster more than once.**
   Anyone holding roles that differed in den/patrol — which is every Den
   Leader who is also a parent, since one role is scoped to a den and the

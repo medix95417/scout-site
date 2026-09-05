@@ -113,11 +113,18 @@ type RosterEntry struct {
 	// on a roster and they are one person.
 	SubGroupName string
 	// Roles is every role this member holds in the unit, on one entry.
-	Roles     []string
-	Email     string // "" if not released
-	HomePhone string // "" if not released
-	CellPhone string // "" if not released
-	Address   string // "" if not released — family-level, so shared by every member in the family
+	// These are slugs — the stable keys permission checks compare — so
+	// anything shown to a person wants RoleLabels instead.
+	Roles []string
+	// RoleLabels is Roles as a person reads it. Left nil by the queries
+	// in this package: labelling needs the unit's custom roles, and a
+	// data-model package has no business loading display strings. The web
+	// layer fills it in through units.RoleLabeler — see labelRoster.
+	RoleLabels []string
+	Email      string // "" if not released
+	HomePhone  string // "" if not released
+	CellPhone  string // "" if not released
+	Address    string // "" if not released — family-level, so shared by every member in the family
 }
 
 // RosterForUnit lists every active member with at least one role
