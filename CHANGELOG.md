@@ -27,6 +27,18 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Changed
+
+- **The "Emails to prospects" section folds away.** Every campaign a unit
+  has ever sent is kept and listed there, so after a couple of recruiting
+  seasons it was the longest thing on a page whose actual subject is the
+  enquiries below it. It is now a collapsible section showing the five
+  most recent messages, with the rest one link away and the count of the
+  whole history on the summary line either way. Nothing is deleted or
+  hidden for good. The saved templates stay reachable whenever the
+  section is open, however long the history is, and "Write a new message"
+  stays put whether it is open or shut.
+
 ## [2.8.0] — 2026-09-05
 
 ### Added
