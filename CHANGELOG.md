@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.9.0] — 2026-09-06
+
 ### Fixed
 
 - **A photo album showed a band across the middle of each photo instead
