@@ -3,6 +3,9 @@ package web
 import (
 	"strings"
 	"testing"
+
+	"github.com/47-yonkers/scout-site/internal/content"
+	"github.com/47-yonkers/scout-site/internal/files"
 )
 
 // A news card that shows the first 220 characters of a longer post, with
@@ -95,5 +98,74 @@ func TestOnlyTheTruncatedCardsAreMarked(t *testing.T) {
 	}))
 	if got := strings.Count(out, "Read more"); got != 1 {
 		t.Errorf(`"Read more" appears %d times, want 1 — only the truncated card`, got)
+	}
+}
+
+// Deleting a news post is super_admin only, so the button has to be too.
+// A leader who can publish, unpublish and edit sees the rest of this
+// page work; a Delete that turns them away reads as a broken site rather
+// than a rule, and the handler refusing them is not much comfort once
+// they have already clicked it on a post they meant to remove.
+
+func adminNewsList(superAdmin bool) any {
+	base := testBase("Manage News")
+	base.IsSuperAdmin = superAdmin
+	return struct {
+		baseData
+		Kind  contentKind
+		Items []adminContentRow
+	}{base, newsKind, []adminContentRow{
+		{ID: "p1", Title: "Pack meeting", Status: "published", Visibility: "public", UpdatedOn: "6 Sep 2026"},
+	}}
+}
+
+func TestOnlyAnAdminIsOfferedDeleteInTheNewsList(t *testing.T) {
+	admin := renderPage(t, "admin-content-list.html", adminNewsList(true))
+	if !strings.Contains(admin, "/admin/news/p1/delete") {
+		t.Error("an Admin is not offered Delete")
+	}
+
+	editor := renderPage(t, "admin-content-list.html", adminNewsList(false))
+	if strings.Contains(editor, "/admin/news/p1/delete") {
+		t.Error("a content editor is offered a Delete the handler will refuse")
+	}
+	// The actions they DO have are untouched.
+	if !strings.Contains(editor, "/admin/news/p1/publish") || !strings.Contains(editor, "/admin/news/p1/edit") {
+		t.Error("restricting Delete took Unpublish or Edit with it")
+	}
+}
+
+func adminNewsForm(superAdmin bool) any {
+	base := testBase("Edit News Post")
+	base.IsSuperAdmin = superAdmin
+	return struct {
+		baseData
+		Kind                 contentKind
+		IsEdit               bool
+		Post                 content.Post
+		PhotoDateInput       string
+		PublicMediaGroups    []files.EventFileGroup
+		PublicMediaUngrouped []files.File
+		EventPhotoGroups     []files.EventFileGroup
+	}{baseData: base, Kind: newsKind, IsEdit: true, Post: content.Post{
+		ID: "p1", Title: "Pack meeting", Body: "Tuesday at 7.", Status: "published", Visibility: "public",
+	}}
+}
+
+func TestOnlyAnAdminIsOfferedDeleteInTheEditor(t *testing.T) {
+	admin := renderPage(t, "admin-content-form.html", adminNewsForm(true))
+	if !strings.Contains(admin, "/admin/news/p1/delete") {
+		t.Error("an Admin is not offered Delete in the editor")
+	}
+	if !strings.Contains(admin, "Delete this News Post") {
+		t.Error("the Admin's delete button has lost its label")
+	}
+
+	editor := renderPage(t, "admin-content-form.html", adminNewsForm(false))
+	if strings.Contains(editor, "/admin/news/p1/delete") {
+		t.Error("a content editor is offered a Delete the handler will refuse")
+	}
+	if !strings.Contains(editor, "Save") {
+		t.Error("restricting Delete broke the editor for everyone else")
 	}
 }

@@ -29,13 +29,17 @@ tagged commit with an accurate date.
 
 ### Added
 
-- **A news post can be deleted, not just unpublished.** Unpublishing is
-  the right tool for taking something down and the wrong one for a post
-  that should never have gone up — it stays in the admin list for the
-  next person to read and wonder about. There is now a Delete button on
-  the news editor and in the news list, both behind a confirmation that
-  spells out the difference. Who deleted what, and which post it was,
-  stays in the Activity Log afterwards.
+- **An Admin can delete a news post, not just unpublish it.**
+  Unpublishing is the right tool for taking something down and the wrong
+  one for a post that should never have gone up — it stays in the admin
+  list for the next person to read and wonder about. There is now a
+  Delete button on the news editor and in the news list, behind a
+  confirmation that spells out the difference. Deleting is limited to
+  Admins, unlike writing, editing, publishing and unpublishing, which
+  any leader who manages content can still do: every one of those can be
+  taken back and this one cannot. Other leaders don't see the button at
+  all. Who deleted what, and which post it was, stays in the Activity
+  Log afterwards.
 
 ### Fixed
 

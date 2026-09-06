@@ -83,8 +83,11 @@
   {{/* Outside the form above, not inside it — a nested <form> is invalid
        and the browser drops it, so the button would silently do nothing.
        Only on an existing item: there is nothing to delete while
-       creating one. */}}
-  {{if and .Post.ID (eq .Kind.PageType "post")}}
+       creating one. And only for an Admin: deleting is the one action
+       here that cannot be undone, so it is held to super_admin while
+       editing and unpublishing stay with any content editor (see
+       requireContentDeleter). */}}
+  {{if and .IsSuperAdmin .Post.ID (eq .Kind.PageType "post")}}
     <div class="mt-8 border-t border-gray-200 pt-4">
       <form method="post" action="{{.Kind.BasePath}}/{{.Post.ID}}/delete"
             data-confirm="Delete &quot;{{.Post.Title}}&quot; for good? Unpublishing hides it instead and can be undone; this cannot.">
