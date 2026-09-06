@@ -235,6 +235,28 @@ Set these for production:
   keep their original flat keys and go on working — nothing needs
   migrating, so an older bucket will have both shapes in it.
 
+  **Tidying an older bucket.** `server -rekey-files` moves already-stored
+  files into the folders they would be filed under today. It prints the
+  plan and **changes nothing** unless `-apply` is also given:
+
+      docker compose run --rm app -rekey-files           # look
+      docker compose run --rm app -rekey-files -apply    # leap
+
+  Safe to run while the site is serving, and safe to re-run. Each file is
+  copied to its new key, the copy is verified present, the database is
+  repointed, and only then is the original deleted — so the key the
+  database holds always names an object that exists, and an interrupted
+  run leaves either the original or the copy in place, never neither.
+  Because the new key is derived from the file's own row id, a re-run
+  after an interruption lands on the same key and finishes the job rather
+  than leaving a fresh orphan each time. A second run reports everything
+  as "already in place".
+
+  Rows whose object is missing from the bucket entirely are listed and
+  left alone rather than repointed — that is a pre-existing problem, and
+  giving it a new key would only hide it. The exit status is non-zero if
+  any move actually failed, so it can be run from a script.
+
 Lock the file down since it now holds real secrets:
 
 ```bash

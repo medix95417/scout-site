@@ -27,6 +27,19 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **`server -rekey-files` tidies an older bucket.** Files stored before
+  the folder layout existed keep their original flat locations and go on
+  working, so nothing has to be migrated — but a bucket that is half
+  tidy and half a heap of identifiers is unpleasant to look at when you
+  are restoring a backup or auditing what is stored. This moves them into
+  the folders they would be filed under today. It prints the plan and
+  changes nothing unless `-apply` is given, is safe to run while the site
+  is serving, and is safe to re-run. Rows whose file is missing from
+  storage entirely are reported and left alone rather than quietly given
+  a new address. See DEPLOY.md.
+
 ### Changed
 
 - **Uploaded files are filed into folders instead of one flat heap.**
