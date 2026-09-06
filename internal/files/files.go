@@ -9,6 +9,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,15 +51,103 @@ func (f File) DisplayLabel() string {
 	return f.Filename
 }
 
-// NewStorageKey generates a collision-proof object key for a new upload,
-// namespaced by unit so two units' files never collide even though they
-// share one bucket. The original filename is preserved as a suffix purely
-// so a key is human-recognizable
-// in the bucket browser — nothing parses it back out; the database row is
-// the source of truth for Filename.
-func NewStorageKey(unitID, filename string) string {
-	return fmt.Sprintf("%s/%s-%s", unitID, uuid.NewString(), filename)
+// Folders a unit's objects are filed under, alongside one folder per
+// event (see EventFolder). Everything sits below the unit's own id, so
+// two units never collide even though they share one bucket.
+const (
+	// DocumentsFolder holds general uploads not tied to an event — the
+	// bylaws, a permission form, a fundraiser order sheet.
+	DocumentsFolder = "documents"
+	// PhotosFolder holds photos and video uploaded as event media but
+	// not actually linked to an event. They have to go somewhere, and it
+	// is not among the documents.
+	PhotosFolder = "photos"
+)
+
+// EventFolder is the folder name for one event's uploads: its title,
+// slugified, with its date.
+//
+// The date is not decoration. It separates this year's Summer Camp from
+// last year's, which would otherwise share a folder and read as one
+// campout — and it guarantees an event folder can never collide with
+// DocumentsFolder or PhotosFolder, however an event is named. An event
+// actually called "Documents" becomes documents-2026-07-15.
+func EventFolder(title string, date time.Time) string {
+	slug := slugForKey(title)
+	if slug == "" {
+		// A title that is entirely punctuation or emoji. The date alone
+		// still identifies it, and is still a valid folder name.
+		slug = "event"
+	}
+	return slug + "-" + date.Format("2006-01-02")
 }
+
+// NewStorageKey generates a collision-proof object key for a new upload,
+// filed under folder within the unit's own namespace.
+//
+// The original filename is preserved as a suffix purely so a key is
+// human-recognizable in the bucket browser — nothing parses it back out;
+// the database row is the source of truth for Filename. It is passed
+// through slugForKey on the way in, because the multipart filename is
+// chosen by whoever is uploading: a name containing "/" would otherwise
+// invent directory levels inside the folder, and one containing ".."
+// would be a path segment some storage backends resolve.
+//
+// Note that a key is written once and never rewritten. Re-linking a file
+// to a different event later (see SetEventLinks) does NOT move the
+// object — the folder records where the file was filed, and the database
+// remains the authority on which events it belongs to.
+func NewStorageKey(unitID, folder, filename string) string {
+	name := slugForKey(strings.TrimSuffix(filename, filepath.Ext(filename)))
+	if name == "" {
+		name = "file"
+	}
+	return fmt.Sprintf("%s/%s/%s-%s%s", unitID, folder, uuid.NewString(), name,
+		strings.ToLower(slugExt(filepath.Ext(filename))))
+}
+
+// slugForKey reduces arbitrary text to the characters an object key can
+// safely carry: lowercase letters, digits and single hyphens.
+//
+// Deliberately an allowlist. The inputs are an event title a leader
+// typed and a filename a browser sent, and the output becomes a path —
+// so the question is not "which characters are dangerous" but "which are
+// known safe", and "/" and "." are the two that must never survive.
+func slugForKey(s string) string {
+	var b strings.Builder
+	lastHyphen := true // leading hyphens are trimmed by never writing one first
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastHyphen = false
+		default:
+			if !lastHyphen {
+				b.WriteByte('-')
+				lastHyphen = true
+			}
+		}
+		if b.Len() >= maxKeySegment {
+			break
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+// slugExt keeps a file extension recognizable without letting it carry
+// anything but letters and digits — ".jpg" survives, ".jpg/../x" does not.
+func slugExt(ext string) string {
+	slug := slugForKey(ext)
+	if slug == "" {
+		return ""
+	}
+	return "." + slug
+}
+
+// maxKeySegment bounds one path segment. S3 allows a 1024-byte key in
+// total, and an event title or a filename can be far longer than anyone
+// wants in a bucket listing.
+const maxKeySegment = 60
 
 // Create inserts a file's metadata row after its bytes have already been
 // written to storage (see internal/web/files.go's upload handler, which

@@ -213,6 +213,28 @@ Set these for production:
   library/event photos just show a clear "not configured yet" notice
   instead of an error.
 
+  **How the bucket is laid out.** Every object sits under the unit's own
+  id, and below that in a folder, so browsing the bucket (or a backup of
+  it) shows what things are rather than a flat heap of UUIDs:
+
+      <unit id>/summer-camp-2026-07-15/<uuid>-group-photo.jpg
+      <unit id>/documents/<uuid>-bylaws-2026.pdf
+      <unit id>/photos/<uuid>-pack-meeting.jpg
+      <unit id>/email-images/<sha256>.jpg
+
+  An upload attached to an event goes in a folder named after that event,
+  dated so this year's Summer Camp is not last year's. Everything else
+  goes to `documents/` or `photos/` depending on which category it was
+  uploaded as. Event and file names are reduced to lowercase letters,
+  digits and hyphens on the way in.
+
+  Two things worth knowing. The folder records where a file was FILED,
+  not where it belongs now: re-linking a file to a different event later
+  does not move the object, and the database stays the authority on which
+  events a file belongs to. And files uploaded before this layout existed
+  keep their original flat keys and go on working — nothing needs
+  migrating, so an older bucket will have both shapes in it.
+
 Lock the file down since it now holds real secrets:
 
 ```bash
