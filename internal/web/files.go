@@ -212,12 +212,21 @@ type fileLibraryData struct {
 // than failing the upload: a file in the wrong folder is a tidiness
 // problem, a refused upload is a lost photo.
 func (h *Handlers) uploadFolder(ctx context.Context, unitID, category string, eventIDs []string) string {
+	return folderFor(ctx, h.Pool, unitID, category, eventIDs)
+}
+
+// folderFor is the decision itself, as a free function so the rekey pass
+// (see rekey.go) files an existing file exactly where an upload of it
+// would go today. Two implementations of "which folder" would drift, and
+// the drift would show up as a migration that shuffles files back and
+// forth on every run.
+func folderFor(ctx context.Context, pool *pgxpool.Pool, unitID, category string, eventIDs []string) string {
 	fallback := files.DocumentsFolder
 	if category == files.CategoryEventPhoto {
 		fallback = files.PhotosFolder
 	}
 	for _, id := range eventIDs {
-		event, found, err := calendar.GetEvent(ctx, h.Pool, id, unitID)
+		event, found, err := calendar.GetEvent(ctx, pool, id, unitID)
 		if err != nil {
 			log.Printf("web: resolving event %s for upload folder: %v", id, err)
 			continue

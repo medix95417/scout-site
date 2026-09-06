@@ -11,6 +11,8 @@
 //	server -refresh-calendar-feeds  re-fetch every subscribed external calendar, then exit (run via cron)
 //	server -grant-role           grant an existing user a role in a unit, then exit (see DEPLOY.md "Adding a unit later")
 //	server -backfill-thumbnails  generate a cached thumbnail for every image file that doesn't already have one, then exit (safe to re-run) — runs automatically in the background on every normal server startup too, this is only for running it on demand/synchronously
+//	server -rekey-files          print which stored files would move into their event/documents/photos folder, then exit — changes nothing
+//	server -rekey-files -apply   actually move them (safe to re-run, and safe while the site is serving)
 package main
 
 import (
@@ -52,6 +54,8 @@ func main() {
 	backfillThumbnails := flag.Bool("backfill-thumbnails", false, "generate a cached thumbnail for every image file that doesn't already have one, then exit. The normal server already does this automatically in the background on every startup — use this flag only to run it on demand and see the result immediately instead of waiting/checking logs (safe to re-run either way)")
 	backupFiles := flag.Bool("backup-files", false, "write every stored photo and document to stdout as a tar archive, then exit — the photo half of a backup, since these live in object storage rather than the database. Meant to be piped straight into an encryption tool; see scripts/backup.sh")
 	restoreFiles := flag.Bool("restore-files", false, "read a tar archive produced by -backup-files from stdin and put every object back, then exit. Additive: it replaces objects at matching keys and never deletes anything the archive doesn't mention. See scripts/restore.sh")
+	rekeyFiles := flag.Bool("rekey-files", false, "move stored files into the event/documents/photos folders newer uploads use, then exit. Prints the plan and changes NOTHING unless -apply is also given. Safe to re-run, and safe to run while the site is serving — see DEPLOY.md")
+	apply := flag.Bool("apply", false, "with -rekey-files: actually perform the moves instead of only printing them")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -229,6 +233,36 @@ func main() {
 			log.Fatalf("restore-files: %v", err)
 		}
 		log.Printf("restore-files: restored %d objects, %d bytes", res.Objects, res.Bytes)
+		return
+	}
+
+	if *rekeyFiles {
+		if store == nil {
+			log.Fatal("rekey-files: file storage isn't configured (see S3_ENDPOINT above) — there is nothing stored to move")
+		}
+		result, err := web.RekeyFiles(ctx, pool, store, *apply)
+		if err != nil {
+			log.Fatalf("rekey-files: %v", err)
+		}
+		verb := "would move"
+		if *apply {
+			verb = "moved"
+		}
+		for _, m := range result.Moves {
+			log.Printf("rekey-files: %s\n    %s\n -> %s", verb, m.From, m.To)
+		}
+		for _, m := range result.Missing {
+			log.Printf("rekey-files: SKIPPED %s (%s) — no object at %q; the row points at something the bucket does not have",
+				m.FileID, m.Filename, m.From)
+		}
+		log.Printf("rekey-files: %s %d, already in place %d, missing from storage %d, failed %d",
+			verb, len(result.Moves), result.Skipped, len(result.Missing), result.Failed)
+		if !*apply && len(result.Moves) > 0 {
+			log.Print("rekey-files: this was a dry run — nothing changed. Re-run with -apply to perform the moves.")
+		}
+		if result.Failed > 0 {
+			os.Exit(1)
+		}
 		return
 	}
 

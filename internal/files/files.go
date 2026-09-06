@@ -98,11 +98,24 @@ func EventFolder(title string, date time.Time) string {
 // object — the folder records where the file was filed, and the database
 // remains the authority on which events it belongs to.
 func NewStorageKey(unitID, folder, filename string) string {
+	return StorageKeyFor(unitID, folder, uuid.NewString(), filename)
+}
+
+// StorageKeyFor builds the same key as NewStorageKey around a caller-
+// supplied unique part instead of a fresh UUID.
+//
+// It exists for the rekey pass (see internal/web.RekeyFiles), which
+// passes the file's own row id. That makes the target key a pure
+// function of the row: a run interrupted between copying the object and
+// repointing the database re-derives the identical key next time and
+// overwrites its own half-finished copy, rather than stranding a new
+// orphan on every attempt.
+func StorageKeyFor(unitID, folder, unique, filename string) string {
 	name := slugForKey(strings.TrimSuffix(filename, filepath.Ext(filename)))
 	if name == "" {
 		name = "file"
 	}
-	return fmt.Sprintf("%s/%s/%s-%s%s", unitID, folder, uuid.NewString(), name,
+	return fmt.Sprintf("%s/%s/%s-%s%s", unitID, folder, unique, name,
 		strings.ToLower(slugExt(filepath.Ext(filename))))
 }
 
@@ -254,6 +267,47 @@ func ListAllImageFiles(ctx context.Context, pool *pgxpool.Pool) ([]File, error) 
 		out = append(out, f)
 	}
 	return out, rows.Err()
+}
+
+// ListAll returns every file in every unit, oldest first.
+//
+// Like ListAllImageFiles, deliberately NOT scoped to one unit, and for
+// the same reason: its only caller is an operator-run maintenance pass
+// (internal/web.RekeyFiles, behind cmd/server's -rekey-files), never
+// anything reachable over HTTP.
+func ListAll(ctx context.Context, pool *pgxpool.Pool) ([]File, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, unit_id, filename, display_name, content_type, size_bytes, storage_key, category::text, uploaded_by, created_at, is_public
+		FROM files ORDER BY created_at
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []File
+	for rows.Next() {
+		var f File
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// SetStorageKey repoints a file's row at a different object key, for the
+// rekey pass and nothing else — a key is otherwise written once, at
+// upload, and never changed.
+//
+// Not scoped to a unit, unlike every other write here, because the
+// caller is an operator sweeping every unit at once and already holds
+// the row it is moving. storage_key is UNIQUE in the schema, so a
+// collision fails loudly here rather than silently pointing two rows at
+// one object.
+func SetStorageKey(ctx context.Context, pool *pgxpool.Pool, fileID, storageKey string) error {
+	_, err := pool.Exec(ctx, `UPDATE files SET storage_key = $1 WHERE id = $2`, storageKey, fileID)
+	return err
 }
 
 // Get looks up a single file, scoped to a unit — same "scope every lookup

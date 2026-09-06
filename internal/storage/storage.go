@@ -146,6 +146,35 @@ func (s *Store) List(ctx context.Context) ([]Object, error) {
 	return out, nil
 }
 
+// Copy duplicates the object at src to dst, server-side.
+//
+// Server-side rather than Get-then-Put because the caller is the rekey
+// pass (see internal/web.RekeyFiles), which may move a whole library:
+// streaming every photo down and back up again would cost the bandwidth
+// twice and, on a metered endpoint, real money — for bytes that never
+// need to leave the bucket.
+//
+// Copying rather than moving is the point. There is no atomic rename in
+// object storage, and the caller needs the original to stay readable
+// until the database has been repointed, so that a download in flight
+// during the move cannot 404.
+func (s *Store) Copy(ctx context.Context, src, dst string) error {
+	_, err := s.client.CopyObject(ctx,
+		minio.CopyDestOptions{Bucket: s.bucket, Object: dst},
+		minio.CopySrcOptions{Bucket: s.bucket, Object: src},
+	)
+	if err != nil {
+		return fmt.Errorf("storage: copying %q to %q: %w", src, dst, err)
+	}
+	return nil
+}
+
+// Exists reports whether an object is stored at key.
+func (s *Store) Exists(ctx context.Context, key string) bool {
+	_, err := s.client.StatObject(ctx, s.bucket, key, minio.StatObjectOptions{})
+	return err == nil
+}
+
 // Delete removes the object at key. Deleting a key that doesn't exist is
 // not an error — the caller's goal ("this key is gone") is already true.
 func (s *Store) Delete(ctx context.Context, key string) error {
