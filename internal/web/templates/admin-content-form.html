@@ -80,5 +80,25 @@
     <a href="{{.Kind.BasePath}}" class="text-sm underline ml-2">Cancel</a>
   </form>
 
+  {{/* Outside the form above, not inside it — a nested <form> is invalid
+       and the browser drops it, so the button would silently do nothing.
+       Only on an existing item: there is nothing to delete while
+       creating one. */}}
+  {{if and .Post.ID (eq .Kind.PageType "post")}}
+    <div class="mt-8 border-t border-gray-200 pt-4">
+      <form method="post" action="{{.Kind.BasePath}}/{{.Post.ID}}/delete"
+            data-confirm="Delete &quot;{{.Post.Title}}&quot; for good? Unpublishing hides it instead and can be undone; this cannot.">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="rounded-md border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
+          Delete this {{.Kind.Label}}
+        </button>
+      </form>
+      <p class="mt-2 text-xs text-gray-500">
+        Removes it entirely. To take it off the site but keep it, use Unpublish on the
+        <a href="{{.Kind.BasePath}}" class="underline" style="color: var(--unit-color);">{{.Kind.LabelPlural}} list</a> instead.
+      </p>
+    </div>
+  {{end}}
+
   {{if .Kind.HasImagePicker}}{{template "imagePickerScript" .}}{{end}}
 {{end}}

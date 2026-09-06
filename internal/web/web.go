@@ -757,6 +757,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/news/{id}/edit", h.AdminNewsEdit)
 	mux.HandleFunc("POST /admin/news/{id}", h.AdminNewsUpdate)
 	mux.HandleFunc("POST /admin/news/{id}/publish", h.AdminNewsPublishToggle)
+	mux.HandleFunc("POST /admin/news/{id}/delete", h.AdminNewsDelete)
 
 	mux.HandleFunc("GET /admin/gallery", h.AdminGalleryList)
 	mux.HandleFunc("GET /admin/gallery/new", h.AdminGalleryNew)
@@ -1324,7 +1325,7 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 			Title:       p.Title,
 			URL:         "/news/" + p.ID,
 			DateDisplay: postedOn(p.CreatedAt),
-			Excerpt:     excerpt(p.Body, 160),
+			Excerpt:     homeExcerpt(p.Body),
 			MembersOnly: p.Visibility != "public",
 		})
 	}
@@ -2612,3 +2613,11 @@ func (h *Handlers) CalendarEventAttendeesExportPDF(w http.ResponseWriter, r *htt
 }
 
 // --- Audit — see internal/web/audit.go for AuditView/AuditExport -----------
+
+// homeExcerpt is the homepage strip's preview. The strip already reads as
+// a list of links into the news page, so unlike /news it has no use for
+// excerpt's "was this cut" flag.
+func homeExcerpt(body string) string {
+	preview, _ := excerpt(body, 160)
+	return preview
+}
