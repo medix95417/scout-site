@@ -238,10 +238,25 @@
        Photos      anything rangeable with .URL/.Caption fields (e.g.
                    []content.GalleryPhoto)
        HeightClass a Tailwind height class for each photo, e.g. "h-80"
+       Fit         "contain" to show every photo whole, letterboxed into
+                   the height above. Anything else (including unset)
+                   crops to fill it — see below for which to pick.
        AutoRotate  if true (and there's more than one photo), advances to
                    the next photo on a timer instead of waiting for a
                    click/swipe — used for unattended previews like the
                    homepage's recent-activity strip.
+
+     Fit is the difference between a preview and a viewer, and getting it
+     backwards is a real bug rather than a matter of taste. Cropping is
+     right for a grid of cards, where uniform tiles are the point and
+     nobody expects to study the picture. It is wrong wherever the photo
+     IS the content: a fixed-height box crops a portrait photo down to a
+     band across its middle — measured at 20% of the image for a 900x1600
+     photo in an h-80 box — so the visitor sees a slice with no way to
+     tell there is more, short of clicking through to the lightbox. That
+     is exactly what happened on the gallery page. When in doubt, ask
+     whether someone came to this page to look at the photo; if so, pass
+     "contain" and give it enough height to be worth looking at.
 
      Pure CSS scroll-snap under the hood, so swipe/scroll navigation works
      with zero JS; photoCarouselScript below only adds the prev/next
@@ -256,13 +271,23 @@
     <div class="relative">
       <div class="flex overflow-x-auto snap-x snap-mandatory rounded-lg border border-gray-200 bg-white" data-carousel {{if and .AutoRotate (gt (len .Photos) 1)}}data-carousel-autorotate="4000"{{end}}>
         {{$height := .HeightClass}}
+        {{/* A contained photo does not fill its box, so the box needs a
+             backdrop of its own — otherwise the letterboxing reads as a
+             layout that has gone wrong rather than a photo being shown
+             whole. */}}
+        {{$fit := "object-cover"}}
+        {{$figureBg := ""}}
+        {{if eq .Fit "contain"}}
+          {{$fit = "object-contain"}}
+          {{$figureBg = "bg-gray-50"}}
+        {{end}}
         {{range .Photos}}
-          <figure class="snap-start flex-shrink-0 w-full">
+          <figure class="snap-start flex-shrink-0 w-full {{$figureBg}}">
             {{if .IsVideo}}
-              <video src="{{.URL}}" controls preload="metadata" class="w-full {{$height}} object-cover"></video>
+              <video src="{{.URL}}" controls preload="metadata" class="w-full {{$height}} {{$fit}}"></video>
             {{else}}
               <a href="{{.URL}}" data-lightbox-open>
-                <img src="{{thumbURL .URL}}" alt="{{.Caption}}" class="w-full {{$height}} object-cover">
+                <img src="{{thumbURL .URL}}" alt="{{.Caption}}" class="w-full {{$height}} {{$fit}}">
               </a>
             {{end}}
             {{if .Caption}}<figcaption class="p-2 text-xs text-gray-600">{{.Caption}}</figcaption>{{end}}

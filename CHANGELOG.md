@@ -27,6 +27,18 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A photo album showed a band across the middle of each photo instead
+  of the photo.** The carousel cropped every picture to fill a fixed
+  320px-tall box, so a portrait photo showed about a fifth of itself with
+  nothing to say there was more — clicking through to the full-screen
+  viewer was the only way to see the whole thing. Photos on an album page
+  are now shown whole, in a box that grows with the window, so a tall
+  photo is both complete and worth looking at. The album cards on the
+  Photos listing and the homepage strip still crop to uniform tiles,
+  which is what a grid of cards wants.
+
 ### Added
 
 - **`server -rekey-files` tidies an older bucket.** Files stored before

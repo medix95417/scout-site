@@ -5,7 +5,13 @@
 
   {{if .Photos}}
     <div data-carousel-group>
-      {{template "photoCarousel" (dict "Photos" .Photos "HeightClass" "h-80")}}
+      {{/* Whole photos, not a band across the middle: this page is where
+           a visitor came to look at them. Tall enough that a portrait
+           photo shown whole is still worth looking at — at h-80 it came
+           out barely wider than a phone icon — with min-h-80 so a short
+           window doesn't squash it, and 70vh so it scales with the
+           screen instead of guessing one size for every device. */}}
+      {{template "photoCarousel" (dict "Photos" .Photos "HeightClass" "h-[70vh] min-h-80" "Fit" "contain")}}
       {{template "photoCarouselThumbnails" .}}
     </div>
     {{template "lightbox" .}}
