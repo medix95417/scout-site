@@ -383,6 +383,12 @@ func main() {
 		}
 	}()
 
+	// Named out loud because a wrong timezone is invisible until an
+	// imported calendar disagrees with the events typed in by hand — and
+	// by then it reads as an import bug rather than a container running
+	// on UTC. See DEPLOY.md "Timezone".
+	logTimezone()
+
 	log.Printf("listening on %s (cookie domain %q)", cfg.ListenAddr, cfg.CookieDomain)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server: %v", err)
@@ -446,4 +452,20 @@ func printDemoSeedSummary(s demoseed.Summary) {
 	fmt.Println("\n" + divider)
 	fmt.Println("Every login above shares the same password. These are obviously-fake test accounts (example.com addresses) — see DEMO_DATA.md before pointing this at a real production database.")
 	fmt.Println(divider)
+}
+
+// logTimezone reports the zone every wall-clock time on this site is read
+// and displayed in — time.Local, which comes from the TZ environment
+// variable (see docker-compose.yml) and falls back to UTC when unset.
+func logTimezone() {
+	now := time.Now()
+	zone, offset := now.Zone()
+	if time.Local == time.UTC || time.Local.String() == "UTC" {
+		log.Printf("timezone: UTC (TZ is not set) — times typed into the site will be read as UTC, "+
+			"which will disagree with an imported calendar by the local offset. Set TZ (e.g. America/New_York) "+
+			"if that is not what you want; see DEPLOY.md. Now: %s", now.Format(time.RFC1123))
+		return
+	}
+	log.Printf("timezone: %s (%s, UTC%+.1fh) — times typed into the site are read as wall-clock times here",
+		time.Local, zone, float64(offset)/3600)
 }

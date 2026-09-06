@@ -50,6 +50,15 @@ services:
       DB_NAME: "scoutsite"
       DB_PASSWORD: ${POSTGRES_PASSWORD:-scoutsite}
       DB_SSLMODE: "disable"
+      # The unit's own timezone, and load-bearing rather than cosmetic.
+      # Every time a leader types into a form is read as a wall clock in
+      # THIS zone, and every time shown back is rendered in it. Left
+      # unset the container runs on UTC, which looks fine until a
+      # subscribed calendar is imported: those timestamps carry a real
+      # zone, get converted correctly, and then display four or five
+      # hours out against everything typed in by hand. See DEPLOY.md
+      # "Timezone" before changing it on a site that already has events.
+      TZ: ${TZ:-America/New_York}
       LISTEN_ADDR: ":8080"
       SESSION_SECRET: ${SESSION_SECRET}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}

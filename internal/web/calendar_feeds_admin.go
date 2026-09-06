@@ -84,6 +84,16 @@ func (h *Handlers) renderCalendarFeeds(w http.ResponseWriter, r *http.Request, u
 // the end time only when there is one and only the clock part when it
 // falls on the same day.
 func formatEventRange(start time.Time, end *time.Time) string {
+	// In the unit's zone, for the same reason as calendar.FormatDateRange:
+	// this table puts an imported event (UTC, from the feed) next to the
+	// site's own event (time.Local, from the database) and asks a leader
+	// whether they are the same meeting. Rendering them in different
+	// zones would make identical times look hours apart.
+	start = start.In(time.Local)
+	if end != nil {
+		local := end.In(time.Local)
+		end = &local
+	}
 	s := start.Format("Mon 2 Jan 2006, 15:04")
 	if end == nil {
 		return s

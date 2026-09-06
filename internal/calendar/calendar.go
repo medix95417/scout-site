@@ -66,6 +66,20 @@ func FormatDateRange(start time.Time, end *time.Time) string {
 	const dateFmt = "Mon Jan 2, 2006"
 	const timeFmt = "3:04 PM"
 
+	// Rendered in the unit's own zone (time.Local, from TZ — see
+	// DEPLOY.md "Timezone"), not in whatever zone the value happens to
+	// carry. Most callers pass a time read back from Postgres, which
+	// arrives in time.Local already and makes this a no-op; a value
+	// straight from the calendar importer is in UTC, and without this it
+	// would render four or five hours out from every event a leader
+	// typed in by hand. Whose zone a clock time is shown in should not
+	// depend on which code path produced it.
+	start = start.In(time.Local)
+	if end != nil {
+		local := end.In(time.Local)
+		end = &local
+	}
+
 	if end == nil {
 		return start.Format(dateFmt + " · " + timeFmt)
 	}
