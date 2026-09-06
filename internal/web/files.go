@@ -198,6 +198,37 @@ type fileLibraryData struct {
 	StorageConfigured bool
 }
 
+// uploadFolder picks the bucket folder for an upload.
+//
+// An upload attached to an event is filed under that event, which is the
+// point: a leader opening the bucket, or a backup of it, sees "summer-
+// camp-2026-07-15" rather than a flat heap of UUIDs. Attached to several
+// events — a joint campout, say — it goes under the first that resolves;
+// a file lives in one place, and the database still records every link.
+//
+// The event is looked up scoped to this unit, so an id from the other
+// unit's calendar cannot name the folder (or confirm that event exists).
+// Anything unresolvable falls back to the category's own folder rather
+// than failing the upload: a file in the wrong folder is a tidiness
+// problem, a refused upload is a lost photo.
+func (h *Handlers) uploadFolder(ctx context.Context, unitID, category string, eventIDs []string) string {
+	fallback := files.DocumentsFolder
+	if category == files.CategoryEventPhoto {
+		fallback = files.PhotosFolder
+	}
+	for _, id := range eventIDs {
+		event, found, err := calendar.GetEvent(ctx, h.Pool, id, unitID)
+		if err != nil {
+			log.Printf("web: resolving event %s for upload folder: %v", id, err)
+			continue
+		}
+		if found {
+			return files.EventFolder(event.Title, event.StartsAt)
+		}
+	}
+	return fallback
+}
+
 // eventFileGroupView is one event's files, decorated for the template —
 // see files.EventFileGroup.
 type eventFileGroupView struct {
@@ -239,6 +270,12 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("category") == files.CategoryEventPhoto {
 		category = files.CategoryEventPhoto
 	}
+
+	// Where in the bucket this batch is filed. A leader who attaches the
+	// upload to an event gets a folder named after that event; everything
+	// else is a document or a loose photo. Resolved once for the batch,
+	// since the whole form shares one set of event links.
+	folder := h.uploadFolder(r.Context(), unit.ID, category, r.Form["event_ids"])
 
 	if r.MultipartForm == nil {
 		http.Error(w, "choose a file to upload", http.StatusBadRequest)
@@ -296,7 +333,7 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 		// sniffContentType (file_serving.go) for why the multipart part
 		// header can't be trusted here.
 		contentType := sniffContentType(data, fh.Header.Get("Content-Type"))
-		key := files.NewStorageKey(unit.ID, fh.Filename)
+		key := files.NewStorageKey(unit.ID, folder, fh.Filename)
 		if err := h.Storage.Put(r.Context(), key, bytes.NewReader(data), int64(len(data)), contentType); err != nil {
 			log.Printf("web: uploading file to storage: %v", err)
 			http.Error(w, "internal error saving the file", http.StatusInternalServerError)

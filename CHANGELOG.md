@@ -27,6 +27,21 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Changed
+
+- **Uploaded files are filed into folders instead of one flat heap.**
+  Anything attached to an event now goes into a folder named after that
+  event and dated (`summer-camp-2026-07-15`), so this year's camp is not
+  last year's; everything else goes to `documents/` or `photos/`
+  depending on which category it was uploaded as. It makes a bucket — or
+  a backup of one — something you can actually read, rather than
+  thousands of files named after random identifiers. Nothing in the app
+  changes: the library, the pickers and every existing link work exactly
+  as before. Files uploaded before this keep their original locations and
+  go on working, so there is nothing to migrate. Worth knowing that the
+  folder records where a file was filed, not where it belongs now —
+  re-linking a file to a different event later does not move it.
+
 ## [2.8.1] — 2026-09-05
 
 ### Fixed
