@@ -27,6 +27,35 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **A news post can be deleted, not just unpublished.** Unpublishing is
+  the right tool for taking something down and the wrong one for a post
+  that should never have gone up — it stays in the admin list for the
+  next person to read and wonder about. There is now a Delete button on
+  the news editor and in the news list, both behind a confirmation that
+  spells out the difference. Who deleted what, and which post it was,
+  stays in the Activity Log afterwards.
+
+### Fixed
+
+- **Imported calendar events showed hours out from events entered by
+  hand.** A 7pm meeting from a subscribed calendar appeared at 11pm. The
+  import was the only part doing the right thing: a feed's times carry a
+  real timezone and were converted correctly, while everything typed into
+  the site was read and shown as though the server's clock were the
+  unit's. With the server left on UTC the two disagreed by the local
+  offset. The site now has a timezone of its own (`TZ`, defaulting to
+  `America/New_York`), reports it on startup so it can't be silently
+  wrong, and renders every event time in it whichever path the event came
+  from. **On an existing site this also changes how events entered before
+  the fix read — see DEPLOY.md "Timezone" for the one-time correction.**
+- **The news page now says when there is more to read.** A long
+  announcement was cut to a preview with nothing to suggest the rest
+  existed, so there was no reason to click. Cards for posts longer than
+  their preview now show "Read more"; a post shown in full does not,
+  since clicking it would only show the same words again.
+
 ## [2.9.0] — 2026-09-06
 
 ### Fixed

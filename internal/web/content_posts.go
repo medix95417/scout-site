@@ -157,8 +157,13 @@ type publicPostView struct {
 	ID       string
 	Title    string
 	PostedOn string
-	Excerpt  string                 // news only; "" for galleries
-	Photos   []content.GalleryPhoto // galleries only; nil for news
+	Excerpt  string // news only; "" for galleries
+	// Truncated is true when Excerpt is only the start of the post, so
+	// the listing can invite the reader in. False when the excerpt IS
+	// the whole announcement and clicking through would show the same
+	// words again.
+	Truncated bool
+	Photos    []content.GalleryPhoto // galleries only; nil for news
 }
 
 // parsePhotoDate reads the optional "photo_date" form field. An empty or
@@ -186,16 +191,23 @@ func postedOn(t time.Time) string {
 // excerpt trims a post's body to a preview length for the list view,
 // breaking on a word boundary rather than mid-word, and only appending
 // "…" if it actually had to cut something.
-func excerpt(body string, maxLen int) string {
+// excerpt returns the preview and whether it had to cut anything.
+//
+// The second return is what lets a listing say "Read more" only when
+// there is more. Getting that from the string itself doesn't work: the
+// trailing "…" is also a character somebody can legitimately type at the
+// end of a short announcement, so a page checking for it would promise
+// more to a reader and then show them the same sentence again.
+func excerpt(body string, maxLen int) (string, bool) {
 	body = strings.Join(strings.Fields(body), " ") // collapse newlines/extra whitespace for the one-line preview
 	if len(body) <= maxLen {
-		return body
+		return body, false
 	}
 	cut := body[:maxLen]
 	if i := strings.LastIndexByte(cut, ' '); i > 0 {
 		cut = cut[:i]
 	}
-	return cut + "…"
+	return cut + "…", true
 }
 
 func (h *Handlers) publicContentList(w http.ResponseWriter, r *http.Request, kind contentKind, render func(http.ResponseWriter, *http.Request, []content.Post)) {
@@ -240,7 +252,11 @@ func (h *Handlers) publicContentView(w http.ResponseWriter, r *http.Request, kin
 func (h *Handlers) newsList(w http.ResponseWriter, r *http.Request, posts []content.Post) {
 	items := make([]publicPostView, 0, len(posts))
 	for _, p := range posts {
-		items = append(items, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.DisplayDate()), Excerpt: excerpt(p.Body, 220)})
+		preview, truncated := excerpt(p.Body, 220)
+		items = append(items, publicPostView{
+			ID: p.ID, Title: p.Title, PostedOn: postedOn(p.DisplayDate()),
+			Excerpt: preview, Truncated: truncated,
+		})
 	}
 	data := struct {
 		baseData
@@ -332,6 +348,10 @@ func (h *Handlers) AdminNewsCreate(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) AdminNewsUpdate(w http.ResponseWriter, r *http.Request) {
 	h.adminContentUpdate(w, r, newsKind)
 }
+func (h *Handlers) AdminNewsDelete(w http.ResponseWriter, r *http.Request) {
+	h.adminContentDelete(w, r, newsKind)
+}
+
 func (h *Handlers) AdminNewsPublishToggle(w http.ResponseWriter, r *http.Request) {
 	h.adminContentPublishToggle(w, r, newsKind)
 }
@@ -530,6 +550,39 @@ func (h *Handlers) adminContentUpdate(w http.ResponseWriter, r *http.Request, ki
 		return
 	}
 	http.Redirect(w, r, kind.BasePath+"/"+id+"/edit", http.StatusSeeOther)
+}
+
+// adminContentDelete removes an item for good.
+//
+// Gated the same way as publishing rather than more tightly: whoever can
+// put an announcement in front of every family can take it back down,
+// and a content editor who cannot remove their own mistaken post would
+// just unpublish it and leave it cluttering the admin list forever —
+// which is the state this exists to fix.
+func (h *Handlers) adminContentDelete(w http.ResponseWriter, r *http.Request, kind contentKind) {
+	unit, actor, ok := h.requireContentEditor(w, r, kind.BasePath)
+	if !ok {
+		return
+	}
+
+	id := r.PathValue("id")
+	// Type-scoped, so a gallery's id posted to the news delete route is a
+	// 404 rather than a deleted photo album.
+	if _, found, err := content.GetPost(r.Context(), h.Pool, id, unit.ID, kind.PageType); err != nil {
+		log.Printf("web: loading %s %s: %v", kind.Label, id, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	} else if !found {
+		http.NotFound(w, r)
+		return
+	}
+
+	if err := content.DeletePost(r.Context(), h.Pool, id, unit.ID, actor.ID); err != nil {
+		log.Printf("web: deleting %s %s: %v", kind.Label, id, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, kind.BasePath, http.StatusSeeOther)
 }
 
 func (h *Handlers) adminContentPublishToggle(w http.ResponseWriter, r *http.Request, kind contentKind) {

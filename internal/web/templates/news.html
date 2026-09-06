@@ -8,6 +8,14 @@
           <div class="text-xs text-gray-400 mb-1">{{.PostedOn}}</div>
           <h2 class="text-lg font-semibold mb-1" style="color: var(--unit-color);">{{.Title}}</h2>
           {{if .Excerpt}}<p class="text-sm text-gray-600">{{.Excerpt}}</p>{{end}}
+          {{/* Only when the post really is longer than its preview. A
+               "Read more" on an announcement shown in full sends the
+               reader to a page with the same sentence on it. */}}
+          {{if .Truncated}}
+            <span class="mt-2 inline-block text-sm font-medium" style="color: var(--unit-color);">
+              Read more <span aria-hidden="true">&rarr;</span>
+            </span>
+          {{end}}
         </a>
       {{end}}
     </div>

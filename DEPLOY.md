@@ -263,6 +263,61 @@ Lock the file down since it now holds real secrets:
 chmod 600 .env
 ```
 
+## Timezone
+
+`TZ` in `.env` (default `America/New_York`) is the unit's own timezone,
+and it is load-bearing rather than cosmetic. Every time a leader types
+into a form — an event's start, a campout's end — is read as a wall-clock
+time in this zone, and every time the site shows back is rendered in it.
+
+Leave it unset and the container runs on UTC. That looks fine for a
+while, because typing 7pm and reading back 7pm is self-consistent even
+when the instant stored underneath is wrong. It stops looking fine the
+first time a subscribed calendar is imported: those timestamps carry a
+real zone (`DTSTART;TZID=America/New_York:...`), get converted to a real
+instant correctly, and then display four or five hours out from
+everything typed in by hand. It reads as an import bug and is not one —
+the importer is the only part that was right.
+
+The server logs the zone it is using on every startup, so this is
+visible rather than inferred:
+
+    timezone: America/New_York (EDT, UTC-4.0h) — times typed into the site are read as wall-clock times here
+
+### Changing it on a site that already has events
+
+Setting `TZ` for the first time fixes imports and everything typed in
+afterwards, but it also changes how the events **already** in the
+database read. Those were stored as a wall clock labelled UTC, so a 7pm
+meeting entered before the change will start displaying as 3pm (or 2pm
+in winter). Imported events are already correct and must not be touched.
+
+One statement fixes the hand-entered ones, and only those — `feed_id IS
+NULL` is exactly "somebody created this on this site":
+
+```sql
+UPDATE events
+SET starts_at = starts_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York',
+    ends_at   = ends_at   AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York'
+WHERE feed_id IS NULL;
+```
+
+It reinterprets each stored wall clock as an Eastern one, per row, so
+summer events shift by 4 hours and winter events by 5 — `AT TIME ZONE`
+works that out from the date rather than applying one offset to
+everything.
+
+Run it **once**, after setting `TZ`, and only on a database that was
+running on UTC before. Deliberately not an automatic migration: on a
+fresh install, or a second run, it would shift correct times into
+incorrect ones, and a migration cannot tell the two situations apart.
+Take a backup first (see "Backups and recovery"), and check a couple of
+known events on the calendar page afterwards.
+
+```
+docker compose exec db psql -U scoutsite -d scoutsite   # then paste the UPDATE
+```
+
 ## 6. Bring the stack up
 
 ```bash

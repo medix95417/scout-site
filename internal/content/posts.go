@@ -246,6 +246,57 @@ func SetPublished(ctx context.Context, pool *pgxpool.Pool, id, unitID string, pu
 	return nil
 }
 
+// DeletePost removes a post or gallery outright, scoped to a unit.
+//
+// A real delete, unlike SetPublished(false) — which is the right tool for
+// "take this down" and the wrong one for "this should never have been
+// posted", where leaving the row in place means the next person to open
+// the admin list still reads it.
+//
+// The audit entry is logged against the UNIT rather than the post, which
+// is the whole reason this is not three lines. audit.ForUnitFiltered
+// resolves an entry by joining its entity_id back to the table that owns
+// it (see internal/audit's entityScopeSQL), so an entry pointing at a
+// content_pages row that no longer exists is written and then
+// immediately invisible — the one action whose record matters most would
+// be the one action with no record. Logging against the unit keeps it
+// readable, the same trick units.logRoleChange uses for a built-in role
+// that has no id of its own, and Before carries what was deleted so the
+// entry still says which post it was.
+//
+// It is written after the delete succeeds, not before: the post has to
+// be read first either way (Before needs it), and logging first would
+// record a deletion that a failing DELETE then never performed.
+func DeletePost(ctx context.Context, pool *pgxpool.Pool, id, unitID, actorID string) error {
+	p, found, err := GetPostAnyType(ctx, pool, id, unitID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("content: item %s not found in unit %s", id, unitID)
+	}
+
+	tag, err := pool.Exec(ctx, `DELETE FROM content_pages WHERE id = $1 AND unit_id = $2`, id, unitID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("content: item %s not found in unit %s", id, unitID)
+	}
+
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "content_page",
+		EntityID:   unitID,
+		ActorID:    &actorID,
+		Action:     "delete",
+		Before: map[string]any{
+			"id": p.ID, "page_type": p.PageType, "title": p.Title,
+			"status": p.Status, "visibility": p.Visibility,
+		},
+	})
+	return nil
+}
+
 // GetPostAnyType fetches one post/gallery by ID, scoped to a unit, without
 // checking PageType — used internally (e.g. by UpdatePost, which already
 // knows the ID came from a same-page-type edit form) and by admin
