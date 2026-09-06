@@ -52,7 +52,10 @@
                 <button type="submit" class="rounded-full bg-green-100 text-green-800 text-xs font-medium px-3 py-1.5 hover:bg-green-200">Publish</button>
               {{end}}
             </form>
-            {{if eq $.Kind.PageType "post"}}
+            {{/* Admins only — the handler refuses anyone else (see
+                 requireContentDeleter), and showing a button that will
+                 turn you away is worse than not showing it. */}}
+            {{if and $.IsSuperAdmin (eq $.Kind.PageType "post")}}
               <form method="post" action="{{$.Kind.BasePath}}/{{.ID}}/delete" class="ml-auto"
                     data-confirm="Delete &quot;{{.Title}}&quot; for good? Unpublishing hides it instead and can be undone; this cannot.">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">

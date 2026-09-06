@@ -552,15 +552,45 @@ func (h *Handlers) adminContentUpdate(w http.ResponseWriter, r *http.Request, ki
 	http.Redirect(w, r, kind.BasePath+"/"+id+"/edit", http.StatusSeeOther)
 }
 
-// adminContentDelete removes an item for good.
+// requireContentDeleter is requireContentEditor's stricter sibling, for
+// the one content action that cannot be undone.
 //
-// Gated the same way as publishing rather than more tightly: whoever can
-// put an announcement in front of every family can take it back down,
-// and a content editor who cannot remove their own mistaken post would
-// just unpublish it and leave it cluttering the admin list forever —
-// which is the state this exists to fix.
+// Deleting is held to super_admin while publishing, unpublishing and
+// editing stay with any content editor. Every other action on a post is
+// recoverable — unpublish it back, edit the text again — and this one
+// takes the post and its body with it. Narrowing who can do it is worth
+// the occasional "ask an Admin" more than an accidental, unrecoverable
+// removal is worth avoiding.
+func (h *Handlers) requireContentDeleter(w http.ResponseWriter, r *http.Request, kind contentKind) (unit units.Unit, actor family.Member, ok bool) {
+	unit, _ = units.UnitFromContext(r.Context())
+	user, loggedIn := auth.UserFromContext(r.Context())
+	if !loggedIn {
+		http.Redirect(w, r, "/login?next="+kind.BasePath, http.StatusSeeOther)
+		return unit, family.Member{}, false
+	}
+
+	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	if err != nil || !units.IsSuperAdmin(caps) {
+		// Said plainly, and pointing at what they CAN do: a leader who
+		// reaches this has the run of the rest of the page, so a bare
+		// "forbidden" reads like a bug rather than a rule.
+		http.Error(w, "only an Admin can delete a "+kind.Label+". You can unpublish it instead, "+
+			"which takes it off the site and can be undone.", http.StatusForbidden)
+		return unit, family.Member{}, false
+	}
+
+	actor, err = h.actingMember(r.Context(), user, unit.ID)
+	if err != nil {
+		http.Error(w, "could not determine acting member — has your family been added to the roster yet?", http.StatusBadRequest)
+		return unit, family.Member{}, false
+	}
+	return unit, actor, true
+}
+
+// adminContentDelete removes an item for good. super_admin only — see
+// requireContentDeleter.
 func (h *Handlers) adminContentDelete(w http.ResponseWriter, r *http.Request, kind contentKind) {
-	unit, actor, ok := h.requireContentEditor(w, r, kind.BasePath)
+	unit, actor, ok := h.requireContentDeleter(w, r, kind)
 	if !ok {
 		return
 	}
