@@ -72,6 +72,16 @@ tagged commit with an accurate date.
   existed, so there was no reason to click. Cards for posts longer than
   their preview now show "Read more"; a post shown in full does not,
   since clicking it would only show the same words again.
+- **The `govulncheck` CI job stopped failing on the calendar.** The job
+  used `golang/govulncheck-action`, which installs the scanner from
+  `@latest`; `x/vuln` v1.8.0 raised its own floor to Go 1.26, so the
+  install broke under the Go this project builds with and every branch
+  went red at once — while fetching the tool, having scanned nothing. The
+  scanner is now pinned to v1.7.0 and installed directly. Pinning the
+  scanner rather than raising the job's Go version is deliberate:
+  `govulncheck` reports standard-library findings for the Go it runs
+  under, so scanning on a version we don't ship would report against the
+  wrong binary in both directions.
 
 ## [2.9.0] — 2026-09-06
 
