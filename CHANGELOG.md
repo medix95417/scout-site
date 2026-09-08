@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.9.1] — 2026-09-08
+
 ### Added
 
 - **A newsletter can be sent exactly as written.** A template built in a
