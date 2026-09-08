@@ -71,9 +71,14 @@ const inlineImageDisplayName = "Email image"
 // stores an email body, and identical to it when storage is
 // unconfigured — the optional-integration rule (see CLAUDE.md): no
 // storage means no hosting, not a broken composer.
-func (h *Handlers) hostInlineImages(ctx context.Context, unitID, siteURL string, actorID *string, body string) string {
+//
+// The optional fullHTML argument picks which sanitizer runs (see
+// newsletter.SanitizeFor). Variadic so the prospect-campaign callers,
+// which have no such option, read exactly as they did before.
+func (h *Handlers) hostInlineImages(ctx context.Context, unitID, siteURL string, actorID *string, body string, fullHTML ...bool) string {
+	full := len(fullHTML) > 0 && fullHTML[0]
 	if h.Storage == nil {
-		return newsletter.Sanitize(body)
+		return newsletter.SanitizeFor(body, full)
 	}
 	host := &inlineImageHost{
 		unitID:  unitID,
@@ -101,7 +106,7 @@ func (h *Handlers) hostInlineImages(ctx context.Context, unitID, siteURL string,
 			}
 		},
 	}
-	return newsletter.SanitizeHostingImages(body, host.store(ctx))
+	return newsletter.SanitizeHostingImagesFor(body, full, host.store(ctx))
 }
 
 // inlineImageHost holds the state and the dependencies of hosting the

@@ -100,6 +100,33 @@
 
       <textarea id="body-initial" style="display:none">{{.Newsletter.Body}}</textarea>
       <input type="hidden" id="body-input" name="body">
+
+      {{/* Admins only. The handler refuses anyone else outright rather
+           than quietly saving without it (see fullHTMLRequest), so
+           showing the box to a content editor would only set them up to
+           be turned away. */}}
+      {{if $.IsSuperAdmin}}
+        <div class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3">
+          <label class="flex items-start gap-2 text-sm font-medium">
+            <input type="checkbox" name="full_html" value="1" class="mt-0.5"
+                   {{if .Newsletter.FullHTML}}checked{{end}}>
+            <span>Send this one exactly as written (full HTML)</span>
+          </label>
+          <p class="mt-2 text-xs text-gray-600">
+            For a template built in a design tool. Normally a newsletter is reduced to the formatting the editor
+            above can produce, which quietly drops the parts a designed template relies on — the
+            <span class="font-mono">&lt;!--[if mso]&gt;</span> blocks that only Outlook reads,
+            <span class="font-mono">&lt;center&gt;</span> and <span class="font-mono">&lt;font&gt;</span>, and
+            per-element attributes an export scatters everywhere. Ticked, all of that is kept and only things that
+            can run — scripts, frames, forms, event handlers,
+            <span class="font-mono">javascript:</span> links — are removed.
+          </p>
+          <p class="mt-1 text-xs text-gray-600">
+            Only tick it for a file you trust, from someone you trust. Nothing here can run code in the site, but
+            everything else in the file goes out to every family exactly as written.
+          </p>
+        </div>
+      {{end}}
     </div>
 
     {{if or (not .IsEdit) (eq .Newsletter.Status "draft")}}

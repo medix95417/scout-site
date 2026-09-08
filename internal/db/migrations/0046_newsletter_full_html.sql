@@ -1,0 +1,24 @@
+-- Full-HTML newsletters.
+--
+-- A newsletter body is normally reduced to a small allowlist of tags and
+-- attributes (see internal/newsletter.Sanitize). That is the right
+-- default: almost every newsletter is typed into the editor, and an
+-- allowlist is the only sanitizing strategy that does not have to
+-- anticipate every way of hiding something dangerous.
+--
+-- It is the wrong default for a template built in a design tool. Real
+-- email HTML leans on things the allowlist has no reason to know about:
+-- <!--[if mso]> conditional blocks that only Outlook reads, VML shapes
+-- for background images, <center> and <font>, and per-element
+-- attributes nobody would put in a WYSIWYG editor. Stripped, the
+-- template still sends and no longer looks like the thing that was
+-- designed.
+--
+-- So: a per-newsletter opt-in. Per newsletter rather than per unit
+-- because it is a property of one carefully-built message, not a mood a
+-- unit is in — the next quick note typed into the editor should get the
+-- strict treatment again without anybody remembering to switch back.
+--
+-- Defaults to false, so every existing newsletter and every new one
+-- keeps the strict sanitizer until somebody deliberately says otherwise.
+ALTER TABLE newsletters ADD COLUMN full_html boolean NOT NULL DEFAULT false;
