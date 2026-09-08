@@ -22,8 +22,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/newsletter"
 	"github.com/47-yonkers/scout-site/internal/settings"
+	"github.com/47-yonkers/scout-site/internal/units"
 )
 
 // requireNewsletterEnabled reports whether the newsletter feature is on
@@ -180,13 +182,26 @@ func (h *Handlers) AdminNewsletterCreate(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "subject is required", http.StatusBadRequest)
 		return
 	}
-	// Images the author embedded move out to the file library here, before
-	// the draft is written — see inline_images.go. CreateDraft/UpdateDraft
-	// sanitize again on the way in, which this is careful to leave
-	// unchanged: a hosted image is an ordinary https src by then.
-	body = h.hostInlineImages(r.Context(), unit.ID, h.siteURL(r), &actor.ID, body)
+	// Full HTML is an Admin's call, and asking for it without being one
+	// is a refusal rather than a silent downgrade — a leader who ticks
+	// the box and gets the strict sanitizer anyway would think the
+	// feature was broken.
+	fullHTML, ok := h.fullHTMLRequest(w, r, unit.ID)
+	if !ok {
+		return
+	}
 
-	n, err := newsletter.CreateDraft(r.Context(), h.Pool, unit.ID, subject, body, actor.ID)
+	// Images the author embedded move out to the file library here,
+	// before the draft is written — see inline_images.go. This matters
+	// most for exactly the designed templates full HTML is for: they
+	// arrive with the artwork inlined, which is what pushes a body past
+	// the ~102 KB where Gmail hides the rest behind "View entire
+	// message". CreateDraft/UpdateDraft sanitize again on the way in,
+	// which this leaves unchanged either way: a hosted image is an
+	// ordinary https src by then.
+	body = h.hostInlineImages(r.Context(), unit.ID, h.siteURL(r), &actor.ID, body, fullHTML)
+
+	n, err := newsletter.CreateDraft(r.Context(), h.Pool, unit.ID, subject, body, actor.ID, fullHTML)
 	if err != nil {
 		log.Printf("web: creating newsletter: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -218,14 +233,27 @@ func (h *Handlers) AdminNewsletterUpdate(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "subject is required", http.StatusBadRequest)
 		return
 	}
-	// Images the author embedded move out to the file library here, before
-	// the draft is written — see inline_images.go. CreateDraft/UpdateDraft
-	// sanitize again on the way in, which this is careful to leave
-	// unchanged: a hosted image is an ordinary https src by then.
-	body = h.hostInlineImages(r.Context(), unit.ID, h.siteURL(r), &actor.ID, body)
+	// Full HTML is an Admin's call, and asking for it without being one
+	// is a refusal rather than a silent downgrade — a leader who ticks
+	// the box and gets the strict sanitizer anyway would think the
+	// feature was broken.
+	fullHTML, ok := h.fullHTMLRequest(w, r, unit.ID)
+	if !ok {
+		return
+	}
+
+	// Images the author embedded move out to the file library here,
+	// before the draft is written — see inline_images.go. This matters
+	// most for exactly the designed templates full HTML is for: they
+	// arrive with the artwork inlined, which is what pushes a body past
+	// the ~102 KB where Gmail hides the rest behind "View entire
+	// message". CreateDraft/UpdateDraft sanitize again on the way in,
+	// which this leaves unchanged either way: a hosted image is an
+	// ordinary https src by then.
+	body = h.hostInlineImages(r.Context(), unit.ID, h.siteURL(r), &actor.ID, body, fullHTML)
 
 	id := r.PathValue("id")
-	if _, err := newsletter.UpdateDraft(r.Context(), h.Pool, id, unit.ID, subject, body, actor.ID); err != nil {
+	if _, err := newsletter.UpdateDraft(r.Context(), h.Pool, id, unit.ID, subject, body, actor.ID, fullHTML); err != nil {
 		if errors.Is(err, newsletter.ErrNotFound) {
 			http.NotFound(w, r)
 			return
@@ -398,4 +426,30 @@ type newsletterRecipientRow struct {
 	Email  string
 	SentOn string
 	Err    string
+}
+
+// fullHTMLRequest reads the composer's "send exactly as written" box and
+// checks the author may use it.
+//
+// Admins only, for the same reason deleting a news post is: this is the
+// one control on the page whose effect cannot be judged by looking at
+// the result. A stripped template looks wrong and gets fixed; a template
+// that kept markup nobody vetted looks perfect. Anyone who can already
+// change site settings can have it; a content editor cannot.
+//
+// Refuses rather than quietly falling back, so a leader who ticks the
+// box and is not an Admin is told why instead of wondering for an
+// afternoon why their template keeps losing its layout.
+func (h *Handlers) fullHTMLRequest(w http.ResponseWriter, r *http.Request, unitID string) (bool, bool) {
+	if r.PostFormValue("full_html") == "" {
+		return false, true
+	}
+	user, _ := auth.UserFromContext(r.Context())
+	caps, err := h.capabilitiesFor(r.Context(), user, unitID)
+	if err != nil || !units.IsSuperAdmin(caps) {
+		http.Error(w, "only an Admin can send a newsletter as full HTML. Save it without that box ticked and "+
+			"an Admin can turn it on, or leave it off and the usual formatting is kept.", http.StatusForbidden)
+		return false, false
+	}
+	return true, true
 }

@@ -29,6 +29,19 @@ tagged commit with an accurate date.
 
 ### Added
 
+- **A newsletter can be sent exactly as written.** A template built in a
+  design tool leans on things the normal formatting rules have no reason
+  to keep — the `<!--[if mso]>` blocks only Outlook reads, `<center>` and
+  `<font>`, per-element attributes an export scatters everywhere — so it
+  arrived stripped of the parts that made it look designed. An Admin can
+  now tick "send this one exactly as written" on a newsletter, which
+  keeps all of that and removes only what could run: scripts, frames,
+  forms, event handlers, `javascript:` links, and CSS that fetches or
+  executes. It is per newsletter, so the next note typed into the editor
+  gets the strict treatment again without anybody remembering to switch
+  back, and it is limited to Admins because the result cannot be judged
+  by looking at it — a stripped template looks wrong and gets fixed, one
+  that kept markup nobody vetted looks perfect.
 - **An Admin can delete a news post, not just unpublish it.**
   Unpublishing is the right tool for taking something down and the wrong
   one for a post that should never have gone up — it stays in the admin

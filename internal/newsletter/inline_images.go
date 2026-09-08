@@ -45,6 +45,19 @@ import (
 // otherwise.
 type ImageStore func(data []byte, declaredType string) string
 
+// SanitizeHostingImagesFor is SanitizeHostingImages with the choice of
+// sanitizer made by a caller who knows which one this body wants.
+//
+// Hosting matters MORE in full-HTML mode, not less: a designed template
+// is exactly the kind that arrives with its artwork inlined, and that is
+// what pushes a body past the size where Gmail hides the end of it.
+func SanitizeHostingImagesFor(rawHTML string, fullHTML bool, store ImageStore) string {
+	if fullHTML {
+		return sanitizeFull(rawHTML, store)
+	}
+	return sanitize(rawHTML, store)
+}
+
 // hosted returns the URL to emit for a src value: the stored one if this
 // is an embedded image and the store took it, and the original value in
 // every other case.

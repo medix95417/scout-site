@@ -357,6 +357,7 @@ var Topics = []Topic{
 		Body: []string{
 			"Newsletters are written in a formatting editor and sent by email to the unit. Save a draft and come back to it; nothing sends until you choose to send.",
 			"If email hasn't been configured for the site, sending will tell you so plainly rather than silently failing — the draft is kept.",
+			"A newsletter is normally reduced to the formatting the editor can produce. If you have a template built in a design tool and it comes out looking wrong, an Admin can tick \"send this one exactly as written\" on that newsletter, which keeps the markup a designed template relies on and removes only the parts that could run something. It is per newsletter, so the next quick note you type gets the usual treatment.",
 			"If you start from an HTML file you built elsewhere, any pictures inside it are moved into the file library when you save and the newsletter is pointed at them. Gmail and Outlook won't show a picture that travels inside an email, so one left in the file arrives as a blank gap. A picture used this way is fetched by each reader's email provider without signing in, so treat it as public — the same as a photo on the homepage.",
 			"Once a newsletter has gone out, opening it from the list shows what was sent and every address it reached, with anything that failed marked as failed. The list is the addresses as they were on the roster that day, so a family who has since left still appears — because they did receive it.",
 		},

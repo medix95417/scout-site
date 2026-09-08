@@ -39,6 +39,10 @@ type Newsletter struct {
 	RecipientCount *int
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	// FullHTML means this one was written elsewhere and should keep the
+	// markup it arrived with — see SanitizeFullHTML. Off by default and
+	// settable only by an Admin.
+	FullHTML bool
 }
 
 var (
@@ -62,11 +66,11 @@ var (
 	ErrNoRecipients = errors.New("newsletter: no recipients found for this unit")
 )
 
-const columns = `id, unit_id, subject, body, status::text, created_by, sent_at, recipient_count, created_at, updated_at`
+const columns = `id, unit_id, subject, body, status::text, created_by, sent_at, recipient_count, created_at, updated_at, full_html`
 
 func scan(row interface{ Scan(dest ...any) error }) (Newsletter, error) {
 	var n Newsletter
-	err := row.Scan(&n.ID, &n.UnitID, &n.Subject, &n.Body, &n.Status, &n.CreatedBy, &n.SentAt, &n.RecipientCount, &n.CreatedAt, &n.UpdatedAt)
+	err := row.Scan(&n.ID, &n.UnitID, &n.Subject, &n.Body, &n.Status, &n.CreatedBy, &n.SentAt, &n.RecipientCount, &n.CreatedAt, &n.UpdatedAt, &n.FullHTML)
 	return n, err
 }
 
@@ -75,13 +79,13 @@ func scan(row interface{ Scan(dest ...any) error }) (Newsletter, error) {
 // it's run through Sanitize before it's ever written to the database, not
 // just before it's sent, so a stored draft is exactly what the editor will
 // safely reload later too.
-func CreateDraft(ctx context.Context, pool *pgxpool.Pool, unitID, subject, body, actorID string) (Newsletter, error) {
-	body = Sanitize(body)
+func CreateDraft(ctx context.Context, pool *pgxpool.Pool, unitID, subject, body, actorID string, fullHTML bool) (Newsletter, error) {
+	body = SanitizeFor(body, fullHTML)
 	n, err := scan(pool.QueryRow(ctx, `
-		INSERT INTO newsletters (unit_id, subject, body, created_by)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO newsletters (unit_id, subject, body, created_by, full_html)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING `+columns,
-		unitID, subject, body, actorID))
+		unitID, subject, body, actorID, fullHTML))
 	if err != nil {
 		return Newsletter{}, err
 	}
@@ -100,18 +104,18 @@ func CreateDraft(ctx context.Context, pool *pgxpool.Pool, unitID, subject, body,
 // ErrAlreadySent (rather than silently applying the edit) if it's since
 // been sent — the WHERE clause below is what actually enforces that
 // atomically, not a separate read-then-write check.
-func UpdateDraft(ctx context.Context, pool *pgxpool.Pool, id, unitID, subject, body, actorID string) (Newsletter, error) {
+func UpdateDraft(ctx context.Context, pool *pgxpool.Pool, id, unitID, subject, body, actorID string, fullHTML bool) (Newsletter, error) {
 	before, err := GetNewsletter(ctx, pool, id, unitID)
 	if err != nil {
 		return Newsletter{}, err
 	}
-	body = Sanitize(body)
+	body = SanitizeFor(body, fullHTML)
 
 	n, err := scan(pool.QueryRow(ctx, `
-		UPDATE newsletters SET subject = $1, body = $2, updated_at = now()
+		UPDATE newsletters SET subject = $1, body = $2, full_html = $5, updated_at = now()
 		WHERE id = $3 AND unit_id = $4 AND status = 'draft'
 		RETURNING `+columns,
-		subject, body, id, unitID))
+		subject, body, id, unitID, fullHTML))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Newsletter{}, ErrAlreadySent
@@ -128,6 +132,16 @@ func UpdateDraft(ctx context.Context, pool *pgxpool.Pool, id, unitID, subject, b
 		After:      n,
 	})
 	return n, nil
+}
+
+// SanitizeFor picks the sanitizer for a body, so no caller has to
+// remember which is which. The bool is the newsletter's own FullHTML,
+// which only an Admin can have set (see internal/web).
+func SanitizeFor(body string, fullHTML bool) string {
+	if fullHTML {
+		return SanitizeFullHTML(body)
+	}
+	return Sanitize(body)
 }
 
 // GetNewsletter looks up a newsletter, scoped to a unit — ErrNotFound
