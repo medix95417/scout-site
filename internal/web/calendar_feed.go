@@ -146,12 +146,18 @@ func (h *Handlers) CalendarFeed(w http.ResponseWriter, r *http.Request) {
 }
 
 // siteURL reconstructs this unit's public base URL, for the event links
-// embedded in the feed. Behind Caddy the request itself always arrives
-// over plain HTTP, so the scheme comes from the forwarded header when
-// present rather than from r.TLS, which would always say "no".
+// embedded in the feed and the hosted-image and unsubscribe links in
+// outgoing email. Behind Caddy the request itself always arrives over
+// plain HTTP, so the scheme comes from the forwarded header rather than
+// from r.TLS, which would always say "no" — but only when the operator
+// has said the proxy's headers are to be believed (TrustProxyHeaders,
+// the same switch clientIP uses for X-Forwarded-For). Read from any
+// client, the header was a way for whoever sent the request to pick the
+// scheme on links that other people receive; and it accepted any value,
+// not only "http" or "https".
 func (h *Handlers) siteURL(r *http.Request) string {
 	scheme := "https"
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+	if proto := strings.ToLower(r.Header.Get("X-Forwarded-Proto")); h.TrustProxyHeaders && (proto == "http" || proto == "https") {
 		scheme = proto
 	} else if r.TLS == nil && (r.Host == "localhost" || len(r.Host) > 9 && r.Host[:9] == "127.0.0.1") {
 		// Local development over plain HTTP.

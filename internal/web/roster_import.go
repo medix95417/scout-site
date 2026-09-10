@@ -170,7 +170,7 @@ type rosterImportFormData struct {
 }
 
 func (h *Handlers) AdminRosterImportForm(w http.ResponseWriter, r *http.Request) {
-	unit, _, _, ok := h.requireRosterEditor(w, r, "/admin/roster/import")
+	unit, _, _, _, ok := h.requireRosterEditor(w, r, "/admin/roster/import")
 	if !ok {
 		return
 	}
@@ -217,7 +217,7 @@ func (h *Handlers) sampleSubGroupName(r *http.Request, unitID string) string {
 // members of that family are grouped by sharing the family name and leave
 // email blank, and a second family starts the pattern over.
 func (h *Handlers) AdminRosterImportTemplate(w http.ResponseWriter, r *http.Request) {
-	unit, _, scope, ok := h.requireRosterEditor(w, r, "/admin/roster/import")
+	unit, _, scope, editorCaps, ok := h.requireRosterEditor(w, r, "/admin/roster/import")
 	if !ok {
 		return
 	}
@@ -233,7 +233,7 @@ func (h *Handlers) AdminRosterImportTemplate(w http.ResponseWriter, r *http.Requ
 	sampleSubGroup := h.sampleSubGroupName(r, unit.ID)
 
 	adultRole, youthRole := "parent", "scout"
-	if opts, err := roster.AllowedRoles(r.Context(), h.Pool, unit.UnitType, unit.ID, scope); err != nil {
+	if opts, err := roster.AllowedRoles(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, editorCaps); err != nil {
 		log.Printf("web: loading allowed roles for the import template: %v", err)
 	} else {
 		// "parent"/"scout" are in every unit's fixed set, but a scoped
@@ -295,7 +295,7 @@ func firstAllowedRole(opts []roster.RoleOption, prefer []string, def string) str
 // with a reason, since this app's login model has no member-level
 // identity to place an unanchored youth row against.
 func (h *Handlers) AdminRosterImportApply(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster/import")
+	unit, actor, scope, editorCaps, ok := h.requireRosterEditor(w, r, "/admin/roster/import")
 	if !ok {
 		return
 	}
@@ -345,7 +345,7 @@ func (h *Handlers) AdminRosterImportApply(w http.ResponseWriter, r *http.Request
 			skip("member type must be adult/parent/leader or youth/scout/child")
 			continue
 		}
-		if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, row.Role); err != nil || !allowed {
+		if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, editorCaps, row.Role); err != nil || !allowed {
 			skip(fmt.Sprintf("you don't have permission to assign the role %q (or it isn't a recognized role)", row.Role))
 			continue
 		}

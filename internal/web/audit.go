@@ -198,7 +198,7 @@ func (h *Handlers) AuditExport(w http.ResponseWriter, r *http.Request) {
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{"When", "Who", "Action", "Function", "Entity ID"})
 	for _, e := range entries {
-		_ = cw.Write([]string{e.OccurredAt, e.ActorName, e.Action, entityTypeLabel(e.EntityType), e.EntityID})
+		_ = cw.Write([]string{e.OccurredAt, csvCell(e.ActorName), csvCell(e.Action), entityTypeLabel(e.EntityType), csvCell(e.EntityID)})
 	}
 	cw.Flush()
 	if err := cw.Error(); err != nil {
@@ -207,4 +207,25 @@ func (h *Handlers) AuditExport(w http.ResponseWriter, r *http.Request) {
 		// response that fails partway through.
 		log.Printf("web: writing audit export CSV: %v", err)
 	}
+}
+
+// csvCell keeps a value from being read as a formula when the export is
+// opened in a spreadsheet.
+//
+// Excel, LibreOffice and Google Sheets evaluate a cell that starts with
+// "=", "+", "-" or "@" — so a member whose first name was entered as
+// "=HYPERLINK(...)" would put a live formula on the screen of whichever
+// leader opened the activity log. Names on this site are typed by
+// leaders, not strangers, which is why this is a small courtesy rather
+// than a large one; but the fix is a single quote, which spreadsheets
+// read as "this is text", and it costs nothing.
+func csvCell(v string) string {
+	if v == "" {
+		return v
+	}
+	switch v[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + v
+	}
+	return v
 }

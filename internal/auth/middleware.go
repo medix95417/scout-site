@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"net/http"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -47,7 +48,7 @@ func UserFromContext(ctx context.Context) (User, bool) {
 func RequireLogin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := UserFromContext(r.Context()); !ok {
-			http.Redirect(w, r, "/login?next="+r.URL.Path, http.StatusSeeOther)
+			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.Path), http.StatusSeeOther)
 			return
 		}
 		next.ServeHTTP(w, r)

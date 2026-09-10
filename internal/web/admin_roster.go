@@ -32,37 +32,40 @@ func subGroupNoun(unitType string) string {
 }
 
 // requireRosterEditor is the common auth+scope preamble every handler below
-// needs: logged in, holds CanEditUnitContent, and their roster.Scope. Writes
-// an HTTP error/redirect and returns ok=false if the request should stop
-// here.
-func (h *Handlers) requireRosterEditor(w http.ResponseWriter, r *http.Request, redirectPath string) (unit units.Unit, actor family.Member, scope roster.Scope, ok bool) {
+// needs: logged in, holds CanEditUnitContent, their roster.Scope, and the
+// full capability set that scope was derived from — which is what the
+// privilege ceiling compares against (see roster.RoleCapabilities and
+// requireCeiling below). Writes an HTTP error/redirect and returns
+// ok=false if the request should stop here.
+func (h *Handlers) requireRosterEditor(w http.ResponseWriter, r *http.Request, redirectPath string) (unit units.Unit, actor family.Member, scope roster.Scope, caps units.Capabilities, ok bool) {
 	unit, _ = units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
 	if !loggedIn {
 		http.Redirect(w, r, "/login?next="+redirectPath, http.StatusSeeOther)
-		return unit, family.Member{}, roster.Scope{}, false
+		return unit, family.Member{}, roster.Scope{}, nil, false
 	}
 
-	caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
+	var err error
+	caps, err = h.capabilitiesFor(r.Context(), user, unit.ID)
 	if err != nil || !units.CanEditUnitContent(caps) {
 		http.Error(w, "you don't have permission to manage the roster", http.StatusForbidden)
-		return unit, family.Member{}, roster.Scope{}, false
+		return unit, family.Member{}, roster.Scope{}, nil, false
 	}
 
 	scope, err = h.rosterScope(r.Context(), user, unit.ID)
 	if err != nil {
 		log.Printf("web: computing roster scope: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
-		return unit, family.Member{}, roster.Scope{}, false
+		return unit, family.Member{}, roster.Scope{}, nil, false
 	}
 
 	actor, err = h.actingMember(r.Context(), user, unit.ID)
 	if err != nil {
 		http.Error(w, "could not determine acting member — has your family been added to the roster yet?", http.StatusBadRequest)
-		return unit, family.Member{}, roster.Scope{}, false
+		return unit, family.Member{}, roster.Scope{}, nil, false
 	}
 
-	return unit, actor, scope, true
+	return unit, actor, scope, caps, true
 }
 
 // resolveSubGroup validates a submitted sub_group_id against both the
@@ -118,6 +121,31 @@ func writeError(w http.ResponseWriter, err error) {
 	http.Error(w, "internal error", http.StatusInternalServerError)
 }
 
+// requireCeiling is the privilege ceiling on an account-affecting action:
+// the editor may go ahead only if they hold everything the target does
+// (see units.Capabilities.Covers and internal/roster/privilege.go for
+// why). held is the target's capability set and err is whatever
+// gathering it returned, so a call reads as one line at the site.
+//
+// Scope is not enough here. A unit-wide leader's scope covers everyone
+// in the unit, the Admin included — so without this, the permission to
+// fix a Scout's surname was also the permission to reset the Admin's
+// password, mint a login for the Admin's member record under a new
+// email address, or deactivate the Admin outright. Refused with a
+// reason that names the way forward, since the leader hitting this is
+// usually doing something legitimate for the wrong person.
+func requireCeiling(w http.ResponseWriter, editor, held units.Capabilities, err error, what string) bool {
+	if err != nil {
+		writeError(w, err)
+		return false
+	}
+	if !editor.Covers(held) {
+		http.Error(w, "you can't "+what+" for someone who holds more access than you do — ask an Admin to do it", http.StatusForbidden)
+		return false
+	}
+	return true
+}
+
 // --- Roster list / add ------------------------------------------------
 
 type rosterRow struct {
@@ -126,7 +154,7 @@ type rosterRow struct {
 }
 
 func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
-	unit, _, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, _, scope, editorCaps, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -198,7 +226,7 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	allowedRoles, err := roster.AllowedRoles(r.Context(), h.Pool, unit.UnitType, unit.ID, scope)
+	allowedRoles, err := roster.AllowedRoles(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, editorCaps)
 	if err != nil {
 		log.Printf("web: loading allowed roles: %v", err)
 	}
@@ -235,7 +263,7 @@ func (h *Handlers) AdminRosterList(w http.ResponseWriter, r *http.Request) {
 // its login, its first adult member, and assigns the chosen role, all in
 // one submission, then shows the generated temporary password once.
 func (h *Handlers) AdminRosterCreateFamily(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, editorCaps, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -245,7 +273,7 @@ func (h *Handlers) AdminRosterCreateFamily(w http.ResponseWriter, r *http.Reques
 	}
 
 	role := r.FormValue("role")
-	if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, role); err != nil || !allowed {
+	if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, editorCaps, role); err != nil || !allowed {
 		http.Error(w, "you don't have permission to assign that role", http.StatusForbidden)
 		return
 	}
@@ -292,7 +320,7 @@ func (h *Handlers) AdminRosterCreateFamily(w http.ResponseWriter, r *http.Reques
 // then did nothing with it but store it as contact detail, which read as
 // though a login had been set up when none had.
 func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, editorCaps, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -312,7 +340,7 @@ func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	role := r.FormValue("role")
-	if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, role); err != nil || !allowed {
+	if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, editorCaps, role); err != nil || !allowed {
 		http.Error(w, "you don't have permission to assign that role", http.StatusForbidden)
 		return
 	}
@@ -387,7 +415,7 @@ func (h *Handlers) AdminRosterAddMember(w http.ResponseWriter, r *http.Request) 
 // AdminRosterCreateSubGroup adds a new den/patrol. Unit-wide leaders only —
 // creating a new organizational group is above a single Den Leader's scope.
 func (h *Handlers) AdminRosterCreateSubGroup(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, _, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -419,7 +447,7 @@ func (h *Handlers) AdminRosterCreateSubGroup(w http.ResponseWriter, r *http.Requ
 // organizational decision above a single Den Leader's own-den scope. See
 // roster.SetSubGroupActive for what this does and doesn't touch.
 func (h *Handlers) AdminRosterSetSubGroupActive(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, _, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -475,7 +503,7 @@ func (h *Handlers) AdminRosterSetSubGroupActive(w http.ResponseWriter, r *http.R
 // requireRosterEditor) plus IsAllowedRole and resolveSubGroup — which
 // applies just as well to an existing member as to a brand-new one.
 func (h *Handlers) AdminRosterAssignExistingMember(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, editorCaps, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -502,7 +530,7 @@ func (h *Handlers) AdminRosterAssignExistingMember(w http.ResponseWriter, r *htt
 	}
 
 	role := r.FormValue("role")
-	if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, role); err != nil || !allowed {
+	if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, editorCaps, role); err != nil || !allowed {
 		http.Error(w, "you don't have permission to assign that role", http.StatusForbidden)
 		return
 	}
@@ -523,7 +551,7 @@ func (h *Handlers) AdminRosterAssignExistingMember(w http.ResponseWriter, r *htt
 // --- Member edit --------------------------------------------------------
 
 func (h *Handlers) AdminRosterMemberEdit(w http.ResponseWriter, r *http.Request) {
-	unit, _, scope, ok := h.requireRosterEditor(w, r, r.URL.Path)
+	unit, _, scope, editorCaps, ok := h.requireRosterEditor(w, r, r.URL.Path)
 	if !ok {
 		return
 	}
@@ -573,7 +601,7 @@ func (h *Handlers) AdminRosterMemberEdit(w http.ResponseWriter, r *http.Request)
 		log.Printf("web: loading individual login state: %v", err)
 	}
 
-	allowedRoles, err := roster.AllowedRoles(r.Context(), h.Pool, unit.UnitType, unit.ID, scope)
+	allowedRoles, err := roster.AllowedRoles(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, editorCaps)
 	if err != nil {
 		log.Printf("web: loading allowed roles: %v", err)
 	}
@@ -640,7 +668,7 @@ func memberEditBase(b baseData, firstName, loginErr string) baseData {
 // login separate from their family's shared one. Scoped by the same
 // manageability check as every other roster-admin write.
 func (h *Handlers) AdminRosterCreateMemberLogin(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, editorCaps, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -662,6 +690,14 @@ func (h *Handlers) AdminRosterCreateMemberLogin(w http.ResponseWriter, r *http.R
 	}
 	if !manageable {
 		http.Error(w, "this member is outside your "+subGroupNoun(unit.UnitType), http.StatusForbidden)
+		return
+	}
+	// A new individual login inherits this member's roles the moment it is
+	// created, and has no two-factor enrollment of its own — so creating
+	// one for a member above the editor's ceiling is the same as signing
+	// in as them.
+	held, err := roster.MemberCapabilitiesAcrossUnits(r.Context(), h.Pool, memberID)
+	if !requireCeiling(w, editorCaps, held, err, "create a login") {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -695,7 +731,7 @@ func (h *Handlers) AdminRosterCreateMemberLogin(w http.ResponseWriter, r *http.R
 // member-scoped sibling of AdminRosterResetPassword, which only ever
 // touches the family-wide login.
 func (h *Handlers) AdminRosterResetMemberLoginPassword(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, editorCaps, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -719,6 +755,10 @@ func (h *Handlers) AdminRosterResetMemberLoginPassword(w http.ResponseWriter, r 
 		http.Error(w, "this member is outside your "+subGroupNoun(unit.UnitType), http.StatusForbidden)
 		return
 	}
+	held, err := roster.MemberCapabilitiesAcrossUnits(r.Context(), h.Pool, memberID)
+	if !requireCeiling(w, editorCaps, held, err, "reset the password") {
+		return
+	}
 
 	tempPassword, err := roster.ResetMemberLoginPassword(r.Context(), h.Pool, memberID, actor.ID)
 	if err != nil {
@@ -735,7 +775,7 @@ func (h *Handlers) AdminRosterResetMemberLoginPassword(w http.ResponseWriter, r 
 }
 
 func (h *Handlers) AdminRosterMemberUpdate(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, _, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -795,7 +835,7 @@ func (h *Handlers) AdminRosterMemberUpdate(w http.ResponseWriter, r *http.Reques
 // intact — refused with a friendly error if they still hold a nonzero
 // Scout account balance anywhere.
 func (h *Handlers) AdminRosterMemberDeactivate(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, editorCaps, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -807,6 +847,12 @@ func (h *Handlers) AdminRosterMemberDeactivate(w http.ResponseWriter, r *http.Re
 	}
 	if !manageable {
 		http.Error(w, "this member is outside your "+subGroupNoun(unit.UnitType), http.StatusForbidden)
+		return
+	}
+	// Deactivating silences every role the member holds, in every unit —
+	// done to the Admin by a lesser leader, it is a lockout.
+	held, err := roster.MemberCapabilitiesAcrossUnits(r.Context(), h.Pool, memberID)
+	if !requireCeiling(w, editorCaps, held, err, "deactivate the account") {
 		return
 	}
 
@@ -842,7 +888,7 @@ func (h *Handlers) AdminRosterMemberDeactivate(w http.ResponseWriter, r *http.Re
 // anything that must keep its attribution, and says which kind of record
 // is holding them — see its doc comment.
 func (h *Handlers) AdminRosterMemberDelete(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, _, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -893,7 +939,7 @@ func (h *Handlers) AdminRosterMemberDelete(w http.ResponseWriter, r *http.Reques
 // this unit's roster — every role assignment they held is still there, so
 // there's nothing else to reassign.
 func (h *Handlers) AdminRosterMemberReactivate(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, _, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -917,7 +963,7 @@ func (h *Handlers) AdminRosterMemberReactivate(w http.ResponseWriter, r *http.Re
 }
 
 func (h *Handlers) AdminRosterAssignRole(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, editorCaps, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -937,7 +983,7 @@ func (h *Handlers) AdminRosterAssignRole(w http.ResponseWriter, r *http.Request)
 	}
 
 	role := r.FormValue("role")
-	if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, role); err != nil || !allowed {
+	if allowed, err := roster.IsAllowedRole(r.Context(), h.Pool, unit.UnitType, unit.ID, scope, editorCaps, role); err != nil || !allowed {
 		http.Error(w, "you don't have permission to assign that role", http.StatusForbidden)
 		return
 	}
@@ -956,7 +1002,7 @@ func (h *Handlers) AdminRosterAssignRole(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handlers) AdminRosterRemoveRole(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, editorCaps, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -984,6 +1030,12 @@ func (h *Handlers) AdminRosterRemoveRole(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "this member is outside your "+subGroupNoun(unit.UnitType), http.StatusForbidden)
 		return
 	}
+	// Taking a role away is measured by the role, not the member: a
+	// leader may remove only a role they could have granted.
+	held, err := roster.RoleCapabilities(r.Context(), h.Pool, unit.ID, ra.Role)
+	if !requireCeiling(w, editorCaps, held, err, "remove that role") {
+		return
+	}
 
 	if _, _, err := roster.RemoveRole(r.Context(), h.Pool, roleAssignmentID, actor.ID); err != nil {
 		log.Printf("web: removing role: %v", err)
@@ -998,7 +1050,7 @@ func (h *Handlers) AdminRosterRemoveRole(w http.ResponseWriter, r *http.Request)
 // as editing them — a Den Leader can reset a password only for a family
 // they can otherwise manage a member of.
 func (h *Handlers) AdminRosterResetPassword(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, "/admin/roster")
+	unit, actor, scope, editorCaps, ok := h.requireRosterEditor(w, r, "/admin/roster")
 	if !ok {
 		return
 	}
@@ -1020,6 +1072,12 @@ func (h *Handlers) AdminRosterResetPassword(w http.ResponseWriter, r *http.Reque
 	}
 	if !manageable {
 		http.Error(w, "this member is outside your "+subGroupNoun(unit.UnitType), http.StatusForbidden)
+		return
+	}
+	// The family login carries every role anyone in the family holds, in
+	// every unit — so that is what has to fit under the editor's ceiling.
+	held, err := roster.FamilyCapabilitiesAcrossUnits(r.Context(), h.Pool, member.FamilyID)
+	if !requireCeiling(w, editorCaps, held, err, "reset the password") {
 		return
 	}
 

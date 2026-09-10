@@ -153,7 +153,7 @@ func (h *Handlers) GroupView(w http.ResponseWriter, r *http.Request) {
 // sub-group (unit-wide leaders, or the Den Leader/Patrol Leader scoped to
 // it).
 func (h *Handlers) AdminGroupEdit(w http.ResponseWriter, r *http.Request) {
-	unit, _, scope, ok := h.requireRosterEditor(w, r, r.URL.Path)
+	unit, _, scope, _, ok := h.requireRosterEditor(w, r, r.URL.Path)
 	if !ok {
 		return
 	}
@@ -211,7 +211,7 @@ func (h *Handlers) AdminGroupEdit(w http.ResponseWriter, r *http.Request) {
 
 // AdminGroupUpdate saves a patrol's/den's blurb.
 func (h *Handlers) AdminGroupUpdate(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, r.URL.Path)
+	unit, actor, scope, _, ok := h.requireRosterEditor(w, r, r.URL.Path)
 	if !ok {
 		return
 	}
@@ -239,7 +239,7 @@ func (h *Handlers) AdminGroupUpdate(w http.ResponseWriter, r *http.Request) {
 // page shows — the same "linked events" checkbox pattern files.html
 // already uses, just linking to a sub-group instead of a calendar event.
 func (h *Handlers) AdminGroupSetPhotos(w http.ResponseWriter, r *http.Request) {
-	unit, _, scope, ok := h.requireRosterEditor(w, r, r.URL.Path)
+	unit, _, scope, _, ok := h.requireRosterEditor(w, r, r.URL.Path)
 	if !ok {
 		return
 	}
@@ -268,7 +268,7 @@ func (h *Handlers) AdminGroupSetPhotos(w http.ResponseWriter, r *http.Request) {
 // low-stakes update visible only within the site (the group page is
 // already members-only), not worth a separate publish step.
 func (h *Handlers) AdminGroupCreateNews(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, r.URL.Path)
+	unit, actor, scope, _, ok := h.requireRosterEditor(w, r, r.URL.Path)
 	if !ok {
 		return
 	}
@@ -308,7 +308,7 @@ func (h *Handlers) AdminGroupCreateNews(w http.ResponseWriter, r *http.Request) 
 // hard delete, same "keep the history, just hide it" posture /admin/news
 // already uses for its own publish toggle.
 func (h *Handlers) AdminGroupDeleteNews(w http.ResponseWriter, r *http.Request) {
-	unit, actor, scope, ok := h.requireRosterEditor(w, r, r.URL.Path)
+	unit, actor, scope, _, ok := h.requireRosterEditor(w, r, r.URL.Path)
 	if !ok {
 		return
 	}

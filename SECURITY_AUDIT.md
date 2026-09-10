@@ -500,3 +500,264 @@ the URL a store returns — each fails a test. The two SQL changes
 (`files.Create` honouring `Public`, and `files.ByStorageKey`) are covered
 by integration tests against a real Postgres, including a cross-unit
 lookup that must not resolve.
+
+# Audit pass 4 — full-site review (2026-09-10)
+
+**Scope:** the whole codebase, read fresh rather than as a diff — with
+particular attention to everything merged since pass 3 (PRs #56–#111:
+calendar import and the personal feed, the join form and prospect
+campaigns, custom-role editing and built-in role overrides, image
+hosting, full-HTML newsletters, the file rekey, backup/restore, news
+deletion). Asked for as an independent audit with no proof-of-concept
+code; findings were reproduced against a running server with the demo
+dataset, and fixed.
+
+**Method:** every route in `Handlers.Routes` was checked for the three
+questions CLAUDE.md separates — signed in, member of *this* unit, and
+what may it do here — and every `{id}` route for whether the lookup
+carries the unit. Then the trust boundaries: the login and reset flows,
+CSRF, cookies, the two token-bearing public endpoints (`/feed/{token}`
+and `/unsubscribe`), the SSRF boundary on calendar import, file upload
+and serving, every place `html/template` escaping is bypassed (there are
+none for user content — the only `template.JS` values are server
+constants), every place SQL is assembled from strings (column-name
+constants only), CSP and headers, the backup scripts, and what the logs
+carry. Each fix ships with a regression test that was mutation-tested —
+eleven mutations across the guards, each of which fails a test.
+
+## Findings fixed in this pass
+
+### 1. CRITICAL — a unit-wide content editor could take over the Admin's account
+
+**Files:** `internal/roster/roster.go` (`AllowedRoles`, `IsAllowedRole`,
+`fixedRoleOptions`), `internal/web/admin_roster.go` (password reset,
+login creation, deactivation, role removal).
+
+The roster admin pages are gated on two questions: does the leader hold
+`edit_content`, and is the member inside their `roster.Scope`. A
+Scoutmaster, Assistant Scoutmaster or Cubmaster has unit-wide scope, and
+unit-wide scope covers every member of the unit — the Admin included.
+Neither question asks how much access the *other* person holds. Four
+ordinary forms on the roster page therefore did more than intended:
+
+- **Role assignment offered Treasurer to every unit-wide leader**, and
+  offered *every custom role* — including one granting `super_admin` —
+  to every unit-wide leader. An Assistant Scoutmaster could make
+  themselves Treasurer.
+- **Password reset** resets the *family* login of any member in scope.
+  Pointed at the Admin's family, it prints a temporary password for the
+  Admin's account.
+- **Creating an individual login** for a member creates a `users` row
+  whose roles are that member's roles. Pointed at the Admin's member
+  record with the attacker's own email, it produces a login that holds
+  `super_admin` in both units — and, being a new login, has **no
+  two-factor enrollment**, so the Admin's TOTP does not apply to it.
+- **Deactivate** on the Admin's member record silences every role they
+  hold, in every unit.
+
+Reproduced live with the demo dataset, signed in as Ashley (Assistant
+Scoutmaster, Troop 47), against `main` before the fix:
+
+| action | result |
+|---|---|
+| POST `/admin/roster/members/{ashley}/roles` `role=treasurer` | `303`, `treasurer` row written |
+| POST `/admin/roster/members/{alex}/reset-password` | `200`, Admin's password hash changed, temporary password on screen |
+| POST `/admin/roster/members/{alex}/login` `email=asm-owned@…` | `200`, a `users` row on the Admin's member record whose roles are `super_admin, super_admin` |
+| POST `/admin/roster/members/{alex}/deactivate` | `303`, `members.active = false` |
+
+The site's answer to a stolen Admin session is two-factor, and it is
+mandatory for Admins and Treasurers — but "mandatory" is a persistent
+nudge, not a block, and in any case the third row above sidesteps it
+entirely by never touching the Admin's own login.
+
+**Fix — a privilege ceiling, applied in both directions.** One rule,
+`units.Capabilities.Covers`: a leader may grant only capabilities they
+hold, and may administer only a login that holds nothing they do not.
+`super_admin` covers everything; `submit_for_approval` is read as the
+lesser form of `edit_content`, so an Assistant Scoutmaster can still
+appoint a Patrol Leader.
+
+- `roster.AllowedRoles` and `roster.IsAllowedRole` now take the editor's
+  resolved capabilities and drop every role the editor does not cover.
+  The parameter is not optional, so no call site can forget it — all six
+  (the two forms, existing-member assignment, and the CSV import) go
+  through them. A role is measured by what it grants *in this unit*
+  (`roster.RoleCapabilities` → `units.CapabilitiesForRoles`), so a unit
+  that has overridden Den Leader to grant `manage_ledger` is measured by
+  that, not by the code's default.
+- Password reset, individual-login creation and reset, deactivation, and
+  role removal call `requireCeiling` with the target's capabilities.
+  For the login-affecting actions the target is measured **across both
+  units** (`roster.FamilyCapabilitiesAcrossUnits`,
+  `MemberCapabilitiesAcrossUnits`): a family login signs in to both
+  subdomains, so a Troop leader must see the Pack's Admin as an Admin
+  even when that person holds only a parent role on the Troop side.
+  Role removal is measured by the role — a leader may take away only
+  what they could have granted.
+
+Re-verified live after the fix, same account, same four requests: `403`
+on each, nothing written, and each refusal says why ("you can't reset
+the password for someone who holds more access than you do — ask an
+Admin to do it"). The ordinary workflow still works, also live: the
+Scoutmaster appointed an Assistant Scoutmaster (`303`) and was refused
+Treasurer (`403`); the Assistant Scoutmaster reset a parent family's
+password (`200`, hash changed) and was refused the Scoutmaster's (`403`,
+because a Scoutmaster holds `approve_expenses` and an Assistant does
+not).
+
+**Durable fix:** `TestCapabilities_Covers` (pure), three
+`TestIsAllowedRole_*` and `TestCapabilitiesAcrossUnits` (against
+Postgres), and `TestAccountAffectingRosterHandlersApplyTheCeiling`,
+which reads `admin_roster.go` and fails if any of the five handlers
+stops calling `requireCeiling` or measures the wrong thing (member where
+it should be family). Mutations that fail a test: `Covers` returning
+true; `AllowedRoles` skipping the filter; dropping the
+`submit_for_approval` dominance; a handler dropping the ceiling; a
+handler measuring the member instead of the family; `RoleCapabilities`
+ignoring per-unit overrides; the cross-unit gathering collapsing to one
+unit.
+
+### 2. MEDIUM — two-factor could be turned off by anyone holding a session
+
+**File:** `internal/web/twofactor.go` (`TwoFactorDisable`),
+`templates/two-factor-settings.html`.
+
+Re-enrolling over a confirmed credential requires the current password,
+and the code says why: a stolen session cookie or an unlocked laptop
+must not be enough to swap out a Treasurer's second factor. Turning it
+*off* — strictly more than swapping it — did not ask. One POST from a
+live session put the account back to password-only. Since two-factor
+exists precisely for the case "holds a session, is not the owner", a
+session alone can never be what removes it.
+
+**Fix:** the disable form carries a password field and the handler
+verifies it with `auth.VerifyPassword`, same bar as re-enrolling, with a
+flash that says two-factor is still on. **Durable fix:**
+`TestTwoFactorDisableRequiresThePassword` reads both the handler and the
+template; removing the check or the field each fails it.
+
+### 3. LOW — the login form's timing distinguished "no such account" from "wrong password"
+
+**File:** `internal/auth/auth.go` (`Authenticate`).
+
+The error message is uniform and the lockout counts both the same, but
+an unknown email returned before any bcrypt comparison and a wrong
+password after one — a gap of tens of milliseconds, measurable remotely,
+that turned the login form into a way to check which parents have
+accounts here. **Fix:** the unknown-account path now runs a bcrypt
+comparison against a placeholder hash generated at startup at the same
+cost, so both paths do the same work.
+
+### 4. LOW — a forwarded-scheme header was believed from anyone
+
+**File:** `internal/web/calendar_feed.go` (`siteURL`).
+
+`siteURL` builds the base URL for links that other people receive — the
+personal feed's event links, and the hosted-image and unsubscribe links
+in outgoing email. It took the scheme from `X-Forwarded-Proto` whenever
+present, from any client, with any value. `clientIP` already has a
+switch for whether the proxy's headers are trusted
+(`TRUST_PROXY_HEADERS`); `siteURL` now honours the same switch and
+accepts only `http` or `https`. Behind Caddy with the switch on, nothing
+changes.
+
+### 5. LOW — activity-log CSV cells could be read as spreadsheet formulas
+
+**File:** `internal/web/audit.go` (`csvCell`).
+
+Excel, LibreOffice and Google Sheets evaluate a cell beginning with `=`,
+`+`, `-` or `@`. Member names are typed by leaders, not strangers, so
+this is a small courtesy rather than a large exposure — but the fix is a
+leading `'`, which spreadsheets read as text. Applied to the actor,
+action and entity-id columns of the export.
+
+### 6. LOW — `auth.RequireLogin` built its redirect without escaping the path
+
+Unused by any route (every handler gates itself), so unreachable today;
+fixed with `url.QueryEscape` so it is safe the day it is used. The
+`sanitizeNextPath` that every live login redirect goes through was
+checked separately and holds: it refuses a scheme, a host, an opaque
+URL, a backslash (`/\evil.com` resolves as `//evil.com` in browsers),
+and control characters.
+
+## Checked and clean (executed, not assumed)
+
+- **Sessions.** 32 random bytes, SHA-256 at rest, `HttpOnly`, `Secure`
+  in production, `SameSite=Lax`, server-side expiry, destroyed on every
+  password change (self-service reset, forced change, and the settings
+  page) and on logout. New token on every login.
+- **CSRF.** Double-submit cookie, constant-time compare, parsed before
+  the body limit applies, body limit sized by whether the caller is
+  signed in (1 MB anonymous, 250 MB signed in). Every state-changing
+  route is `POST` — except `/unsubscribe`, which is a `GET` by design and
+  is authorised by an HMAC over the prospect id rather than by anything
+  ambient, compared with `hmac.Equal`.
+- **Lockout and reset.** Per-account and per-address limits on login and
+  on reset requests; uniform responses; reset tokens hashed, single-use,
+  one-hour expiry; every session destroyed on redemption; the
+  two-factor pending login capped at five wrong codes.
+- **Host header.** Go's server rejects a `Host` containing `@`
+  (confirmed: `400 malformed Host header` for
+  `troop.example.org:8080@evil.com`), and `units.Middleware` resolves the
+  unit from the header against the database before anything is built
+  from it, so the reset-link origin cannot name another host.
+- **Personal calendar feed.** 32-byte token, hashed at rest, resolved
+  against the unit the hostname selected (a Troop token is a 404 on the
+  Pack), membership re-checked on every fetch, scoping recomputed on
+  every fetch, `no-store`.
+- **Calendar import (SSRF).** The check is at the dial, on the resolved
+  IP, so it covers redirects and DNS rebinding; loopback, private,
+  link-local (including 169.254.169.254) and unspecified refused;
+  redirects bounded and scheme-checked; response bounded by
+  `MaxFeedBytes`; a 30-second timeout.
+- **Join form and storefront.** Per-address limiters checked before any
+  query; the join form's quota spent only on a stored enquiry; CR/LF
+  stripped from anything that reaches a mail header; the notification
+  body plain text on purpose; quantities bounded.
+- **Files.** Type derived from the bytes, never from the upload; an
+  uploader's claim honoured only when it is an inert type; everything
+  outside a small allowlist served as a download; every response
+  stamped `Content-Security-Policy: sandbox` and `nosniff`;
+  `image/svg+xml` deliberately absent; access gated on unit membership,
+  not merely on being signed in; a "public" flag is the only exception.
+- **Templates.** No `template.HTML` anywhere; post bodies render through
+  `{{.Body}}`; the newsletter preview is an `<iframe sandbox="">` via
+  `srcdoc`, escaped by `html/template`; URL attributes go through the
+  contextual escaper, which neutralises `javascript:`.
+- **SQL.** The only string-assembled fragments are column-list and
+  `ORDER BY` constants owned by the package; every value is a
+  placeholder.
+- **Roles.** `CapabilitiesForRoles` applies per-unit overrides;
+  custom-role creation and built-in-role editing are gated on
+  `super_admin`; `ErrCannotDisarmSuperAdmin` keeps the top role from
+  being emptied; capability names are filtered against
+  `AllCapabilities` before they reach the database.
+- **Every `{id}` mutation** carries `unit.ID` into its lookup
+  (approvals, expense approvals, files, resources, newsletters,
+  campaigns, templates, feeds, conflicts, transactions, fundraisers and
+  their orders).
+- **Contact data.** The roster, the directory and both PDF exports read
+  email, phone and address through `CASE WHEN release_* THEN … ELSE ''
+  END`, so an unreleased field never leaves the database for a
+  members-only page.
+- **Secrets.** Nothing logs a password, session token or reset token;
+  the backup script refuses a passphrase file readable by others and
+  never puts the passphrase on a command line.
+
+## Worth knowing, not changed
+
+- Two-factor is *nudged* for Admins and Treasurers, not enforced at
+  login; the settings page and the persistent banner are the mechanism.
+  Finding 1's fix closes the path that made this matter most (a fresh
+  login on the Admin's record), but an Admin who never enrols is still
+  protected only by their password. Enforcing it is a product decision
+  rather than a bug, and is left as one.
+- A TOTP code is accepted within its ±30 s window without a
+  last-used-step record, so a code observed and replayed inside that
+  window works. The pending-login attempt cap bounds guessing; replay
+  would need the password and a live shoulder-surf of the code within
+  a minute. Not addressed in this pass.
+- `/unsubscribe` acts on a `GET`. A mail scanner that pre-fetches links
+  will opt a family out; the page says "already done" on the second
+  visit for exactly that reason. Deliberate, and documented in the
+  handler.
