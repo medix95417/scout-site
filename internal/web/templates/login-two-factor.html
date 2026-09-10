@@ -1,14 +1,58 @@
 {{define "content"}}
   <h1 class="text-2xl font-bold mb-6">Two-Factor Verification</h1>
+
+  {{if .HasKeys}}
+    <section class="max-w-sm mb-6" id="key-section" hidden>
+      <p class="text-sm text-gray-600 mb-2">Insert your security key and touch it when it blinks.</p>
+      <button type="button" id="use-key" class="rounded-md px-4 py-2 btn-accent">
+        Use your security key
+      </button>
+      <p id="key-status" class="text-sm text-gray-600 mt-2" aria-live="polite"></p>
+    </section>
+    <noscript>
+      <p class="text-sm text-amber-700 max-w-sm mb-4">JavaScript is off, so a security key can't be used here — enter a backup code below instead.</p>
+    </noscript>
+  {{end}}
+
   <form method="post" action="/login/2fa" class="max-w-sm space-y-4">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <div>
-      <label class="block text-sm font-medium mb-1" for="code">Code</label>
-      <input class="w-full rounded-md border border-gray-300 px-3 py-2 tracking-widest" type="text" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required autofocus>
-      <p class="text-xs text-gray-500 mt-1">Enter the 6-digit code from your authenticator app, or one of your backup codes.</p>
+      <label class="block text-sm font-medium mb-1" for="code">
+        {{if .HasTOTP}}Code{{else}}Backup code{{end}}
+      </label>
+      <input class="w-full rounded-md border border-gray-300 px-3 py-2 tracking-widest" type="text" id="code" name="code" inputmode="{{if .HasTOTP}}numeric{{else}}text{{end}}" autocomplete="one-time-code" placeholder="{{if .HasTOTP}}123456{{else}}xxxxx-xxxxx{{end}}" required {{if not .HasKeys}}autofocus{{end}}>
+      <p class="text-xs text-gray-500 mt-1">
+        {{if .HasTOTP}}Enter the 6-digit code from your authenticator app, or one of your backup codes.{{else}}Don't have your key with you? Enter one of the backup codes you saved when you set it up.{{end}}
+      </p>
     </div>
     <button type="submit" class="rounded-md px-4 py-2 btn-accent">
       Verify
     </button>
   </form>
+
+  {{if .HasKeys}}
+    {{template "webauthn-helpers" .}}
+    <script nonce="{{.CSPNonce}}">
+      (function () {
+        if (!window.scoutWebAuthn || !scoutWebAuthn.supported()) return;
+        var section = document.getElementById('key-section');
+        var button = document.getElementById('use-key');
+        var status = document.getElementById('key-status');
+        section.hidden = false;
+        button.addEventListener('click', async function () {
+          button.disabled = true;
+          status.textContent = 'Waiting for your security key…';
+          try {
+            var options = await scoutWebAuthn.begin('/login/2fa/key/begin', { csrf_token: {{.CSRFToken}} });
+            var credential = await scoutWebAuthn.get(options);
+            status.textContent = 'Checking…';
+            scoutWebAuthn.submit('/login/2fa/key/finish', { csrf_token: {{.CSRFToken}}, credential: credential });
+          } catch (err) {
+            status.textContent = "That didn't work: " + (err && err.message ? err.message : err) + ' — try again, or enter a code below.';
+            button.disabled = false;
+          }
+        });
+      })();
+    </script>
+  {{end}}
 {{end}}

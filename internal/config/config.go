@@ -81,6 +81,13 @@ type Config struct {
 	// rate-limit bucket.
 	TrustProxyHeaders bool
 
+	// WebAuthnRPID pins the domain security keys are bound to. Leave
+	// empty: it is derived from COOKIE_DOMAIN (or, without one, from
+	// what the unit hostnames share), which is right for every ordinary
+	// deployment. Set it only when the two units live on domains that
+	// share nothing.
+	WebAuthnRPID string
+
 	// ReminderWindow is how far ahead of an event's start time
 	// -send-event-reminders looks when deciding a reminder is due.
 	ReminderWindow time.Duration
@@ -121,6 +128,7 @@ func Load() (Config, error) {
 		// pacing off for a site that knows it doesn't need it.
 		MailBulkPerMinute: getenvInt("MAIL_BULK_PER_MINUTE", 0),
 		TrustProxyHeaders: getenv("TRUST_PROXY_HEADERS", "") == "true",
+		WebAuthnRPID:      getenv("WEBAUTHN_RP_ID", ""),
 		FastmailAPIToken:  getenv("FASTMAIL_API_TOKEN", ""),
 
 		// Empty S3Endpoint is the safe default — it means "storage

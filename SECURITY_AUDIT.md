@@ -761,3 +761,80 @@ and control characters.
   will opt a family out; the page says "already done" on the second
   visit for exactly that reason. Deliberate, and documented in the
   handler.
+
+# Design note: security keys (WebAuthn) as a second factor
+
+## What the code now does
+
+A login can register one or more security keys — a YubiKey or any FIDO2
+authenticator, or a platform passkey — and use one at the second step of
+login instead of, or alongside, an authenticator app. The ceremony is
+`github.com/go-webauthn/webauthn` (v0.18.0, the newest that builds on
+the Go 1.25 this project pins); `internal/auth/securitykey.go` owns what
+is stored and the rules, `internal/web/securitykey.go` the HTTP wiring.
+
+- **Challenge stored server-side, answered once.** Each begin writes the
+  library's session data to `webauthn_sessions` keyed by login and
+  ceremony kind; the finish step reads it with `DELETE … RETURNING`, so
+  a response can be checked against a challenge exactly once, and a
+  second begin supersedes the first. Five-minute expiry.
+- **Bound to our origin.** Every ceremony is bound to `siteURL(r)` — the
+  host `units.Middleware` has already checked and the scheme the server
+  decided — and the library verifies the browser signed exactly that
+  origin. The relying-party id is the domain both subdomains share
+  (derived from `COOKIE_DOMAIN`; `WEBAUTHN_RP_ID` overrides), so a key
+  set up on the Troop site works on the Pack's and on nothing else.
+- **Step-up.** Adding a key, removing one, or enrolling an app once any
+  second factor exists asks for the password first — the same rule
+  `BeginTOTPEnrollment` already had for replacing a confirmed app, now
+  applied to every change of factor. A stolen session cannot add a key
+  of its own or take the owner's away.
+- **One second step, whichever kind.** `completeLogin` asks
+  `auth.HasSecondFactor` (app *or* key), never `TOTPStatus`, so a
+  key-only login is sent through `/login/2fa`; a guard test reads the
+  source and fails if that changes. The pending login carries the same
+  attempt cap for a failed key answer as for a wrong code, and is spent
+  before a session is issued, so two answers to one challenge cannot
+  both become sessions.
+- **Backup codes belong to the account.** Issued with the first factor
+  of either kind, kept while any factor remains, removed with the last.
+  `VerifySecondFactorCode` accepts a backup code for a key-only login and
+  still refuses everything for a login with no factor.
+- **Non-discoverable credentials, no attestation.** The server names the
+  key at login, so a hardware key spends none of its resident slots on
+  this site, and the browser shows no "share the make of your key"
+  prompt. The signature counter is stored; a counter that steps
+  backwards is logged as a possible clone rather than refused, since the
+  common cause is a key without counters.
+- **Same-origin, CSRF-covered, CSP-clean.** Both halves of each ceremony
+  are ordinary `POST`s carrying `csrf_token`; the finish is a real form
+  submission, so the server renders the next page (backup codes, a
+  refusal with a flash, the post-login redirect) the way the app flow
+  does. The page script is inline under the per-request nonce and uses
+  no `eval` — the site's CSP forbids it, which a test harness discovered
+  the hard way.
+
+## Verification
+
+Executed in Chromium against a running server with the demo data, using
+a CDP virtual authenticator (CTAP2, USB, user-verified): the demo
+Assistant Scoutmaster registered a key from `/settings/2fa` and was
+shown ten backup codes; the key row appeared in `security_keys`;
+signing in again stopped at `/login/2fa` with no session cookie, the key
+answered, and a session was issued with the pending login consumed and
+the key's counter advanced. A response with one character of its
+signature altered in flight was refused (`invalid_signature` in the
+server log) with no session. With the authenticator removed, the key
+button reported failure and a backup code signed the login in, spending
+that code. Removing the key with a wrong password kept it; with the
+right password it went, and with it the backup codes, there being no
+factor left.
+
+Against Postgres: backup codes issued only with the first factor and
+outliving the removal of either kind while the other remains; a
+credential id refused a second registration under any login; another
+login's removal attempt a "not found"; the stored challenge consumed by
+its read, superseded by a new begin, absent once expired, and
+kind-specific; the pending login readable without being spent, unusable
+after the attempt cap, consumable once. Pure: `rpIDFor` across cookie
+domain, override, shared suffix, and the fallbacks.

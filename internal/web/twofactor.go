@@ -16,25 +16,46 @@ import (
 // and LoginSubmit in web.go), and the self-service /settings/2fa
 // enrollment flow.
 
+// twoFactorSettingsData is what two-factor-settings.html renders. Named,
+// so a render test can build one.
+type twoFactorSettingsData struct {
+	baseData
+	Enrolled        bool // an authenticator app has been started
+	Confirmed       bool // ...and confirmed with a code
+	FormattedSecret string
+	ProvisioningURI string
+	Keys            []auth.SecurityKey
+	StepUp          bool // adding or removing a factor needs the password
+}
+
+// loginTwoFactorData is what login-two-factor.html renders: which second
+// steps this login can take. Both may be true; at least one is, or the
+// login would not be here.
+type loginTwoFactorData struct {
+	baseData
+	HasTOTP bool
+	HasKeys bool
+}
+
 func (h *Handlers) LoginTwoFactorForm(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(auth.PendingTwoFactorCookieName)
-	if err != nil || cookie.Value == "" {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	_, userID, _, ok := h.pendingLoginFromCookie(w, r, false)
+	if !ok {
 		return
 	}
+	h.renderLoginTwoFactor(w, r, userID, "")
+}
 
-	exists, err := auth.PendingTwoFactorLoginExists(r.Context(), h.Pool, cookie.Value)
+// renderLoginTwoFactor shows the second-step page with whichever methods
+// the login has. Shared by the form, a wrong code, and a failed key.
+func (h *Handlers) renderLoginTwoFactor(w http.ResponseWriter, r *http.Request, userID, flash string) {
+	totp, keys, err := auth.SecondFactorStatus(r.Context(), h.Pool, userID)
 	if err != nil {
-		log.Printf("web: checking pending two-factor login: %v", err)
+		log.Printf("web: checking second factor status: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if !exists {
-		h.expirePendingTwoFactorLogin(w, r)
-		return
-	}
-
-	data := struct{ baseData }{baseData: h.base(r, "Two-Factor Verification")}
+	data := loginTwoFactorData{baseData: h.base(r, "Two-Factor Verification"), HasTOTP: totp, HasKeys: keys > 0}
+	data.Flash = flash
 	h.render(w, h.loginTwoFactor, data)
 }
 
@@ -56,9 +77,9 @@ func (h *Handlers) LoginTwoFactorSubmit(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		if errors.Is(err, auth.ErrInvalidTOTPCode) || errors.Is(err, auth.ErrTOTPNotEnrolled) {
-			data := struct{ baseData }{baseData: h.base(r, "Two-Factor Verification")}
-			data.Flash = "That code didn't match — check your authenticator app (or use a backup code) and try again."
-			h.render(w, h.loginTwoFactor, data)
+			if _, userID, _, ok := h.pendingLoginFromCookie(w, r, false); ok {
+				h.renderLoginTwoFactor(w, r, userID, "That code didn't match — check your authenticator app (or use a backup code) and try again.")
+			}
 			return
 		}
 		log.Printf("web: verifying two-factor code: %v", err)
@@ -118,13 +139,22 @@ func (h *Handlers) renderTwoFactorSettings(w http.ResponseWriter, r *http.Reques
 	unit, _ := units.UnitFromContext(r.Context())
 	user, _ := auth.UserFromContext(r.Context())
 
-	data := struct {
-		baseData
-		Enrolled        bool
-		Confirmed       bool
-		FormattedSecret string
-		ProvisioningURI string
-	}{baseData: h.base(r, "Two-Factor Authentication"), Enrolled: enrolled, Confirmed: confirmed}
+	keys, err := auth.ListSecurityKeys(r.Context(), h.Pool, userID)
+	if err != nil {
+		log.Printf("web: listing security keys: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	data := twoFactorSettingsData{
+		baseData:  h.base(r, "Two-Factor Authentication"),
+		Enrolled:  enrolled,
+		Confirmed: confirmed,
+		Keys:      keys,
+		// Once anything is confirmed, changing it needs the password
+		// — see securityKeyStepUp and TwoFactorDisable.
+		StepUp: confirmed || len(keys) > 0,
+	}
 	data.Flash = flash
 
 	if enrolled && !confirmed {

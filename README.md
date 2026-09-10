@@ -278,13 +278,20 @@ the Treasurer ticks the unit's own entries off against the bank statement
 and can only sign off once the difference reaches zero; fundraiser
 tracking with a configurable proceeds-allocation rule
 that starts out flagged "needs council confirmation" until a Treasurer
-sets the real, council-approved rule; and mandatory TOTP two-factor login
-(`internal/twofactor`, `/settings/2fa`, QR code enrollment via a
-CDN-loaded canvas library plus manual setup-key entry) for any login that
-holds the Treasurer or super_admin role, since those can move real money
-and some of the family accounts on this site belong to minors — two-factor
-is also available as an **opt-in** for every other login via a "Security"
-nav link, not required, just discoverable. Real payment processing
+sets the real, council-approved rule; and mandatory two-factor login for
+any login that holds the Treasurer or super_admin role, since those can
+move real money and some of the family accounts on this site belong to
+minors. Two kinds of second factor, and a login can hold either or both:
+a **security key** — a YubiKey or any FIDO2 key, or the passkey a phone
+or laptop offers — via WebAuthn (`internal/auth/securitykey.go` on top
+of go-webauthn, keys bound to the domain both subdomains share so one
+key works on both sites); and an **authenticator app** via TOTP
+(`internal/twofactor`, QR code enrollment via a CDN-loaded canvas
+library plus manual setup-key entry). Both are set up under `/settings/2fa`,
+and backup codes issued with the first factor of either kind cover the
+day neither is to hand. Two-factor is also available as an **opt-in**
+for every other login via a "Security" nav link, not required, just
+discoverable. Real payment processing
 (Stripe) is intentionally not wired up yet — see `PHASE2_TREASURY.md` for
 why and what that'll take.
 

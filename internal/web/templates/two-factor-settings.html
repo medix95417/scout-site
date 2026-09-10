@@ -28,16 +28,69 @@
   </section>
 
   <h2 class="text-lg font-semibold mb-2">Two-Factor Authentication</h2>
-  <p class="text-sm text-gray-600 mb-6">
-    Adds a second step (a 6-digit code from your phone) to logging in. Required for accounts that hold Treasurer or
-    unit-wide admin access, since those can see or move real money — optional, but recommended, for everyone else.
+  <p class="text-sm text-gray-600 mb-2">
+    Adds a second step to logging in. Required for accounts that hold Treasurer or unit-wide admin access, since
+    those can see or move real money — optional, but recommended, for everyone else.
   </p>
+  <p class="text-sm text-gray-600 mb-6">
+    Choose either method, or set up both: a <strong>security key</strong> (a YubiKey or similar, or the passkey
+    your phone or laptop offers) that you touch at login, or an <strong>authenticator app</strong> that shows a
+    6-digit code. Whichever you set up first also gives you backup codes for the day the key or phone isn't with you.
+  </p>
+
+  <section class="rounded-lg border border-gray-200 bg-white p-4 max-w-md mb-8">
+    <h3 class="text-base font-semibold mb-1">Security keys</h3>
+    {{if .Keys}}
+      <ul class="divide-y divide-gray-100 mb-4">
+        {{range .Keys}}
+          <li class="py-2 flex items-start justify-between gap-3">
+            <div>
+              <p class="text-sm font-medium">{{.Name}}</p>
+              <p class="text-xs text-gray-500">
+                Added {{.CreatedAt.Format "2 Jan 2006"}}{{if .LastUsedAt}} · last used {{.LastUsedAt.Format "2 Jan 2006"}}{{else}} · not used yet{{end}}
+              </p>
+            </div>
+            <details class="text-right">
+              <summary class="text-xs text-red-700 cursor-pointer">Remove</summary>
+              <form method="post" action="/settings/2fa/keys/{{.ID}}/delete" class="mt-2 space-y-1">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <label class="block text-xs" for="remove-{{.ID}}">Current password</label>
+                <input class="w-full rounded-md border border-gray-300 px-2 py-1 text-sm" type="password" id="remove-{{.ID}}" name="password" autocomplete="current-password" required>
+                <button type="submit" class="rounded-md border border-red-300 text-red-700 px-3 py-1 text-xs hover:bg-red-50">Remove this key</button>
+              </form>
+            </details>
+          </li>
+        {{end}}
+      </ul>
+    {{else}}
+      <p class="text-sm text-gray-600 mb-3">No security key registered yet.</p>
+    {{end}}
+
+    <form id="add-key-form" class="space-y-2" hidden>
+      <label class="block text-sm font-medium" for="key-name">Add a security key</label>
+      <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="text" id="key-name" name="name" maxlength="60" placeholder="What you'll call it, e.g. blue YubiKey" autocomplete="off">
+      {{if .StepUp}}
+        <label class="block text-sm font-medium" for="key-password">Confirm your current password to add a key</label>
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="password" id="key-password" name="password" autocomplete="current-password" required>
+      {{end}}
+      <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Add security key</button>
+      <p id="key-status" class="text-sm text-gray-600" aria-live="polite"></p>
+      <p class="text-xs text-gray-500">Your browser will ask you to insert and touch the key. Two keys — one on your keyring, one in a drawer — is the setup every key maker recommends.</p>
+    </form>
+    <p id="key-unsupported" class="text-sm text-amber-700">
+      This browser can't register a security key here — it needs a current browser over HTTPS with JavaScript on.
+      The authenticator app below works anywhere.
+    </p>
+    <noscript><p class="text-sm text-amber-700">JavaScript is off, so a security key can't be registered from this page.</p></noscript>
+  </section>
+
+  <h3 class="text-base font-semibold mb-2">Authenticator app</h3>
 
   {{if .Confirmed}}
     <section class="rounded-lg border border-green-200 bg-green-50 p-4 max-w-md">
-      <p class="text-sm text-green-900 font-medium mb-3">Two-factor authentication is enabled on this login.</p>
+      <p class="text-sm text-green-900 font-medium mb-3">An authenticator app is set up on this login.</p>
       <p class="text-xs text-gray-600 mb-3">
-        If you lose your authenticator device, use one of the backup codes you saved at setup, or re-enroll below (this replaces your current setup and backup codes).
+        If you lose the phone, use one of your backup codes{{if .Keys}} or your security key{{end}}, or re-enroll below (this replaces the app's setup{{if not .Keys}} and your backup codes{{end}}).
       </p>
       <form method="post" action="/settings/2fa/enroll" class="space-y-2 mb-3">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -49,10 +102,10 @@
       </form>
       <form method="post" action="/settings/2fa/disable" class="space-y-2">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <label class="block text-sm font-medium" for="disable-password">Confirm your current password to turn two-factor off</label>
+        <label class="block text-sm font-medium" for="disable-password">Confirm your current password to {{if .Keys}}stop using the app (your security key stays){{else}}turn two-factor off{{end}}</label>
         <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="password" id="disable-password" name="password" autocomplete="current-password" required>
         <button type="submit" class="rounded-md border border-red-300 text-red-700 px-4 py-2 text-sm hover:bg-red-50">
-          Turn off
+          {{if .Keys}}Remove the app{{else}}Turn off{{end}}
         </button>
       </form>
     </section>
@@ -104,13 +157,48 @@
     </section>
   {{else}}
     <section class="rounded-lg border border-gray-200 bg-white p-4 max-w-md">
-      <p class="text-sm text-gray-600 mb-3">Not set up yet.</p>
-      <form method="post" action="/settings/2fa/enroll">
+      <p class="text-sm text-gray-600 mb-3">No authenticator app set up{{if .Keys}} — your security key covers the second step, and an app is an optional second way in{{end}}.</p>
+      <form method="post" action="/settings/2fa/enroll" class="space-y-2">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        {{if .StepUp}}
+          <label class="block text-sm font-medium" for="enroll-password">Confirm your current password to add an app</label>
+          <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="password" id="enroll-password" name="password" autocomplete="current-password" required>
+        {{end}}
         <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
-          Set Up Two-Factor Authentication
+          Set up an authenticator app
         </button>
       </form>
     </section>
   {{end}}
+
+  {{template "webauthn-helpers" .}}
+  <script nonce="{{.CSPNonce}}">
+    (function () {
+      var form = document.getElementById('add-key-form');
+      var unsupported = document.getElementById('key-unsupported');
+      if (!window.scoutWebAuthn || !scoutWebAuthn.supported()) return;
+      unsupported.hidden = true;
+      form.hidden = false;
+      var status = document.getElementById('key-status');
+      form.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        var button = form.querySelector('button[type=submit]');
+        button.disabled = true;
+        status.textContent = 'Waiting for your security key…';
+        var name = document.getElementById('key-name').value;
+        var pw = document.getElementById('key-password');
+        try {
+          var options = await scoutWebAuthn.begin('/settings/2fa/keys/begin', {
+            csrf_token: {{.CSRFToken}}, name: name, password: pw ? pw.value : ''
+          });
+          var credential = await scoutWebAuthn.create(options);
+          status.textContent = 'Saving…';
+          scoutWebAuthn.submit('/settings/2fa/keys/finish', { csrf_token: {{.CSRFToken}}, name: name, credential: credential });
+        } catch (err) {
+          status.textContent = "That didn't work: " + (err && err.message ? err.message : err);
+          button.disabled = false;
+        }
+      });
+    })();
+  </script>
 {{end}}
