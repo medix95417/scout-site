@@ -42,20 +42,21 @@ go run ./cmd/server            # run the server (reads config from env, see .env
 
 `cmd/server/main.go` documents every CLI flag (`-migrate`, `-seed`,
 `-seed-demo`, `-bootstrap-admin`, `-grant-role`, `-send-event-reminders`,
-`-backfill-thumbnails`) — read its top-of-file doc comment before adding
-a new one.
+`-refresh-calendar-feeds`, `-backfill-thumbnails`, `-backup-files`,
+`-restore-files`, `-rekey-files`/`-apply`) — read its top-of-file doc
+comment before adding a new one.
 
 ## Architecture
 
 **Package layering.** Business-logic packages (`internal/family`,
 `internal/roster`, `internal/calendar`, `internal/content`,
 `internal/approval`, `internal/audit`, `internal/ledger`,
-`internal/twofactor`, `internal/settings`, `internal/permission`,
-`internal/advancement`, `internal/leaders`, `internal/resources`,
-`internal/help`, `internal/prospect`) contain
-data model and business rules only — no HTTP or template code. All HTTP
-handlers and `html/template` rendering live together in `internal/web`
-(one package, many files split by feature area, e.g. `treasury.go`,
+`internal/twofactor`, `internal/settings`, `internal/advancement`,
+`internal/leaders`, `internal/resources`, `internal/help`,
+`internal/prospect`, `internal/newsletter`, `internal/emailtemplate`)
+contain data model and business rules only — no HTTP or template code.
+All HTTP handlers and `html/template` rendering live together in
+`internal/web` (one package, many files split by feature area, e.g. `treasury.go`,
 `twofactor.go`, `admin_roster.go`, `content_posts.go`, `audit.go`,
 `settings_admin.go`). Templates are in `internal/web/templates/`.
 
@@ -107,6 +108,23 @@ code asking "what does this role grant" must go through that function (or
 directly. Reading the map is how the approver list and the permission check
 came to disagree.
 
+**Scope answers "where," not "how much" — a privilege ceiling answers the
+second question.** A unit-wide leader's `roster.Scope` covers every member
+of the unit, the Admin included, so "may this leader manage this member's
+roster row" being true is not the same as "may this leader do this
+*particular* thing to this member." Any roster-admin action that changes
+what a login can do or reach (assigning a role, resetting a password,
+creating/removing an individual login, deactivating a member, removing a
+role) must also pass `units.Capabilities.Covers`: the acting leader's
+resolved capabilities must cover everything the role being granted (or
+the target's own roles, gathered across both units via
+`roster.MemberCapabilitiesAcrossUnits`/`FamilyCapabilitiesAcrossUnits`)
+would grant. Without this, a unit-wide Assistant Scoutmaster could make
+themselves Treasurer, or reset the Admin's password — see
+`SECURITY_AUDIT.md` pass 4 for the finding this closed. New account-
+affecting roster code should call `requireCeiling` (`internal/web/
+admin_roster.go`) the same way the existing handlers do.
+
 **Migrations.** Plain SQL files embedded from `internal/db/migrations/`
 and applied in order by `internal/db.Migrate` — it runs automatically on
 every server startup (and via `-migrate`) and needs no separate tool.
@@ -157,7 +175,15 @@ accounts, per-event trip funds, and fundraiser tracking with a
 proceeds-allocation rule. No HTTP/template code, same separation as other
 business-logic packages.
 
-**Two-factor auth (`internal/twofactor`).** Pure-stdlib TOTP (RFC 6238),
-no database code — just the cryptographic primitive, called from
-`internal/auth`. Mandatory for Treasurer/super_admin logins, opt-in for
-everyone else.
+**Two-factor auth: two kinds, either satisfies it.** A login can enrol a
+security key (WebAuthn/FIDO2 — `internal/auth/securitykey.go` on top of
+`github.com/go-webauthn/webauthn`) and/or an authenticator app
+(`internal/twofactor`, pure-stdlib TOTP, RFC 6238 — no database code,
+just the cryptographic primitive, called from `internal/auth`).
+Mandatory for Treasurer/super_admin logins, opt-in for everyone else.
+The one check that decides whether a login needs a second step at all is
+`auth.HasSecondFactor` (app confirmed *or* any key registered) — never
+`auth.TOTPStatus` alone, which would let a key-only login skip the second
+step entirely. Backup codes belong to the login, not to either factor:
+issued once with the first factor of either kind, kept as long as any
+factor remains, removed only once the last one goes.

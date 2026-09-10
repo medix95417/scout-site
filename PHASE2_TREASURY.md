@@ -157,14 +157,42 @@ credited doesn't rewrite those past allocations — each
 credited at the time, same principle as the audit log never being
 rewritten.
 
-## Two-factor authentication (TOTP)
+## Two-factor authentication (security key or TOTP)
 
 Any login that holds the Treasurer or super_admin role — in *either* unit,
 since single sign-on means one session already spans both
 troop.47-yonkers.org and pack.47-yonkers.org — is required to set up
-TOTP two-factor authentication (`internal/twofactor`, RFC 6238/RFC 4226,
-pure Go standard library — `crypto/hmac`, `crypto/sha1`,
-`encoding/base32`, no external dependency).
+two-factor authentication. **Two kinds are offered, and a login may
+enrol either or both:**
+
+- **A security key** — a YubiKey or any FIDO2 authenticator, or the
+  passkey a phone or laptop offers — via WebAuthn
+  (`internal/auth/securitykey.go`, built on
+  [`go-webauthn`](https://github.com/go-webauthn/webauthn)). The key is
+  bound to the domain both subdomains share (derived from
+  `COOKIE_DOMAIN`; `WEBAUTHN_RP_ID` overrides it), so one registered on
+  the Troop site works on the Pack's without re-enrolling. At login the
+  browser prompts for a touch; nothing typed, nothing to phish in the
+  usual sense — the signature only verifies for the origin it was made
+  for.
+- **An authenticator app** via TOTP (`internal/twofactor`, RFC 6238/
+  RFC 4226, pure Go standard library — `crypto/hmac`, `crypto/sha1`,
+  `encoding/base32`, no external dependency).
+
+Whichever a login sets up first, backup codes come with it — they belong
+to the login, not to either factor, so a login with only a security key
+still has a way in (a one-time code) on the day the key isn't to hand.
+Adding a second factor of either kind, or removing one, requires the
+current password once *any* factor already exists — the same reasoning
+`internal/twofactor`'s re-enrollment step-up always had, now applied
+uniformly: a stolen session must never be enough to add a factor of the
+attacker's choosing or strip the owner's away.
+
+At `/login/2fa`, the page offers whichever the login actually has —
+"touch your key" or "enter a code" — and the check that decides whether
+a second step is needed at all is "does this login have a security key
+*or* a confirmed authenticator app," never TOTP status alone, so a
+key-only login can't be walked past the second step by accident.
 
 **As of this update, two-factor is also available to every other login,
 as an opt-in.** It is *not* required for anyone outside Treasurer/
