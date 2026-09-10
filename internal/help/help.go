@@ -446,7 +446,7 @@ var Topics = []Topic{
 			"Roles & Permissions lists every built-in role and exactly what it grants, so you can check it against how your unit actually works. If it doesn't match, change it — the change applies to this unit only, and anything you leave alone keeps following the site's default. The one thing you can't do is take site settings away from the Site Administrator role, since that's the role that would have to put it back.",
 			"Beyond the built-in roles you can create custom ones and choose exactly which abilities they carry — editing content, approving submissions, managing the treasury, authorizing expenses. A custom role can be renamed and its abilities changed later; both take effect at once for everyone holding it.",
 			"Two roles granting the same ability are treated identically everywhere on the site. What matters is the ticks, not the name.",
-			"Anyone who can move money is required to use two-factor authentication; everyone else can turn it on for themselves under Security.",
+			"Anyone who can move money is required to use two-factor authentication; everyone else can turn it on for themselves under Security. Either kind works: a security key (a YubiKey or similar, or a phone's passkey) or an authenticator app, and someone can set up both.",
 		},
 	},
 	{

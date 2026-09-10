@@ -155,13 +155,20 @@ func (h *Handlers) CalendarFeed(w http.ResponseWriter, r *http.Request) {
 // client, the header was a way for whoever sent the request to pick the
 // scheme on links that other people receive; and it accepted any value,
 // not only "http" or "https".
+//
+// The scheme otherwise follows SecureCookie — the one setting that
+// already means "this site is served over HTTPS" (see requestOrigin,
+// which has always read it) — rather than guessing from the hostname.
+// A guess that only knew "localhost" called every other plain-HTTP
+// development origin https, which a security-key ceremony rejects,
+// since the browser signs the origin it actually loaded.
 func (h *Handlers) siteURL(r *http.Request) string {
-	scheme := "https"
+	scheme := "http"
+	if h.SecureCookie {
+		scheme = "https"
+	}
 	if proto := strings.ToLower(r.Header.Get("X-Forwarded-Proto")); h.TrustProxyHeaders && (proto == "http" || proto == "https") {
 		scheme = proto
-	} else if r.TLS == nil && (r.Host == "localhost" || len(r.Host) > 9 && r.Host[:9] == "127.0.0.1") {
-		// Local development over plain HTTP.
-		scheme = "http"
 	}
 	return scheme + "://" + r.Host
 }

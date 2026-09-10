@@ -27,6 +27,23 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **Security keys as a second factor.** Under Security, a login can now
+  register a security key — a YubiKey or similar, or the passkey a phone
+  or laptop offers — instead of, or as well as, an authenticator app.
+  At login the second step offers whichever the person has: touch the
+  key, or type the app's code; and the backup codes issued when the
+  first factor of either kind was set up still work when neither is to
+  hand. Several keys can be registered (one on the keyring and one in
+  the drawer is what every key maker recommends), each named so it can
+  be recognised and removed later. Adding or removing a key, like
+  replacing the app, asks for the password once any second factor
+  exists, so a session alone can never change what protects it. Keys
+  are bound to the domain both subdomains share, so one set up on the
+  Troop site works on the Pack's; see `WEBAUTHN_RP_ID` in `.env.example`
+  for the one deployment shape where that needs saying explicitly.
+
 ### Fixed
 
 - **Security — a leader can no longer hand out, or reach into, more

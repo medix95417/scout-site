@@ -18,8 +18,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -103,6 +105,17 @@ type Handlers struct {
 	// this site to post arbitrary text into a leader's inbox as fast as
 	// they can loop.
 	joinLimiter *ratelimit.Limiter
+
+	// WebAuthnRPID overrides the relying-party id security keys are bound
+	// to (see rpIDFor in securitykey.go). Normally derived from
+	// CookieDomain; set from config for a deployment whose units live on
+	// unrelated domains.
+	WebAuthnRPID string
+
+	// webauthnRP is built on first use from the units table — see
+	// Handlers.webAuthn.
+	webauthnMu sync.Mutex
+	webauthnRP *webauthn.WebAuthn
 
 	home                 *template.Template
 	login                *template.Template
@@ -348,7 +361,7 @@ func redirectTo(path string) http.HandlerFunc {
 // assembled, so that TestEveryTemplateParses exercises the same path New
 // does rather than a copy of it that could drift.
 func parsePageTemplate(page string) (*template.Template, error) {
-	return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/_image-picker.html", "templates/"+page)
+	return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/_image-picker.html", "templates/_webauthn.html", "templates/"+page)
 }
 
 func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *mailer.Mailer, store *storage.Store) (*Handlers, error) {
@@ -690,6 +703,11 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /settings/2fa/enroll", h.TwoFactorEnroll)
 	mux.HandleFunc("POST /settings/2fa/confirm", h.TwoFactorConfirm)
 	mux.HandleFunc("POST /settings/2fa/disable", h.TwoFactorDisable)
+	mux.HandleFunc("POST /settings/2fa/keys/begin", h.SecurityKeyBegin)
+	mux.HandleFunc("POST /settings/2fa/keys/finish", h.SecurityKeyFinish)
+	mux.HandleFunc("POST /settings/2fa/keys/{id}/delete", h.SecurityKeyDelete)
+	mux.HandleFunc("POST /login/2fa/key/begin", h.LoginSecurityKeyBegin)
+	mux.HandleFunc("POST /login/2fa/key/finish", h.LoginSecurityKeyFinish)
 	mux.HandleFunc("POST /settings/password", h.AccountChangePassword)
 
 	// Phase 2: fund accounting — Treasurer-only unless noted.
@@ -1149,10 +1167,10 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 			}
 		}
 		if needsNudge {
-			if _, confirmed, err := auth.TOTPStatus(r.Context(), h.Pool, user.ID); err != nil {
+			if has, err := auth.HasSecondFactor(r.Context(), h.Pool, user.ID); err != nil {
 				log.Printf("web: checking two-factor status: %v", err)
 			} else {
-				data.NeedsTwoFactorSetup = !confirmed
+				data.NeedsTwoFactorSetup = !has
 			}
 		}
 	}
@@ -1725,13 +1743,17 @@ func (h *Handlers) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 // baseData.NeedsTwoFactorSetup in h.base, which never blocks a login
 // outright, only this actually-enrolled check does.
 func (h *Handlers) completeLogin(w http.ResponseWriter, r *http.Request, userID, next string) {
-	_, confirmed, err := auth.TOTPStatus(r.Context(), h.Pool, userID)
+	// Any second factor — a confirmed authenticator app or a security
+	// key — sends the login through /login/2fa, which offers whichever
+	// the person has. TOTPStatus alone would let a key-only login
+	// straight in.
+	needsSecondStep, err := auth.HasSecondFactor(r.Context(), h.Pool, userID)
 	if err != nil {
 		log.Printf("web: checking two-factor status: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if confirmed {
+	if needsSecondStep {
 		pendingToken, pendingExpiresAt, err := auth.CreatePendingTwoFactorLogin(r.Context(), h.Pool, userID, next)
 		if err != nil {
 			log.Printf("web: creating pending two-factor login: %v", err)

@@ -37,8 +37,8 @@ const NumBackupCodes = 10
 
 var (
 	// ErrTOTPNotEnrolled is returned by ConfirmTOTPEnrollment /
-	// VerifyTOTPOrBackupCode when a user has no pending or confirmed TOTP
-	// credential at all.
+	// VerifySecondFactorCode when a user has no second factor at all —
+	// no confirmed TOTP credential and no security key.
 	ErrTOTPNotEnrolled = errors.New("auth: no two-factor enrollment in progress for this account")
 
 	// ErrInvalidTOTPCode covers a wrong 6-digit code or a backup code that
@@ -95,20 +95,21 @@ func PendingTOTPSecret(ctx context.Context, pool *pgxpool.Pool, userID string) (
 // the caller can show it (grouped via twofactor.FormatSecretForDisplay)
 // and the otpauth:// URI for enrollment.
 //
-// Re-enrolling over an already-*confirmed* credential requires currentPassword
-// to verify against the account's stored hash first (step-up
+// Enrolling on a login that already has a second factor — a confirmed
+// app being replaced, or a security key — requires currentPassword to
+// verify against the account's stored hash first (step-up
 // authentication) — without this, anyone who merely holds a valid,
 // logged-in session (e.g. a stolen session cookie, or a shared/unlocked
-// device) could silently swap out a Treasurer/super_admin login's
-// two-factor credential, defeating the entire point of requiring a second
-// factor. Pass an empty currentPassword for first-time enrollment
-// (nothing confirmed yet to protect, so nothing to step up past).
+// device) could silently add or swap out a Treasurer/super_admin login's
+// second factor, defeating the entire point of requiring one. Pass an
+// empty currentPassword for a first enrollment (nothing confirmed yet to
+// protect, so nothing to step up past).
 func BeginTOTPEnrollment(ctx context.Context, pool *pgxpool.Pool, user User, currentPassword string) (secret string, err error) {
-	_, confirmed, err := TOTPStatus(ctx, pool, user.ID)
+	has, err := HasSecondFactor(ctx, pool, user.ID)
 	if err != nil {
 		return "", err
 	}
-	if confirmed && !VerifyPassword(user, currentPassword) {
+	if has && !VerifyPassword(user, currentPassword) {
 		return "", ErrInvalidCredentials
 	}
 
@@ -165,28 +166,20 @@ func ConfirmTOTPEnrollment(ctx context.Context, pool *pgxpool.Pool, userID, code
 		return nil, err
 	}
 
-	// Replace any previous batch of backup codes — old ones from a prior
-	// enrollment shouldn't keep working once someone re-enrolls.
-	if _, err := tx.Exec(ctx, `DELETE FROM totp_backup_codes WHERE user_id = $1`, userID); err != nil {
+	// Backup codes belong to the account, not to the app. Confirming an
+	// app on a login that already has a security key leaves the batch
+	// that key issued alone — replacing it would silently invalidate
+	// codes the person wrote down. A re-enrollment of the app on a login
+	// with no key still gets a fresh batch, as it always did.
+	var codes []string
+	var hasKey bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM security_keys WHERE user_id = $1)`, userID).Scan(&hasKey); err != nil {
 		return nil, err
 	}
-
-	codes := make([]string, 0, NumBackupCodes)
-	for i := 0; i < NumBackupCodes; i++ {
-		plain, err := twofactor.GenerateBackupCode()
-		if err != nil {
+	if !hasKey {
+		if codes, err = issueBackupCodesTx(ctx, tx, userID); err != nil {
 			return nil, err
 		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO totp_backup_codes (user_id, code_hash) VALUES ($1, $2)`, userID, string(hash),
-		); err != nil {
-			return nil, err
-		}
-		codes = append(codes, plain)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -195,11 +188,14 @@ func ConfirmTOTPEnrollment(ctx context.Context, pool *pgxpool.Pool, userID, code
 	return codes, nil
 }
 
-// DisableTOTP removes a user's TOTP credential and every backup code —
-// available to a logged-in user who wants to turn two-factor back off
-// (e.g. stepping down as Treasurer). If they still hold a TreasuryRoles
-// role, internal/web's login flow will prompt them to set it up again
-// the next time they sign in.
+// DisableTOTP removes a user's TOTP credential — available to a logged-in
+// user who wants to stop using the app (e.g. stepping down as Treasurer).
+// If they still hold a treasury role, internal/web's login flow will
+// prompt them to set something up again the next time they sign in.
+//
+// The backup codes go only if nothing is left: a login that still has a
+// security key still has a second step, and the codes are what stands in
+// for the key when it is not to hand.
 func DisableTOTP(ctx context.Context, pool *pgxpool.Pool, userID string) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -210,36 +206,51 @@ func DisableTOTP(ctx context.Context, pool *pgxpool.Pool, userID string) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM totp_credentials WHERE user_id = $1`, userID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM totp_backup_codes WHERE user_id = $1`, userID); err != nil {
+	still, err := hasSecondFactorTx(ctx, tx, userID)
+	if err != nil {
 		return err
+	}
+	if !still {
+		if _, err := tx.Exec(ctx, `DELETE FROM totp_backup_codes WHERE user_id = $1`, userID); err != nil {
+			return err
+		}
 	}
 	return tx.Commit(ctx)
 }
 
-// VerifyTOTPOrBackupCode checks a user-submitted code at login time: a
-// current TOTP code first, then (if that doesn't match) an unused backup
-// code. A matching backup code is marked used and can never be redeemed
-// again.
-func VerifyTOTPOrBackupCode(ctx context.Context, pool *pgxpool.Pool, userID, code string) (bool, error) {
+// VerifySecondFactorCode checks a user-submitted code at login time: a
+// current TOTP code first, if an authenticator app is confirmed, then (if
+// that doesn't match, or there is no app) an unused backup code. A
+// matching backup code is marked used and can never be redeemed again.
+//
+// A login with a security key and no app reaches this with a backup code
+// when the key is not to hand, so "no confirmed app" is not by itself a
+// refusal — only "no second factor of any kind" is.
+func VerifySecondFactorCode(ctx context.Context, pool *pgxpool.Pool, userID, code string) (bool, error) {
 	var secret string
 	var confirmedAt *time.Time
 	err := pool.QueryRow(ctx,
 		`SELECT secret, confirmed_at FROM totp_credentials WHERE user_id = $1`, userID,
 	).Scan(&secret, &confirmedAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return false, err
+	}
+	appConfirmed := err == nil && confirmedAt != nil
+
+	if appConfirmed {
+		if ok, err := twofactor.Verify(secret, code); err != nil {
+			return false, err
+		} else if ok {
+			return true, nil
+		}
+	} else {
+		_, keys, err := SecondFactorStatus(ctx, pool, userID)
+		if err != nil {
+			return false, err
+		}
+		if keys == 0 {
 			return false, ErrTOTPNotEnrolled
 		}
-		return false, err
-	}
-	if confirmedAt == nil {
-		return false, ErrTOTPNotEnrolled
-	}
-
-	if ok, err := twofactor.Verify(secret, code); err != nil {
-		return false, err
-	} else if ok {
-		return true, nil
 	}
 
 	// Not a valid TOTP code — try it as a backup code instead. Backup
@@ -363,12 +374,12 @@ func VerifyPendingTwoFactorLogin(ctx context.Context, pool *pgxpool.Pool, token,
 	}
 
 	// The actual TOTP/backup-code check happens against `pool`, not `tx` —
-	// VerifyTOTPOrBackupCode may write a backup-code's used_at, which
+	// VerifySecondFactorCode may write a backup-code's used_at, which
 	// should stick even though this function's own transaction is about
 	// to either commit a small counter update or a delete; there's no
 	// correctness reason those two writes need to be atomic with each
 	// other.
-	ok, verr := VerifyTOTPOrBackupCode(ctx, pool, userID, code)
+	ok, verr := VerifySecondFactorCode(ctx, pool, userID, code)
 	if verr != nil {
 		return "", "", verr
 	}
@@ -392,4 +403,46 @@ func VerifyPendingTwoFactorLogin(ctx context.Context, pool *pgxpool.Pool, token,
 		return "", "", err
 	}
 	return userID, next, nil
+}
+
+// PendingTwoFactorLoginOwner reads who a pending login belongs to, and
+// where to send them afterwards, without counting an attempt or
+// consuming anything — the security-key path needs this twice (to build
+// the challenge and to check the answer) before it is entitled to a
+// session.
+func PendingTwoFactorLoginOwner(ctx context.Context, pool *pgxpool.Pool, token string) (userID, next string, err error) {
+	err = pool.QueryRow(ctx, `
+		SELECT user_id, next FROM pending_two_factor_logins
+		WHERE token = $1 AND expires_at > now() AND attempts < $2
+	`, hashToken(token), maxPendingTwoFactorAttempts).Scan(&userID, &next)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", ErrInvalidPendingLogin
+	}
+	return userID, next, err
+}
+
+// RecordPendingTwoFactorFailure counts a failed security-key answer
+// against the pending login, under the same cap as a wrong code. A
+// signature is not guessable the way six digits are, so the cap is not
+// doing the same work here — but one cap is easier to reason about than
+// two, and a pending login that keeps failing is one to discard.
+func RecordPendingTwoFactorFailure(ctx context.Context, pool *pgxpool.Pool, token string) error {
+	_, err := pool.Exec(ctx,
+		`UPDATE pending_two_factor_logins SET attempts = attempts + 1 WHERE token = $1`, hashToken(token))
+	return err
+}
+
+// ConsumePendingTwoFactorLogin deletes the pending row once a security
+// key has answered correctly, so the caller can issue the real session.
+// Returns ErrInvalidPendingLogin if it was already gone — two answers to
+// one pending login must not both succeed.
+func ConsumePendingTwoFactorLogin(ctx context.Context, pool *pgxpool.Pool, token string) error {
+	tag, err := pool.Exec(ctx, `DELETE FROM pending_two_factor_logins WHERE token = $1 AND expires_at > now()`, hashToken(token))
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrInvalidPendingLogin
+	}
+	return nil
 }
