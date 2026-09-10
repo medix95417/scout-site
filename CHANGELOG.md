@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.10.0] — 2026-09-10
+
 ### Added
 
 - **Security keys as a second factor.** Under Security, a login can now
