@@ -198,10 +198,29 @@ func (h *Handlers) TwoFactorConfirm(w http.ResponseWriter, r *http.Request) {
 	h.render(w, h.twoFactorBackupCodes, data)
 }
 
+// TwoFactorDisable turns two-factor off, and asks for the current
+// password first.
+//
+// Re-enrolling over a confirmed credential already required the password
+// (see auth.BeginTOTPEnrollment), on the reasoning that a stolen session
+// cookie or an unlocked laptop must not be enough to swap out a
+// Treasurer's second factor. Turning it off is strictly more than
+// swapping it, and did not ask — one POST from a live session and the
+// account was back to password-only. Same bar for both now: the thing a
+// second factor protects against is precisely "holds a session, is not
+// the owner", so a session alone can never be what removes it.
 func (h *Handlers) TwoFactorDisable(w http.ResponseWriter, r *http.Request) {
 	user, loggedIn := auth.UserFromContext(r.Context())
 	if !loggedIn {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if !auth.VerifyPassword(user, r.FormValue("password")) {
+		h.renderTwoFactorSettings(w, r, user.ID, "That password didn't match — two-factor is still on. Re-enter your current password to turn it off.")
 		return
 	}
 	if err := auth.DisableTOTP(r.Context(), h.Pool, user.ID); err != nil {

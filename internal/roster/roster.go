@@ -644,34 +644,62 @@ func fixedRoleOptions(unitType string, scope Scope) []RoleOption {
 	}
 }
 
-// AllowedRoles returns every role the acting scope may assign on this
+// AllowedRoles returns every role the acting leader may assign on this
 // unit — the fixed code-defined set (see fixedRoleOptions) plus any
 // custom roles a super_admin has created for this unit (see
-// CreateCustomRole). Custom roles are only offered to unit-wide leaders,
-// same restriction as the leadership tier of the fixed set: a scoped Den
-// Leader can't grant a custom role that might carry real capabilities
-// (edit_content, manage_ledger, etc.) any more than they could promote
-// someone straight to Cubmaster.
-func AllowedRoles(ctx context.Context, pool *pgxpool.Pool, unitType, unitID string, scope Scope) ([]RoleOption, error) {
+// CreateCustomRole), with two filters applied.
+//
+// The first is scope. Custom roles are only offered to unit-wide
+// leaders, same restriction as the leadership tier of the fixed set: a
+// scoped Den Leader can't grant a custom role that might carry real
+// capabilities any more than they could promote someone to Cubmaster.
+//
+// The second is the ceiling, and it is the one that matters once the
+// leader is unit-wide: a role is offered only if the leader already
+// holds everything it grants (see units.Capabilities.Covers). Without
+// it, "unit-wide" meant an Assistant Scoutmaster could make themselves
+// Treasurer from the roster form, or hand out a custom role that grants
+// super_admin, because the scope check asks where a leader may act and
+// never what they may hand out. The ceiling reads each role's
+// capabilities through CapabilitiesForRoles, so a unit that has changed
+// what a built-in role grants is measured by what it grants here.
+//
+// actor is the resolved capability set of whoever is doing the
+// assigning, in this unit. There is no way to call this without one, on
+// purpose: every place a role is assigned goes through here or
+// IsAllowedRole, and the ceiling is the kind of check that is most
+// dangerous when one call site forgets it.
+func AllowedRoles(ctx context.Context, pool *pgxpool.Pool, unitType, unitID string, scope Scope, actor units.Capabilities) ([]RoleOption, error) {
 	opts := fixedRoleOptions(unitType, scope)
-	if !scope.UnitWide {
-		return opts, nil
+	if scope.UnitWide {
+		custom, err := ListCustomRoles(ctx, pool, unitID)
+		if err != nil {
+			return nil, err
+		}
+		for _, cr := range custom {
+			opts = append(opts, RoleOption{Value: cr.Slug, Label: cr.Label})
+		}
 	}
-	custom, err := ListCustomRoles(ctx, pool, unitID)
-	if err != nil {
-		return nil, err
+
+	within := make([]RoleOption, 0, len(opts))
+	for _, opt := range opts {
+		granted, err := RoleCapabilities(ctx, pool, unitID, opt.Value)
+		if err != nil {
+			return nil, err
+		}
+		if actor.Covers(granted) {
+			within = append(within, opt)
+		}
 	}
-	for _, cr := range custom {
-		opts = append(opts, RoleOption{Value: cr.Slug, Label: cr.Label})
-	}
-	return opts, nil
+	return within, nil
 }
 
 // IsAllowedRole reports whether role is present in AllowedRoles — the
-// server-side check backing the client-side dropdown, since a scoped
-// leader could otherwise POST an arbitrary role value directly.
-func IsAllowedRole(ctx context.Context, pool *pgxpool.Pool, unitType, unitID string, scope Scope, role string) (bool, error) {
-	opts, err := AllowedRoles(ctx, pool, unitType, unitID, scope)
+// server-side check backing the client-side dropdown, since a leader
+// could otherwise POST an arbitrary role value directly. Takes the same
+// actor capabilities as AllowedRoles, for the same reason.
+func IsAllowedRole(ctx context.Context, pool *pgxpool.Pool, unitType, unitID string, scope Scope, actor units.Capabilities, role string) (bool, error) {
+	opts, err := AllowedRoles(ctx, pool, unitType, unitID, scope, actor)
 	if err != nil {
 		return false, err
 	}

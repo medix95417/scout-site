@@ -96,6 +96,19 @@ const (
 
 var ErrInvalidCredentials = errors.New("auth: invalid email or password")
 
+// unknownAccountHash is compared against when the email has no account,
+// so that path takes as long as a real password check (see Authenticate).
+// A hash of a random value at DefaultCost, never a password anyone holds;
+// generated once at startup so its cost matches the stored hashes' cost
+// on this build rather than whatever cost a checked-in constant carried.
+var unknownAccountHash = func() []byte {
+	h, err := bcrypt.GenerateFromPassword([]byte("scout-site unknown account placeholder"), bcrypt.DefaultCost)
+	if err != nil {
+		panic("auth: generating placeholder hash: " + err.Error())
+	}
+	return h
+}()
+
 // ErrAccountLocked is returned by Authenticate when an email address has
 // failed to log in MaxLoginFailures times within LoginLockoutWindow.
 // Returned uniformly whether or not the email has a real account — see
@@ -235,6 +248,13 @@ func Authenticate(ctx context.Context, pool *pgxpool.Pool, email, password strin
 		normalized,
 	).Scan(&u.ID, &u.FamilyID, &u.MemberID, &u.Email, &u.PasswordHash, &u.MustChangePassword)
 	if err != nil {
+		// Spend the same bcrypt comparison a wrong password costs. Without
+		// it, "no such account" answered in under a millisecond and "wrong
+		// password" in tens of them, and the difference was measurable from
+		// across the internet — which turned the login form into a way to
+		// find out which parents' addresses have logins here, exactly what
+		// the uniform error message is meant to withhold.
+		_ = bcrypt.CompareHashAndPassword(unknownAccountHash, []byte(password))
 		recordLoginFailureBestEffort(ctx, pool, normalized)
 		return User{}, ErrInvalidCredentials
 	}

@@ -27,6 +27,35 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Security — a leader can no longer hand out, or reach into, more
+  access than they hold.** The roster pages checked *where* a leader may
+  act (their den, or the whole unit) and never *how much* the other
+  person holds. So a Scoutmaster, Assistant Scoutmaster or Cubmaster —
+  whose scope is the whole unit — could make themselves Treasurer from
+  the role dropdown, reset the Admin's password and read the temporary
+  one off the screen, create a brand-new login on the Admin's member
+  record (which carried every Admin role and no two-factor prompt), or
+  deactivate the Admin. There is now a ceiling: a leader may assign only
+  a role they could hold themselves, and may reset the password of,
+  create a login for, deactivate, or remove a role from only someone who
+  holds no more than they do. Assigning a Patrol Leader still works for
+  an Assistant Scoutmaster, since submitting for approval is the lesser
+  form of editing. The refusal says what to do instead — ask an Admin.
+  Measured across both units, so the Pack's Admin is an Admin to a Troop
+  leader too. See SECURITY_AUDIT.md, pass 4.
+- **Security — turning two-factor off now asks for your password**, the
+  same as re-enrolling already did. Before, anyone holding a signed-in
+  session could switch it off with one click, which is the one thing a
+  second factor exists to prevent.
+- **Security — three smaller hardenings.** The login form now takes the
+  same time whether or not an email has an account, so timing cannot be
+  used to find out which parents are registered; links built for email
+  and calendar feeds believe a proxy's `X-Forwarded-Proto` header only
+  when `TRUST_PROXY_HEADERS` says to; and the activity-log CSV export
+  quotes any cell a spreadsheet would otherwise run as a formula.
+
 ## [2.9.1] — 2026-09-08
 
 ### Added

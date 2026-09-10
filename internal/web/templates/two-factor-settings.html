@@ -47,8 +47,10 @@
           Re-enroll (new device)
         </button>
       </form>
-      <form method="post" action="/settings/2fa/disable" class="inline">
+      <form method="post" action="/settings/2fa/disable" class="space-y-2">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label class="block text-sm font-medium" for="disable-password">Confirm your current password to turn two-factor off</label>
+        <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="password" id="disable-password" name="password" autocomplete="current-password" required>
         <button type="submit" class="rounded-md border border-red-300 text-red-700 px-4 py-2 text-sm hover:bg-red-50">
           Turn off
         </button>

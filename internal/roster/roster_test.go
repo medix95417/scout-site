@@ -114,7 +114,7 @@ func TestIsAllowedRole_ScopedLeaderCannotAssignLeadership(t *testing.T) {
 	scoped := Scope{SubGroupIDs: map[string]bool{denID: true}}
 
 	for _, role := range []string{"parent", "scout"} {
-		ok, err := IsAllowedRole(ctx, f.pool, f.unitType, f.unitID, scoped, role)
+		ok, err := IsAllowedRole(ctx, f.pool, f.unitType, f.unitID, scoped, adminCaps, role)
 		if err != nil {
 			t.Fatalf("IsAllowedRole(%q): %v", role, err)
 		}
@@ -123,7 +123,7 @@ func TestIsAllowedRole_ScopedLeaderCannotAssignLeadership(t *testing.T) {
 		}
 	}
 	for _, role := range []string{"cubmaster", "den_leader", "treasurer", "super_admin", "scoutmaster"} {
-		ok, err := IsAllowedRole(ctx, f.pool, f.unitType, f.unitID, scoped, role)
+		ok, err := IsAllowedRole(ctx, f.pool, f.unitType, f.unitID, scoped, adminCaps, role)
 		if err != nil {
 			t.Fatalf("IsAllowedRole(%q): %v", role, err)
 		}
@@ -132,7 +132,7 @@ func TestIsAllowedRole_ScopedLeaderCannotAssignLeadership(t *testing.T) {
 		}
 	}
 	// A role that doesn't exist at all is refused rather than passed through.
-	if ok, _ := IsAllowedRole(ctx, f.pool, f.unitType, f.unitID, scoped, "made_up_role"); ok {
+	if ok, _ := IsAllowedRole(ctx, f.pool, f.unitType, f.unitID, scoped, adminCaps, "made_up_role"); ok {
 		t.Error("an unknown role slug must not be assignable")
 	}
 }
@@ -150,12 +150,12 @@ func TestIsAllowedRole_CustomRolesAreUnitWideOnly(t *testing.T) {
 	}
 
 	unitWide := Scope{UnitWide: true}
-	if ok, err := IsAllowedRole(ctx, f.pool, f.unitType, f.unitID, unitWide, cr.Slug); err != nil || !ok {
+	if ok, err := IsAllowedRole(ctx, f.pool, f.unitType, f.unitID, unitWide, adminCaps, cr.Slug); err != nil || !ok {
 		t.Errorf("a unit-wide leader should be able to assign the custom role (ok=%v err=%v)", ok, err)
 	}
 
 	scoped := Scope{SubGroupIDs: map[string]bool{"some-patrol": true}}
-	if ok, _ := IsAllowedRole(ctx, f.pool, f.unitType, f.unitID, scoped, cr.Slug); ok {
+	if ok, _ := IsAllowedRole(ctx, f.pool, f.unitType, f.unitID, scoped, adminCaps, cr.Slug); ok {
 		t.Error("a scoped leader must NOT be able to assign a custom role")
 	}
 }
@@ -174,10 +174,10 @@ func TestIsAllowedRole_CustomRolesDoNotLeakAcrossUnits(t *testing.T) {
 	}
 
 	unitWide := Scope{UnitWide: true}
-	if ok, _ := IsAllowedRole(ctx, troop.pool, troop.unitType, troop.unitID, unitWide, cr.Slug); !ok {
+	if ok, _ := IsAllowedRole(ctx, troop.pool, troop.unitType, troop.unitID, unitWide, adminCaps, cr.Slug); !ok {
 		t.Error("the role should be assignable in the unit that owns it")
 	}
-	if ok, _ := IsAllowedRole(ctx, pack.pool, pack.unitType, pack.unitID, unitWide, cr.Slug); ok {
+	if ok, _ := IsAllowedRole(ctx, pack.pool, pack.unitType, pack.unitID, unitWide, adminCaps, cr.Slug); ok {
 		t.Error("a custom role must not be assignable in a different unit")
 	}
 }
@@ -529,3 +529,9 @@ func TestDeleteMember_RefusesWhenTheyHaveMoney(t *testing.T) {
 		t.Fatalf("the books should still balance after a refused delete, got %d", sum)
 	}
 }
+
+// adminCaps is the actor the scope tests above run as: an Admin covers
+// every role, so the ceiling never decides those tests and they keep
+// testing scope alone. The ceiling has its own tests in
+// privilege_test.go.
+var adminCaps = units.CapabilitiesOf(units.CapSuperAdmin)

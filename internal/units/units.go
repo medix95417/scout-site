@@ -508,3 +508,50 @@ func RolesForFamilyInUnit(ctx context.Context, pool *pgxpool.Pool, familyID, uni
 	}
 	return roles, rows.Err()
 }
+
+// Covers reports whether c is enough to hand out, or act on an account
+// that holds, every capability in needed.
+//
+// This is the ceiling on the roster admin pages. A leader who can edit
+// the roster can assign roles and reset passwords, and without a ceiling
+// those two together are a way up: assign yourself Treasurer, or reset
+// the Admin's password and sign in as them. The rule that closes both is
+// the same rule — you may only grant what you could do yourself, and you
+// may only administer a login that holds no more than you do.
+//
+// Two capabilities are read with their meaning rather than as bare
+// strings. super_admin is the top of the ladder and covers everything,
+// so an Admin is never told they hold too little to act. And
+// submit_for_approval is the lesser form of edit_content — it is what a
+// Senior Patrol Leader gets so their events go through an Assistant
+// Scoutmaster — so anyone who edits without approval covers it, or an
+// Assistant Scoutmaster could not appoint a Patrol Leader.
+func (c Capabilities) Covers(needed Capabilities) bool {
+	if c.has(CapSuperAdmin) {
+		return true
+	}
+	for capability, held := range needed {
+		if !held {
+			continue
+		}
+		if c.has(capability) {
+			continue
+		}
+		if capability == CapSubmitForApproval && c.has(CapEditContent) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// CapabilitiesOf builds a set from a list of capability names — the
+// shape the ceiling is compared against when the input is a role's
+// stored list rather than a resolved set.
+func CapabilitiesOf(names ...string) Capabilities {
+	caps := make(Capabilities, len(names))
+	for _, n := range names {
+		caps[n] = true
+	}
+	return caps
+}
