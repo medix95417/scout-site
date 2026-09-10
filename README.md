@@ -17,15 +17,6 @@ exist on your machine at all. If you don't have Docker yet, install
 Docker Desktop (Mac/Windows) or Docker Engine (Linux) first, then come
 back here.
 
-One caveat worth knowing up front: this code was written and
-formatting-checked (`gofmt`), and every database query was manually
-cross-checked against the schema and struct field order, but it's never
-been compiled — the environment that generated it had no internet access
-to fetch Go's dependencies. The first `docker compose build` below is
-where that gets tested for real, on a machine (yours) that has normal
-internet access. If it fails, send me the exact error — likely a small,
-quick fix, not a sign anything is fundamentally wrong.
-
 ## Running with Docker Compose (the only path you need)
 
 ```bash
@@ -359,9 +350,9 @@ this configuration; see `SECURITY_AUDIT.md`.
 ## Versioning
 
 Changes are tracked in `CHANGELOG.md` and tagged in git as `vX.Y.Z`
-(current version: **v1.6.3**). Each delivery from here forward gets its
-own commit and tag — see `CHANGELOG.md` for the full history and how
-version numbers are chosen.
+(current version: **v2.10.0**). Every delivery gets its own commit and
+tag — see `CHANGELOG.md` for the full history and how version numbers
+are chosen.
 
 ## Repo layout
 
@@ -416,3 +407,52 @@ Phase 2 additions:
   `settings_admin.go` and by `internal/web`'s login/nav logic. No HTTP
   code — same data-model-only separation as `internal/ledger` and
   `internal/twofactor`.
+
+Added since Phase 2, backing the features described above:
+
+- `internal/mailer` — SMTP or Fastmail JMAP sending, with SMTP host/port/
+  username/from overridable per-unit from `/admin/settings`. Optional and
+  degrades gracefully — unconfigured, "forgot password" and event
+  reminders just no-op with a log line instead of failing.
+- `internal/storage` — S3-compatible object storage client for the file
+  library and event/gallery photos. Also optional and gracefully
+  degrading, same pattern as `internal/mailer`.
+- `internal/files` — the file library's data model: uploads, categories
+  (general/event photo), display names, per-event linking, and the
+  content-addressed keys used for hosted newsletter images.
+- `internal/thumbnail` — server-side image thumbnail generation, run
+  eagerly at upload time and on demand for older files.
+- `internal/resources` — the Resources page's data model (public and
+  members-only documents/links, either a pasted URL or a file-library
+  pick).
+- `internal/leaders` — the public "Our Leaders" page's data model.
+- `internal/advancement` — rank/badge advancement records, with a
+  per-unit on/off toggle.
+- `internal/prospect` — "interested in joining" enquiries from the public
+  `/join` form, tracked by leaders on `/admin/prospects`; deliberately
+  separate from `internal/roster` since a prospect has no family, login,
+  or roles.
+- `internal/emailtemplate` — saved email bodies a unit can reuse, shared
+  by prospect campaigns and newsletters (`kind` distinguishes the two).
+- `internal/newsletter` — newsletter drafting, HTML sanitizing (a strict
+  allowlist mode for the WYSIWYG editor, plus an opt-in permissive mode
+  for a designed template an Admin has reviewed), and sending.
+- `internal/icalendar` — parses the `.ics` feeds a unit can subscribe an
+  external calendar from.
+- `internal/reminders` — the event-reminder email logic behind
+  `-send-event-reminders`.
+- `internal/help` — the in-app help catalog (`/help`); each topic
+  declares the capability and feature toggle it needs, so help can't
+  describe something the reader can't do or the unit has switched off.
+- `internal/csrf` — double-submit-cookie CSRF protection, applied to
+  every `POST` request regardless of login state.
+- `internal/csp` — issues the per-request nonce behind the site's
+  Content-Security-Policy header.
+- `internal/ratelimit` — small in-memory rate limiter for the handful of
+  endpoints an anonymous visitor can reach (login, password reset, the
+  public join/order/storefront forms).
+- `internal/backup` / `internal/demoseed` — support code for the
+  `-backup-files`/`-restore-files` and `-seed-demo` CLI flags,
+  respectively.
+- `internal/version` — this build's release version, shown in the
+  site footer and set by the release tooling.
