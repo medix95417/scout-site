@@ -81,7 +81,7 @@
               <div>
                 <div class="font-medium">{{.Title}}</div>
                 <div class="text-xs text-gray-500 mb-1">{{.PostedOn}}</div>
-                <p class="whitespace-pre-line">{{.Excerpt}}</p>
+                <div class="whitespace-pre-line">{{.BodyHTML}}</div>
               </div>
               {{if $.Scope.CanManageSubGroup $.Group.ID}}
                 <form method="post" action="/admin/groups/{{$.Group.ID}}/news/{{.ID}}/delete" class="flex-shrink-0"

@@ -14,6 +14,7 @@ package web
 
 import (
 	"context"
+	"html/template"
 	"log"
 	"net/http"
 	"regexp"
@@ -112,7 +113,7 @@ var (
 		PageType: "post", Label: "News Post", LabelPlural: "News",
 		BasePath: "/admin/news", PublicPath: "/news",
 		BodyLabel:       "Announcement",
-		BodyHelp:        "Plain text — line breaks are preserved, but no HTML.",
+		BodyHelp:        "Plain text — line breaks are preserved, but no HTML. A web address becomes a link on its own. Put a YouTube link on a line by itself and it shows as a video; in the middle of a sentence it stays a link.",
 		BodyPlaceholder: "What's the news?",
 	}
 	// Label/LabelPlural are "Photo Album"/"Photos" rather than the
@@ -164,6 +165,11 @@ type publicPostView struct {
 	// words again.
 	Truncated bool
 	Photos    []content.GalleryPhoto // galleries only; nil for news
+	// BodyHTML is the whole post, rendered — set only where a listing
+	// shows full posts rather than excerpts (a den/patrol page), so a
+	// link or a YouTube video works there the same as on the post's own
+	// page. See renderPostBody.
+	BodyHTML template.HTML
 }
 
 // parsePhotoDate reads the optional "photo_date" form field. An empty or
@@ -269,9 +275,9 @@ func (h *Handlers) newsDetail(w http.ResponseWriter, r *http.Request, p content.
 	data := struct {
 		baseData
 		Title    string
-		Body     string
+		Body     template.HTML // built by renderPostBody — the only user text this package hands to the template pre-rendered
 		PostedOn string
-	}{baseData: h.base(r, p.Title), Title: p.Title, Body: p.Body, PostedOn: postedOn(p.DisplayDate())}
+	}{baseData: h.base(r, p.Title), Title: p.Title, Body: renderPostBody(p.Body), PostedOn: postedOn(p.DisplayDate())}
 	h.render(w, h.newsDetailTmpl, data)
 }
 

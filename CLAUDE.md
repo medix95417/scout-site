@@ -125,6 +125,18 @@ themselves Treasurer, or reset the Admin's password — see
 affecting roster code should call `requireCeiling` (`internal/web/
 admin_roster.go`) the same way the existing handlers do.
 
+**One `template.HTML` for user content, and it is `renderPostBody`.**
+`html/template`'s contextual escaping is the XSS defence, so nothing
+user-typed is ever cast to `template.HTML` — except news-post bodies,
+which go through `renderPostBody` (`internal/web/body_render.go`) to
+turn URLs into links and an own-line YouTube URL into an embedded
+player. That function escapes every text segment itself and constructs
+the only tags it emits; `TestOnlyTheBodyRendererMakesTemplateHTML`
+fails if a second `template.HTML(` appears anywhere else in
+`internal/web`. Need rich output from user text elsewhere? Extend that
+function, don't add another cast. (`template.JS` casts of server-owned
+constants — the starter templates — are a different, reviewed thing.)
+
 **Migrations.** Plain SQL files embedded from `internal/db/migrations/`
 and applied in order by `internal/db.Migrate` — it runs automatically on
 every server startup (and via `-migrate`) and needs no separate tool.

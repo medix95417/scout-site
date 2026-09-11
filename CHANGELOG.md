@@ -27,6 +27,20 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **Links and YouTube videos in news posts.** A web address in a news
+  post is now a link a reader can click, opening in a new tab. A YouTube
+  link on a line of its own shows as a video player right in the post,
+  with a "Watch on YouTube" link beneath it; the same link in the middle
+  of a sentence stays a link, so a post can mention a video without
+  being taken over by one. The player loads from YouTube's privacy-
+  enhanced host, which sets no tracking cookie until someone presses
+  play. Posts are still plain text — nothing else typed into one is
+  treated as formatting, and the announcement editor now says so.
+  Den and patrol pages, which show whole posts, get the same treatment;
+  the news listing and homepage keep their short text previews.
+
 ## [2.10.0] — 2026-09-10
 
 ### Added
