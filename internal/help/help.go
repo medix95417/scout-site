@@ -295,6 +295,7 @@ var Topics = []Topic{
 		Body: []string{
 			"The homepage's text and photos are edited from \"Edit Homepage\" — the hero banner, what your program offers, meeting details, and contact information.",
 			"News posts and photo galleries are each marked public or members-only when you write them. Public ones show to anyone; members-only ones only appear once someone signs in. The homepage follows the same rule, so a members-only post never shows to a visitor.",
+			"A news post is plain text, but a web address in it becomes a link by itself, and a YouTube link on a line of its own shows as a video right in the post. Put the link in the middle of a sentence if you'd rather it stayed a link.",
 			"Unpublishing a news post takes it off the site and keeps it, so you can put it back. Deleting one removes it for good, and only an Admin can do that — everything else about a post can be undone, and that cannot. If you need one gone rather than hidden, unpublish it and ask an Admin.",
 		},
 	},

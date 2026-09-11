@@ -99,3 +99,24 @@ func TestNonceFromContext_EmptyWithoutMiddleware(t *testing.T) {
 		t.Errorf("NonceFromContext without the middleware = %q, want empty", got)
 	}
 }
+
+// The frame allowance is the one hole in default-src 'self', and it is
+// meant to be exactly one host: YouTube's privacy-enhanced player, for a
+// video in a news post. Not youtube.com, which sets tracking cookies
+// before play, and nothing else. Pinned exactly so widening it is a
+// deliberate edit here rather than a side effect somewhere.
+func TestPolicyFramesOnlyTheNoCookieYouTubeHost(t *testing.T) {
+	policy := Policy("abc")
+	var frameSrc string
+	for _, d := range strings.Split(policy, "; ") {
+		if strings.HasPrefix(d, "frame-src ") {
+			frameSrc = strings.TrimPrefix(d, "frame-src ")
+		}
+	}
+	if frameSrc != "'self' https://www.youtube-nocookie.com" {
+		t.Errorf("frame-src = %q, want exactly 'self' plus the nocookie host", frameSrc)
+	}
+	if strings.Contains(policy, "https://www.youtube.com") || strings.Contains(policy, "https://youtube.com") {
+		t.Error("policy must not admit the cookie-setting youtube.com host")
+	}
+}

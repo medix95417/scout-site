@@ -118,7 +118,7 @@ func (h *Handlers) GroupView(w http.ResponseWriter, r *http.Request) {
 	}
 	newsViews := make([]publicPostView, 0, len(news))
 	for _, p := range news {
-		newsViews = append(newsViews, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.CreatedAt), Excerpt: p.Body})
+		newsViews = append(newsViews, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.CreatedAt), BodyHTML: renderPostBody(p.Body)})
 	}
 
 	scope, err := h.rosterScope(r.Context(), user, unit.ID)

@@ -64,6 +64,14 @@ func Policy(nonce string) string {
 		"img-src 'self' data: https:",
 		"connect-src 'self'",
 		"form-action 'self'",
+		// 'self' keeps the sandboxed srcdoc previews (a sent newsletter,
+		// a campaign) working as they did under default-src. The one
+		// outside host is YouTube's privacy-enhanced player, for a video
+		// a leader puts in a news post — see internal/web/body_render.go.
+		// It is the nocookie host specifically: the ordinary
+		// youtube.com embed sets tracking cookies before play, and some
+		// of this site's readers are minors.
+		"frame-src 'self' https://www.youtube-nocookie.com",
 		"frame-ancestors 'none'",
 		"object-src 'none'",
 		"base-uri 'self'",

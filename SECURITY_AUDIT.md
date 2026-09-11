@@ -81,7 +81,7 @@ The comment claimed `SESSION_SECRET` "signs session cookies." It doesn't — ses
 ## What's already solid (checked, not just assumed)
 
 - **SQL injection:** Every one of the 63 query call sites in the codebase uses parameterized placeholders (`$1, $2, ...`); grepped the entire repo for any query built via string concatenation or `fmt.Sprintf` with SQL keywords — none found.
-- **XSS:** `html/template` (contextually auto-escaping) is used exclusively — grepped for `text/template` and for any use of the unsafe `template.HTML`/`template.JS`/`template.URL`/`template.CSS` escape-hatch casts; none exist anywhere in the codebase. User-supplied content (event titles, family names, homepage content, a leader-pasted image URL used inside a CSS `url()`) all flow through the escaper with no bypass.
+- **XSS:** `html/template` (contextually auto-escaping) is used exclusively — grepped for `text/template` and for any use of the unsafe `template.HTML`/`template.JS`/`template.URL`/`template.CSS` escape-hatch casts; none exist anywhere in the codebase. User-supplied content (event titles, family names, homepage content, a leader-pasted image URL used inside a CSS `url()`) all flow through the escaper with no bypass. *(Since amended: `template.JS` is used for server-authored starter-template constants, and one reviewed `template.HTML` exists for news-post bodies — see "Design note: links and YouTube videos in news posts" below, and the test that fails if a second one appears.)*
 - **Email header injection:** Verified specifically, not just assumed — a malicious event title containing embedded CRLF characters cannot smuggle extra SMTP headers into a reminder email, because `mime.QEncoding.Encode` (already used for the `Subject:` header) triggers full Q-encoding on any string containing a byte outside printable ASCII, which includes `\r`/`\n` — confirmed by reading the Go standard library's own `needsEncoding` implementation. Recipient addresses are validated with `net/mail.ParseAddress` before ever reaching the SMTP `RCPT TO` command, which rejects any embedded control characters.
 - **CSRF:** Every state-changing route in the app is POST-only (verified against the full route table — zero GET routes with side effects), and the session cookie is `HttpOnly`, `Secure` (in production), and `SameSite=Lax`. Lax-mode cookies are not sent on cross-site POST requests at all, which is the primary CSRF vector for this app's request pattern. Not a dedicated CSRF token, so noted as a hardening recommendation below rather than a finding — the current setup meaningfully mitigates the risk, it just doesn't eliminate reliance on browser cookie-attribute behavior.
 - **Secrets hygiene:** `.env` is git-ignored. Postgres and the app's own HTTP port are both bound to `127.0.0.1` only, even in the production `docker-compose.yml` — neither is reachable from the public internet; only Caddy's 80/443 are exposed, and Caddy issues real Let's Encrypt certificates and auto-redirects HTTP→HTTPS by default.
@@ -720,7 +720,7 @@ and control characters.
   stamped `Content-Security-Policy: sandbox` and `nosniff`;
   `image/svg+xml` deliberately absent; access gated on unit membership,
   not merely on being signed in; a "public" flag is the only exception.
-- **Templates.** No `template.HTML` anywhere; post bodies render through
+- **Templates.** No `template.HTML` anywhere at the time of this pass (one reviewed use has since been added for news-post bodies — see the design note that follows); post bodies rendered through
   `{{.Body}}`; the newsletter preview is an `<iframe sandbox="">` via
   `srcdoc`, escaped by `html/template`; URL attributes go through the
   contextual escaper, which neutralises `javascript:`.
@@ -838,3 +838,59 @@ its read, superseded by a new begin, absent once expired, and
 kind-specific; the pending login readable without being spent, unusable
 after the attempt cap, consumable once. Pure: `rpIDFor` across cookie
 domain, override, shared suffix, and the fallbacks.
+
+
+# Design note: links and YouTube videos in news posts
+
+## What the code now does
+
+A news post is still plain text in a plain textarea. On the way out,
+`renderPostBody` (`internal/web/body_render.go`) turns it into HTML with
+exactly two additions: every `http(s)` URL becomes a link that opens in a
+new tab, and a YouTube URL that is a line of its own becomes an embedded
+player with a "Watch on YouTube" link under it. The same URL inside a
+sentence stays a link. The rendered body is shown on the post's own page
+and on a den/patrol page, which shows whole posts; listings keep showing
+plain excerpts.
+
+This is the first place user-typed content becomes `template.HTML`, and
+the reasons it is acceptable are structural rather than a matter of
+care:
+
+- **Every byte is either escaped or constructed.** Text is passed through
+  `html.EscapeString` segment by segment. The only tags emitted are the
+  `<a>` and `<iframe>` this file writes.
+- **The URL pattern is the attribute's guard.** It matches only `http`/
+  `https` and stops at whitespace, `<`, `>`, `"`, `'` and backtick — so
+  nothing a URL can contain closes the `href` it is placed in, and it is
+  escaped again on the way in regardless. `javascript:` never matches.
+- **The video id cannot carry markup.** It must be exactly eleven
+  characters from `[A-Za-z0-9_-]`, and the start offset is an integer,
+  so the iframe `src` is built from values with no escaping to get
+  wrong. The host is matched as a whole (`youtube.com`, `youtu.be`,
+  `youtube-nocookie.com`, with `www.`/`m.` stripped), so
+  `youtube.com.evil.example` is not YouTube.
+- **The player comes from `youtube-nocookie.com`** — YouTube's privacy-
+  enhanced host, which sets no tracking cookie until play. Some readers
+  are minors. `internal/csp` now allows frames from `'self'` (the
+  existing sandboxed `srcdoc` previews) and that one host; a test pins
+  the directive exactly, and refuses `youtube.com`.
+- **The iframe is sandboxed and lazy.** `allow-scripts allow-same-origin
+  allow-popups allow-popups-to-escape-sandbox allow-presentation` is what
+  the player needs to run and to open its own "watch on YouTube" link;
+  it gets no forms and no top-navigation. `loading="lazy"` means a post
+  with a video costs nothing until it is scrolled to.
+- **Links carry `rel="noopener noreferrer"`.** A new tab cannot reach
+  back to this page, and a members-only URL does not leak into another
+  site's referrer logs.
+
+## Verification
+
+Unit tests cover what the renderer must never do (`<script>`, an
+`onerror` attribute, a quote or tag smuggled into a URL, `javascript:`,
+an ampersand in an href) and what it does (linking, trailing-punctuation
+handling, every YouTube address form, the own-line rule, the inline
+rule, the nocookie host, the start offset). A render test proves the
+detail page passes the markup through intact while still escaping the
+title. A source-reading test fails if any other file in `internal/web`
+constructs `template.HTML`, so the reviewed function stays the only one.
