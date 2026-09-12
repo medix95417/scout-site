@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.12.2] — 2026-09-12
+
 ### Fixed
 
 - **The homepage map now accepts what OpenStreetMap and Google Maps
