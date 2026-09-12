@@ -137,6 +137,45 @@ fails if a second `template.HTML(` appears anywhere else in
 function, don't add another cast. (`template.JS` casts of server-owned
 constants — the starter templates — are a different, reviewed thing.)
 
+**One place issues a session, and it is `startSession`.** There are three
+ways in — a password, a password plus an authenticator code, a password
+plus a security key — and each used to call `auth.CreateSession` itself.
+They all now go through `Handlers.startSession`
+(`internal/web/login_audit.go`), which creates the session, sets the
+cookie, and writes the activity-log entry recording the sign-in and the
+address it came from. `TestOnlyStartSessionIssuesASession` fails any
+file in `internal/web` outside that one that calls `auth.CreateSession`,
+because a fourth route that made its own session would be a sign-in
+nothing recorded — and the sign-in is the first thing anyone looks for
+after something goes wrong with an account. The address comes from
+`clientIP`, never straight from a header: see its doc comment for why
+the rightmost `X-Forwarded-For` value, and only behind a configured
+proxy.
+
+**A bulk action scopes itself in SQL, not in the handler.** Anything
+that takes a list of ids off a form (`files.SetPublicMany`,
+`LinkEventMany`, `UnlinkEventsMany`) answers "which of these are mine"
+in the statement — `WHERE unit_id = $1 AND id = ANY($2)` — rather than
+looping and checking each one. An id from the other unit then matches
+nothing and is skipped, instead of being acted on by a handler that
+forgot a check. Where such an action also names a *second* entity (the
+event a batch is being moved to), that one is verified to belong to the
+unit *before* anything is cleared, so a refused move can't unlink
+everything and link nothing.
+
+**`/my-family` has its own permission rule: an adult in that family.**
+Not a capability, not unit membership — the household's contact details
+and the switches deciding what the unit sees of a child are a parent or
+guardian's call. `requireFamilyAdult` (`internal/web/my_family.go`) is
+the single gate for the page and both its forms; an individual member
+login passes only if that member is `member_type = 'adult'`, and a
+family-wide login passes if the family has an adult in it at all
+(`family.HasAdult`). Being an adult is still permission over your own
+household only, so the member id posted is separately checked to belong
+to this family. The same predicate drives the nav link via
+`baseData.ManagesFamilyContacts`, so nobody is offered a page that will
+refuse them.
+
 **Migrations.** Plain SQL files embedded from `internal/db/migrations/`
 and applied in order by `internal/db.Migrate` — it runs automatically on
 every server startup (and via `-migrate`) and needs no separate tool.

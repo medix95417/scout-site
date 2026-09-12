@@ -163,8 +163,9 @@ func (h *Handlers) JoinSubmit(w http.ResponseWriter, r *http.Request) {
 	// Best-effort, deliberately after the row is safely stored: an
 	// enquiry that is recorded but not emailed still reaches a leader via
 	// the Prospects page, whereas one that fails the request because mail
-	// is down is simply lost.
+	// is down is simply lost. The same goes for the family's own copy.
 	h.notifyProspect(r, unit, p)
+	h.sendProspectAutoReply(r, unit, p)
 
 	http.Redirect(w, r, "/join?sent=1", http.StatusSeeOther)
 }
@@ -315,6 +316,26 @@ type prospectsPageData struct {
 	OpenCount      int
 	OptedOutCount  int
 	SavedTemplates []emailtemplate.Template
+	// The automatic reply a new enquiry gets, edited in its own
+	// closed-by-default section of this page — see prospect_autoreply.go.
+	AutoReply autoReplyView
+}
+
+// autoReplyView is the automatic reply's own state on the Prospects
+// page: whether it's on, and what it would say. Placeholders are shown
+// unrendered, since this is the template rather than one copy of it.
+type autoReplyView struct {
+	Enabled bool
+	Subject string
+	Body    string
+	// UsingDefault is true when this unit hasn't written its own body —
+	// the textarea shows the built-in one so a leader edits a real
+	// message rather than starting at an empty box and wondering what
+	// would have been sent.
+	UsingDefault bool
+	// MailerReady is false when no email is configured at all, in which
+	// case the section says so rather than quietly never sending.
+	MailerReady bool
 }
 
 // ProspectsList shows this unit's enquiries and what's happened to them.
@@ -385,6 +406,7 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 		OpenCount:      openCount,
 		OptedOutCount:  optedOut,
 		SavedTemplates: saved,
+		AutoReply:      h.autoReplyView(r, unit.ID),
 	}
 	h.render(w, h.prospectsPage, data)
 }

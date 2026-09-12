@@ -49,6 +49,9 @@
           <th class="px-4 py-2">Who</th>
           <th class="px-4 py-2">Action</th>
           <th class="px-4 py-2">Function</th>
+          {{/* Blank for everything but a sign-in, which is the entry
+               where "who" on its own answers half a question. */}}
+          <th class="px-4 py-2">From</th>
         </tr>
       </thead>
       <tbody>
@@ -58,6 +61,7 @@
             <td class="px-4 py-2">{{.ActorName}}</td>
             <td class="px-4 py-2">{{.Action}}</td>
             <td class="px-4 py-2 text-gray-500">{{.EntityLabel}}</td>
+            <td class="px-4 py-2 text-gray-500 whitespace-nowrap">{{.IPAddress}}</td>
           </tr>
         {{end}}
       </tbody>

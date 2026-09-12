@@ -151,7 +151,7 @@
                follow the session rather than membership in this unit. */}}
           {{if .LoggedIn}}
             {{if not .IsUnitMember}}<div class="border-t border-gray-100 my-1"></div>{{end}}
-            <a href="/my-family" class="block px-4 py-2 hover:bg-gray-100">My Family</a>
+            {{if .ManagesFamilyContacts}}<a href="/my-family" class="block px-4 py-2 hover:bg-gray-100">My Family</a>{{end}}
             <a href="/help" class="block px-4 py-2 hover:bg-gray-100">Help</a>
             {{if or .CanEditContent .CanManageLedger .IsSuperAdmin}}
               <div class="border-t border-gray-100 my-1"></div>

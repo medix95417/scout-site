@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -164,14 +165,20 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := fileLibraryData{
-		baseData:          h.base(r, "Files"),
-		EventGroups:       groups,
-		GroupedByEvent:    len(selectedEventIDs) > 0,
-		Events:            events,
+		baseData:       h.base(r, "Files"),
+		EventGroups:    groups,
+		GroupedByEvent: len(selectedEventIDs) > 0,
+		// Classified by date rather than handed over as one flat list:
+		// the link controls open on the events a file of that kind
+		// plausibly belongs to — see event_window.go.
+		EventChoices:      eventChoices(events, time.Now()),
 		FilterEvents:      filterEvents,
 		SelectedEventIDs:  selectedEventSet,
 		CanManage:         canManage,
 		StorageConfigured: h.Storage != nil,
+	}
+	if msg := bulkResultMessage(r.URL.Query().Get("bulk"), r.URL.Query().Get("n")); msg != "" {
+		data.Flash = msg
 	}
 	// Set by FileUpload's redirect when a batch upload had to skip one or
 	// more files over the per-file size cap (see maxUploadFileSize) — the
@@ -189,9 +196,12 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 // show that they are still wired to the right ones.
 type fileLibraryData struct {
 	baseData
-	EventGroups       []eventFileGroupView
-	GroupedByEvent    bool
-	Events            []calendar.Event
+	EventGroups    []eventFileGroupView
+	GroupedByEvent bool
+	// EventChoices is every event, each tagged with which date window it
+	// falls in; FilterEvents is only the events that have something
+	// attached. See the comment in FileLibrary for why the two differ.
+	EventChoices      []eventChoice
 	FilterEvents      []calendar.Event
 	SelectedEventIDs  map[string]bool
 	CanManage         bool

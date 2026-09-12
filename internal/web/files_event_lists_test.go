@@ -3,6 +3,7 @@ package web
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/47-yonkers/scout-site/internal/calendar"
 	"github.com/47-yonkers/scout-site/internal/files"
@@ -25,7 +26,8 @@ func fileLibraryFixture() fileLibraryData {
 
 	return fileLibraryData{
 		baseData: testBase("Files"),
-		Events:   []calendar.Event{hasFiles, empty}, // every event
+		// every event, each tagged with its date window
+		EventChoices: eventChoices([]calendar.Event{hasFiles, empty}, time.Now()),
 		// only the one with something attached
 		FilterEvents:      []calendar.Event{hasFiles},
 		SelectedEventIDs:  map[string]bool{},

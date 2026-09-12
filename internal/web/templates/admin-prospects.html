@@ -123,6 +123,75 @@
     </div>
   </section>
 
+  {{/* The automatic reply. Its own section, stacked under the campaigns
+       one and closed until opened, because it is set once and then left
+       alone — it should not take up the space of the enquiries this page
+       is for. */}}
+  <section class="mb-8 rounded-lg border border-gray-200 bg-white p-4" id="auto-email">
+    <details>
+      <summary class="cursor-pointer select-none">
+        <span class="text-lg font-semibold align-middle">Automatic email to prospects</span>
+        <span class="ml-2 align-middle text-sm {{if .AutoReply.Enabled}}text-green-700{{else}}text-gray-500{{end}}">
+          {{if .AutoReply.Enabled}}on{{else}}off{{end}}
+        </span>
+      </summary>
+
+      <p class="mt-2 text-sm text-gray-600 max-w-2xl">
+        Sent to a family the moment they fill in the form at
+        <a href="/join" class="underline" style="color: var(--unit-color);">/join</a> — a reply while they're still
+        at the keyboard, rather than whenever someone next opens this page. It doesn't replace getting in touch
+        properly; it says you have their message.
+      </p>
+
+      {{if not .AutoReply.MailerReady}}
+        <p class="mt-3 rounded-md bg-amber-50 border border-amber-300 px-3 py-2 text-sm text-amber-900 max-w-2xl">
+          No email is configured for this site yet, so nothing can be sent — the message below can still be
+          written and saved, ready for when it is.
+        </p>
+      {{end}}
+
+      <form method="post" action="/admin/prospects/auto-email" class="mt-4 space-y-3 max-w-2xl">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+        <label class="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="enabled" value="1" class="mt-1" {{if .AutoReply.Enabled}}checked{{end}}>
+          <span>
+            <span class="font-medium">Send this automatically</span>
+            <span class="block text-xs text-gray-500">
+              Turn off to stop sending without losing what you've written.
+            </span>
+          </span>
+        </label>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="auto-reply-subject">Subject</label>
+          <input id="auto-reply-subject" type="text" name="prospect_auto_reply_subject"
+                 value="{{.AutoReply.Subject}}"
+                 class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1" for="auto-reply-body">Message</label>
+          <textarea id="auto-reply-body" name="prospect_auto_reply_body" rows="12"
+                    class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono">{{.AutoReply.Body}}</textarea>
+          <p class="text-xs text-gray-500 mt-1">
+            {{if .AutoReply.UsingDefault}}
+              This is the built-in message, shown so you can edit it rather than start from an empty box. Saving it
+              as it stands is fine.
+            {{end}}
+            Placeholders: <code>{{"{{parent_name}}"}}</code>, <code>{{"{{child_name}}"}}</code>,
+            <code>{{"{{unit_name}}"}}</code>, <code>{{"{{site_url}}"}}</code>. HTML is allowed — write tags and
+            they're sent as formatting; a message with no tags is sent as plain paragraphs. Names are always
+            escaped, so one containing &amp; or &lt; can't break the layout. Every copy carries an unsubscribe
+            link, the same as a campaign.
+          </p>
+        </div>
+
+        <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Save automatic email</button>
+      </form>
+    </details>
+  </section>
+
   {{if .Prospects}}
     <div class="space-y-4">
       {{range .Prospects}}

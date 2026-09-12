@@ -178,9 +178,15 @@ logs). No architecture change is needed for this move — see
   homepage. A file can be linked to several events at once (the same
   packing list attached to a recurring campout, say), and `/calendar`
   shows each
-  event's linked photos/documents inline.
-- Activity log: every create/approve/reject/content-edit is recorded
-  (`/audit`, leaders only).
+  event's linked photos/documents inline. The event list a leader picks
+  from opens on the events that fit — the last 30 days for a photo or
+  video, the next 30 for a document — with "show every event" for the
+  rest. Files can also be acted on in bulk: tick several and make them
+  all public/members-only, add them to an event, move them to one
+  (replacing whatever they were filed under), or unlink them.
+- Activity log: every create/approve/reject/content-edit is recorded,
+  along with every sign-in and the IP address it came from
+  (`/audit`, leaders only; filterable and exportable as CSV).
 - Email (optional — see `.env.example` and DEPLOY.md "Configure the
   environment"): if `SMTP_HOST` is set, two things work automatically —
     - **Self-service password reset.** "Forgot your password?" on the
@@ -431,7 +437,9 @@ Added since Phase 2, backing the features described above:
 - `internal/prospect` — "interested in joining" enquiries from the public
   `/join` form, tracked by leaders on `/admin/prospects`; deliberately
   separate from `internal/roster` since a prospect has no family, login,
-  or roles.
+  or roles. A unit can also set an automatic reply on that page, emailed
+  to the family the moment they submit the form (off by default, and
+  carrying the same unsubscribe link every campaign does).
 - `internal/emailtemplate` — saved email bodies a unit can reuse, shared
   by prospect campaigns and newsletters (`kind` distinguishes the two).
 - `internal/newsletter` — newsletter drafting, HTML sanitizing (a strict

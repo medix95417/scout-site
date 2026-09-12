@@ -24,6 +24,11 @@ const (
 	CategoryEventPhoto = "event_photo"
 )
 
+// ErrEventNotInUnit is returned when an event id doesn't belong to the
+// unit a bulk link was asked for — a posted id from the other unit's
+// calendar, rather than anything a leader could have clicked.
+var ErrEventNotInUnit = errors.New("files: that event belongs to another unit")
+
 type File struct {
 	ID          string
 	UnitID      string
@@ -613,6 +618,158 @@ func listMediaGroupedByEvent(ctx context.Context, pool *pgxpool.Pool, unitID str
 		groups[i].Files = append(groups[i].Files, f)
 	}
 	return groups, ungrouped, rows.Err()
+}
+
+// ListDocumentFilesGroupedByEvent is the picker list for anything that
+// is a document rather than a picture — the Resources page's "a document
+// from the file library" chooser (see internal/web/resources.go).
+//
+// "Document" is defined by exclusion: not an image, not a video.
+// Category is deliberately NOT the test, even though there is a
+// general/event_photo column right there. A leader who uploads a
+// campsite map and leaves the category on its default has a document;
+// one who files a PDF under "Event photo/video" by mistake still has a
+// document. Content type is what the file IS, category is where a leader
+// filed it, and the Resources page is asking the first question.
+//
+// Grouped by event like every other picker on the site, for the same
+// reason: a unit with three years of paperwork is looking for "the
+// permission form from the spring camporee", not scrolling one flat
+// list of four hundred filenames.
+func ListDocumentFilesGroupedByEvent(ctx context.Context, pool *pgxpool.Pool, unitID string) (groups []EventFileGroup, ungrouped []File, err error) {
+	rows, err := pool.Query(ctx, `
+		SELECT f.id, f.unit_id, f.filename, f.display_name, f.content_type, f.size_bytes, f.storage_key, f.category::text, f.uploaded_by, f.created_at, f.is_public,
+		       COALESCE(e.id::text, ''), COALESCE(e.title, '')
+		FROM files f
+		LEFT JOIN event_files ef ON ef.file_id = f.id
+		LEFT JOIN events e ON e.id = ef.event_id
+		WHERE f.unit_id = $1
+		  AND f.content_type NOT LIKE 'image/%'
+		  AND f.content_type NOT LIKE 'video/%'
+		ORDER BY (e.starts_at IS NULL), e.starts_at DESC, f.created_at DESC
+	`, unitID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	index := map[string]int{}
+	for rows.Next() {
+		var f File
+		var eventID, eventTitle string
+		if err := rows.Scan(&f.ID, &f.UnitID, &f.Filename, &f.DisplayName, &f.ContentType, &f.SizeBytes, &f.StorageKey, &f.Category, &f.UploadedBy, &f.CreatedAt, &f.Public, &eventID, &eventTitle); err != nil {
+			return nil, nil, err
+		}
+		if eventID == "" {
+			ungrouped = append(ungrouped, f)
+			continue
+		}
+		i, ok := index[eventID]
+		if !ok {
+			i = len(groups)
+			index[eventID] = i
+			groups = append(groups, EventFileGroup{EventID: eventID, EventTitle: eventTitle})
+		}
+		groups[i].Files = append(groups[i].Files, f)
+	}
+	return groups, ungrouped, rows.Err()
+}
+
+// SetPublicMany is SetPublic for a whole selection at once, and returns
+// how many rows it actually changed.
+//
+// The unit scope is in the statement rather than in a caller's loop on
+// purpose: this one takes a list of ids straight off a form, so "which
+// of these are mine" is the question the database has to answer, not the
+// handler. An id belonging to the other unit matches nothing and is
+// silently left alone — the count comes back lower, which is what the
+// leader is told.
+func SetPublicMany(ctx context.Context, pool *pgxpool.Pool, unitID string, fileIDs []string, public bool) (int64, error) {
+	if len(fileIDs) == 0 {
+		return 0, nil
+	}
+	tag, err := pool.Exec(ctx, `UPDATE files SET is_public = $1 WHERE unit_id = $2 AND id = ANY($3)`, public, unitID, fileIDs)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// LinkEventMany links a whole selection of files to one event.
+//
+// replace is the difference between the two things a leader means by
+// "this is under the wrong event". Adding leaves whatever links a file
+// already has and adds one more — the joint campout that belongs to two
+// events. Replacing clears them first, which is the fix for a batch
+// uploaded against the wrong event in the first place, and the reason
+// this is offered at all.
+//
+// Both the files and the event are scoped to unitID in SQL, so neither
+// half of the pair can be borrowed from the other unit by posting its
+// id. Returns how many files were actually linked.
+func LinkEventMany(ctx context.Context, pool *pgxpool.Pool, unitID, eventID string, fileIDs []string, replace bool) (int, error) {
+	if len(fileIDs) == 0 {
+		return 0, nil
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// The event has to be this unit's before anything is cleared —
+	// otherwise "move these to that event" against an id from the other
+	// unit would unlink everything and link nothing.
+	var eventUnit string
+	if err := tx.QueryRow(ctx, `SELECT unit_id::text FROM events WHERE id = $1`, eventID).Scan(&eventUnit); err != nil {
+		return 0, err
+	}
+	if eventUnit != unitID {
+		return 0, ErrEventNotInUnit
+	}
+
+	if replace {
+		if _, err := tx.Exec(ctx, `
+			DELETE FROM event_files
+			WHERE file_id IN (SELECT id FROM files WHERE unit_id = $1 AND id = ANY($2))
+		`, unitID, fileIDs); err != nil {
+			return 0, err
+		}
+	}
+
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO event_files (event_id, file_id)
+		SELECT $1, id FROM files WHERE unit_id = $2 AND id = ANY($3)
+		ON CONFLICT DO NOTHING
+	`, eventID, unitID, fileIDs)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	// On a replace this is every file that matched; on an add it counts
+	// only the links that were new, which is the honest number either
+	// way.
+	return int(tag.RowsAffected()), nil
+}
+
+// UnlinkEventsMany drops every event link from a selection of files —
+// for a batch filed under an event that shouldn't have been an event at
+// all. Scoped to the unit in SQL, same as the rest.
+func UnlinkEventsMany(ctx context.Context, pool *pgxpool.Pool, unitID string, fileIDs []string) (int64, error) {
+	if len(fileIDs) == 0 {
+		return 0, nil
+	}
+	tag, err := pool.Exec(ctx, `
+		DELETE FROM event_files
+		WHERE file_id IN (SELECT id FROM files WHERE unit_id = $1 AND id = ANY($2))
+	`, unitID, fileIDs)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
 
 // Delete removes a file's metadata row, scoped to a unit. The caller is

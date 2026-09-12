@@ -26,17 +26,32 @@
             <input type="radio" name="category" value="event_photo"> Event photo/video
           </label>
         </div>
-        {{if .Events}}
-          <details class="text-sm">
+        {{if .EventChoices}}
+          {{/* The list opens on the events this kind of file plausibly
+               belongs to — the last 30 days for a photo or video, the
+               next 30 for a document (see internal/web/event_window.go).
+               Every event is in the DOM regardless; the script below
+               hides the ones outside the window, so with JavaScript off
+               this is exactly the full list it has always been. */}}
+          <details class="text-sm" data-event-window-scope>
             <summary class="cursor-pointer select-none" style="color: var(--unit-color);">Link to events (optional)</summary>
-            <div class="mt-2 max-h-40 overflow-y-auto space-y-1 border border-gray-100 rounded-md p-2">
-              {{range .Events}}
-                <label class="flex items-center gap-2">
+            <p class="text-xs text-gray-500 mt-1" data-event-window-hint>
+              Showing the next 30 days. Photos and videos show the last 30 days instead.
+            </p>
+            <div class="mt-2 max-h-40 overflow-y-auto space-y-1 border border-gray-100 rounded-md p-2" data-event-window-list>
+              {{range .EventChoices}}
+                <label class="flex items-center gap-2" data-event-window="{{.Window}}">
                   <input type="checkbox" name="event_ids" value="{{.ID}}">
                   <span class="truncate">{{.Title}} <span class="text-gray-400">— {{.DateRangeDisplay}}</span></span>
                 </label>
               {{end}}
+              <p class="text-xs text-gray-500 hidden" data-event-window-empty>
+                No events in that window — tick "show every event" to pick an older or later one.
+              </p>
             </div>
+            <label class="flex items-center gap-1 text-xs text-gray-600 mt-1">
+              <input type="checkbox" data-event-window-all> Show every event
+            </label>
           </details>
         {{end}}
         <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
@@ -74,6 +89,44 @@
   {{end}}
 
   <h2 class="text-lg font-semibold mb-3">{{if .GroupedByEvent}}Selected events{{else}}All files{{end}}</h2>
+
+  {{if and .CanManage .EventGroups}}
+    {{/* The checkboxes that feed this form are rendered inside each
+         file's card, and reach it by id via HTML's form attribute —
+         a card already holds its own rename/delete forms, and forms
+         cannot be nested. */}}
+    <form id="files-bulk" method="post" action="/files/bulk"
+          class="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <p class="text-xs text-gray-600 mb-2">
+        Tick files below, then act on all of them at once.
+        <span data-bulk-count class="font-semibold"></span>
+      </p>
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="submit" name="action" value="public" class="rounded-md px-3 py-1.5 text-xs btn-accent">Make public</button>
+        <button type="submit" name="action" value="private" class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs hover:bg-gray-100">Make members-only</button>
+      </div>
+      {{if .EventChoices}}
+        <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
+          <label class="sr-only" for="bulk-event">Event</label>
+          <select id="bulk-event" name="event_id" class="rounded-md border border-gray-300 px-2 py-1.5 text-xs max-w-xs">
+            <option value="">Choose an event…</option>
+            {{template "bulkEventOptions" (dict "Choices" .EventChoices "Window" "recent" "Label" "Last 30 days")}}
+            {{template "bulkEventOptions" (dict "Choices" .EventChoices "Window" "upcoming" "Label" "Next 30 days")}}
+            {{template "bulkEventOptions" (dict "Choices" .EventChoices "Window" "other" "Label" "Everything else")}}
+          </select>
+          <button type="submit" name="action" value="link" class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs hover:bg-gray-100">Also link to it</button>
+          <button type="submit" name="action" value="move" class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs hover:bg-gray-100">Move to it</button>
+          <button type="submit" name="action" value="unlink" class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-red-600 hover:bg-gray-100">Unlink from every event</button>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">
+          "Move" replaces whatever events those files were linked to — the fix for a batch filed under the wrong one.
+          "Also link" keeps the links they already have.
+        </p>
+      {{end}}
+    </form>
+  {{end}}
+
   {{if .EventGroups}}
     <div class="space-y-3">
       {{range .EventGroups}}
@@ -82,7 +135,13 @@
             {{.EventTitle}} <span class="text-gray-400 font-normal">({{len .Files}})</span>
           </summary>
           <div class="px-4 pb-4">
-            {{template "fileLibraryGroupPage" (dict "Pages" (chunkFileRows .Files 25) "CanManage" $.CanManage "Events" $.Events "CSRFToken" $.CSRFToken)}}
+            {{if $.CanManage}}
+              <p class="mb-2">
+                <button type="button" class="text-xs underline" style="color: var(--unit-color);"
+                        data-bulk-select-group>Select all in this group</button>
+              </p>
+            {{end}}
+            {{template "fileLibraryGroupPage" (dict "Pages" (chunkFileRows .Files 25) "CanManage" $.CanManage "EventChoices" $.EventChoices "CSRFToken" $.CSRFToken)}}
           </div>
         </details>
       {{end}}
@@ -92,6 +151,87 @@
   {{else}}
     <p class="text-sm text-gray-500">No files uploaded yet.</p>
   {{end}}
+
+  {{if .CanManage}}{{template "fileLibraryScript" .}}{{end}}
+{{end}}
+
+{{/* fileLibraryScript does two small jobs, both pure enhancement — with
+     JavaScript off the page behaves exactly as it did before either
+     existed (every event listed; bulk actions still work, just without a
+     running count or a group-level select-all).
+
+     1. The upload form's event list follows the category radio: photos
+        and videos show the last 30 days, documents the next 30, and
+        "show every event" opens it all up. A ticked event is never
+        hidden, whatever window it falls in — hiding a checkbox does not
+        stop it being submitted, so a hidden tick would silently link an
+        upload to an event the leader could no longer see.
+
+     2. The bulk bar counts what's selected, and each event group offers
+        a select-all for the files inside it. */}}
+{{define "fileLibraryScript"}}
+  <script nonce="{{.CSPNonce}}">
+    (function () {
+      var scope = document.querySelector('[data-event-window-scope]');
+      if (scope) {
+        var list = scope.querySelector('[data-event-window-list]');
+        var empty = scope.querySelector('[data-event-window-empty]');
+        var hint = scope.querySelector('[data-event-window-hint]');
+        var showAll = scope.querySelector('[data-event-window-all]');
+        var labels = list.querySelectorAll('[data-event-window]');
+        var radios = document.querySelectorAll('input[name="category"]');
+
+        var apply = function () {
+          var picked = document.querySelector('input[name="category"]:checked');
+          var want = picked && picked.value === 'event_photo' ? 'recent' : 'upcoming';
+          var everything = showAll.checked;
+          var shown = 0;
+          labels.forEach(function (el) {
+            var box = el.querySelector('input[type="checkbox"]');
+            var match = everything || el.getAttribute('data-event-window') === want || (box && box.checked);
+            el.classList.toggle('hidden', !match);
+            if (match) { shown++; }
+          });
+          empty.classList.toggle('hidden', shown > 0);
+          hint.textContent = everything
+            ? 'Showing every event.'
+            : (want === 'recent'
+              ? 'Showing the last 30 days — where photos and videos usually belong.'
+              : 'Showing the next 30 days — where documents usually belong.');
+        };
+
+        radios.forEach(function (r) { r.addEventListener('change', apply); });
+        showAll.addEventListener('change', apply);
+        list.addEventListener('change', apply);
+        apply();
+      }
+
+      var bulk = document.getElementById('files-bulk');
+      if (!bulk) { return; }
+      var boxes = document.querySelectorAll('[data-bulk-file]');
+      var count = bulk.querySelector('[data-bulk-count]');
+      var refresh = function () {
+        var n = 0;
+        boxes.forEach(function (b) { if (b.checked) { n++; } });
+        count.textContent = n === 0 ? '' : n + ' selected';
+      };
+      boxes.forEach(function (b) { b.addEventListener('change', refresh); });
+
+      document.querySelectorAll('[data-bulk-select-group]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var group = btn.closest('details');
+          if (!group) { return; }
+          var groupBoxes = group.querySelectorAll('[data-bulk-file]');
+          var allOn = groupBoxes.length > 0;
+          groupBoxes.forEach(function (b) { if (!b.checked) { allOn = false; } });
+          groupBoxes.forEach(function (b) { b.checked = !allOn; });
+          btn.textContent = allOn ? 'Select all in this group' : 'Clear this group';
+          refresh();
+        });
+      });
+      refresh();
+    })();
+  </script>
 {{end}}
 
 {{/* fileLibraryGroupPage renders one event-group's files 25 at a time,
@@ -102,26 +242,45 @@
      instead of bare thumbnails.
 
      Takes a dict with:
-       Pages      [][]fileRow — every remaining page, this one included
-       CanManage  bool
-       Events     []calendar.Event
-       CSRFToken  string */}}
+       Pages        [][]fileRow — every remaining page, this one included
+       CanManage    bool
+       EventChoices []eventChoice
+       CSRFToken    string */}}
 {{define "fileLibraryGroupPage"}}
   {{if .Pages}}
     {{$pages := .Pages}}
     <div class="space-y-3">
       {{range index $pages 0}}
-        {{template "fileRow" (dict "File" . "CanManage" $.CanManage "Events" $.Events "CSRFToken" $.CSRFToken)}}
+        {{template "fileRow" (dict "File" . "CanManage" $.CanManage "EventChoices" $.EventChoices "CSRFToken" $.CSRFToken)}}
       {{end}}
     </div>
     {{if gt (len $pages) 1}}
       <details class="mt-2">
         <summary class="cursor-pointer select-none text-xs" style="color: var(--unit-color);">Show 25 more</summary>
         <div class="mt-2">
-          {{template "fileLibraryGroupPage" (dict "Pages" (slice $pages 1) "CanManage" .CanManage "Events" .Events "CSRFToken" .CSRFToken)}}
+          {{template "fileLibraryGroupPage" (dict "Pages" (slice $pages 1) "CanManage" .CanManage "EventChoices" .EventChoices "CSRFToken" .CSRFToken)}}
         </div>
       </details>
     {{end}}
+  {{end}}
+{{end}}
+
+{{/* bulkEventOptions renders one window's worth of the bulk bar's event
+     dropdown as an <optgroup>, so the events a leader is most likely to
+     be re-filing under are at the top rather than buried in five years
+     of calendar. Takes a dict with Choices, Window and Label. */}}
+{{define "bulkEventOptions"}}
+  {{$window := .Window}}
+  {{$any := false}}
+  {{range .Choices}}{{if eq .Window $window}}{{$any = true}}{{end}}{{end}}
+  {{if $any}}
+    <optgroup label="{{.Label}}">
+      {{range .Choices}}
+        {{if eq .Window $window}}
+          <option value="{{.ID}}">{{.Title}} — {{.DateRangeDisplay}}</option>
+        {{end}}
+      {{end}}
+    </optgroup>
   {{end}}
 {{end}}
 
@@ -131,17 +290,23 @@
      view above so the two never drift out of sync with each other.
 
      Takes a dict with:
-       File       a fileRow (this file, decorated with SizeDisplay and,
-                  for a leader, LinkedEventIDs)
-       CanManage  bool
-       Events     []calendar.Event — every event in the unit, for the
-                  "Linked events" checkbox list
-       CSRFToken  string */}}
+       File         a fileRow (this file, decorated with SizeDisplay and,
+                    for a leader, LinkedEventIDs)
+       CanManage    bool
+       EventChoices []eventChoice — every event in the unit, each tagged
+                    with its date window, for the "Linked events" list
+       CSRFToken    string */}}
 {{define "fileRow"}}
   {{$f := .File}}
-  <div class="rounded-lg border border-gray-200 bg-white p-4">
+  <div class="rounded-lg border border-gray-200 bg-white p-4" data-file-card>
     <div class="flex items-start justify-between gap-4">
       <div class="flex items-start gap-3 min-w-0">
+        {{if .CanManage}}
+          {{/* Belongs to the bulk form at the top of the page by id, not
+               by nesting — see that form's own comment. */}}
+          <input type="checkbox" form="files-bulk" name="file_ids" value="{{$f.ID}}" data-bulk-file
+                 class="mt-1 flex-shrink-0" aria-label="Select {{$f.DisplayLabel}}">
+        {{end}}
         {{if hasPrefix $f.ContentType "image/"}}
           <img src="/files/{{$f.ID}}/thumb" alt="" loading="lazy" class="h-12 w-12 flex-shrink-0 object-cover rounded-md border border-gray-200">
         {{else if hasPrefix $f.ContentType "video/"}}
@@ -205,20 +370,46 @@
       <p class="text-xs text-gray-400 mt-1">Public — visible to anyone, even logged out, if used on the homepage.</p>
     {{end}}
 
-    {{if and .CanManage .Events}}
+    {{if and .CanManage .EventChoices}}
+      {{/* Windowed by what this file IS: an event photo lists the last 30
+           days, a document the next 30 (see internal/web/event_window.go).
+           Both halves are rendered — the rest sit behind "show every
+           other event" — and any event this file is already linked to is
+           always in the first half, whatever its date, so saving the
+           form can never silently drop a link the leader couldn't see. */}}
+      {{$linked := $f.LinkedEventIDs}}
+      {{$shown := eventsForFile .EventChoices $f.Category $linked}}
+      {{$rest := otherEventsForFile .EventChoices $f.Category $linked}}
       <details class="mt-2 text-sm">
         <summary class="cursor-pointer select-none" style="color: var(--unit-color);">Linked events</summary>
         <form method="post" action="/files/{{$f.ID}}/link" class="mt-2 space-y-1">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <p class="text-xs text-gray-500">
+            {{if eq $f.Category "event_photo"}}Events from the last 30 days{{else}}Events in the next 30 days{{end}}, plus anything this file is already linked to.
+          </p>
           <div class="max-h-40 overflow-y-auto space-y-1 border border-gray-100 rounded-md p-2">
-            {{$linked := $f.LinkedEventIDs}}
-            {{range .Events}}
+            {{range $shown}}
               <label class="flex items-center gap-2">
                 <input type="checkbox" name="event_ids" value="{{.ID}}" {{if index $linked .ID}}checked{{end}}>
                 <span class="truncate">{{.Title}} <span class="text-gray-400">— {{.DateRangeDisplay}}</span></span>
               </label>
+            {{else}}
+              <p class="text-xs text-gray-500">Nothing in that window — open "show every other event" below.</p>
             {{end}}
           </div>
+          {{if $rest}}
+            <details class="mt-1">
+              <summary class="cursor-pointer select-none text-xs" style="color: var(--unit-color);">Show every other event ({{len $rest}})</summary>
+              <div class="mt-1 max-h-40 overflow-y-auto space-y-1 border border-gray-100 rounded-md p-2">
+                {{range $rest}}
+                  <label class="flex items-center gap-2">
+                    <input type="checkbox" name="event_ids" value="{{.ID}}" {{if index $linked .ID}}checked{{end}}>
+                    <span class="truncate">{{.Title}} <span class="text-gray-400">— {{.DateRangeDisplay}}</span></span>
+                  </label>
+                {{end}}
+              </div>
+            </details>
+          {{end}}
           <button type="submit" class="rounded-md px-3 py-1.5 text-xs btn-accent">
             Save linked events
           </button>

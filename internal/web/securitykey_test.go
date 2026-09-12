@@ -144,12 +144,18 @@ func TestSecurityKeyGatesAreCalled(t *testing.T) {
 	}
 
 	// Finishing a key login: take the one-shot challenge, validate, and
-	// spend the pending login before issuing a session.
+	// spend the pending login before issuing a session. The session
+	// itself comes from startSession, the one place that issues one —
+	// which is also the one place that records the sign-in, so a route
+	// that made its own would be a session nothing logged.
 	c = calls("securitykey.go", "LoginSecurityKeyFinish")
-	for _, want := range []string{"auth.TakeWebAuthnSession", "ValidateLogin", "auth.ConsumePendingTwoFactorLogin", "auth.CreateSession"} {
+	for _, want := range []string{"auth.TakeWebAuthnSession", "ValidateLogin", "auth.ConsumePendingTwoFactorLogin", "startSession"} {
 		if !c[want] {
 			t.Errorf("LoginSecurityKeyFinish no longer calls %s", want)
 		}
+	}
+	if c["auth.CreateSession"] {
+		t.Error("LoginSecurityKeyFinish creates its own session instead of going through startSession, so the sign-in isn't recorded")
 	}
 	c = calls("securitykey.go", "SecurityKeyFinish")
 	for _, want := range []string{"auth.TakeWebAuthnSession", "CreateCredential", "auth.AddSecurityKey"} {
