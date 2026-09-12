@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.12.1] — 2026-09-12
+
 ### Fixed
 
 - **The printed roster no longer runs its columns into each other.** A
