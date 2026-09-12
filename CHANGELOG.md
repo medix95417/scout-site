@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.11.0] — 2026-09-12
+
 ### Added
 
 - **Act on several files at once.** The Files page lets a leader tick any
