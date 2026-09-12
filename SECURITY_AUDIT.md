@@ -1005,3 +1005,44 @@ sign-in staying out of the other unit's log. Source-reading guards cover
 the one-place-issues-a-session rule, that all three `/my-family` routes
 check for an adult, and that a new enquiry still triggers the automatic
 reply after the record is stored.
+
+# Design note: the homepage's meeting map
+
+The Meeting Info box can now show a map, which means the homepage — the
+one page on this site an anonymous stranger is most likely to load — can
+contain an iframe pointing at somebody else's origin. Two things make
+that safe enough to offer.
+
+**The src is an allowlist, not a validation.** `safeMapEmbedURL`
+(`internal/web/meeting_map.go`) parses the pasted URL and accepts it only
+if the scheme is https and the host and path are exactly one of two
+providers' embed endpoints — `www.google.com/maps/embed` or
+`www.openstreetmap.org/export/embed.html`, or a path below them. It is
+parsed rather than prefix-matched, because
+`https://www.google.com.evil.example/maps/embed` has the right prefix as
+text and the wrong host as a URL. What reaches the page is rebuilt from
+the parsed scheme, host, path and query, so a fragment or embedded
+credentials are dropped rather than passed through. Anything else comes
+back empty and the page renders no iframe at all.
+
+**The Content-Security-Policy says the same thing independently.**
+`frame-src` now names those two endpoints by path alongside the existing
+YouTube nocookie host — not the bare origins, which would let any page on
+google.com be framed inside this site's homepage. So a value that somehow
+got past the handler still cannot be rendered by a browser, and a test
+pins the directive exactly and fails a bare origin.
+
+**Privacy is the real cost, and it is opt-in.** An embedded map is a
+request every visitor's browser makes to that provider, on the front page
+of a site used by children's families, whether or not anyone looks at the
+map. Nothing is embedded unless a unit pastes a link; the admin help says
+so in those terms and points at OpenStreetMap as the option that sets no
+cookie. The directions button — which is the actual feature — makes no
+request at all until someone clicks it, and the address it carries is the
+unit's own meeting place, already public on the page.
+
+The address is leader-typed text that ends up inside a URL and inside the
+page. It is escaped on both paths: `url.QueryEscape` for the link, and
+`html/template`'s own contextual escaping for the text, with a test that
+a name containing quotes, angle brackets or an ampersand cannot break out
+of either.

@@ -105,7 +105,13 @@ func TestNonceFromContext_EmptyWithoutMiddleware(t *testing.T) {
 // video in a news post. Not youtube.com, which sets tracking cookies
 // before play, and nothing else. Pinned exactly so widening it is a
 // deliberate edit here rather than a side effect somewhere.
-func TestPolicyFramesOnlyTheNoCookieYouTubeHost(t *testing.T) {
+// Everything this site will put in an iframe, and nothing else. Each
+// entry is here because a feature needs it: the nocookie player for a
+// video in a news post, and the two map embeds for a unit's meeting
+// location. The map entries are pinned to the exact embed endpoint —
+// framing anything else on google.com from this site is not a thing any
+// feature asks for, and a bare origin would allow it.
+func TestPolicyFramesOnlyTheHostsAFeatureNeeds(t *testing.T) {
 	policy := Policy("abc")
 	var frameSrc string
 	for _, d := range strings.Split(policy, "; ") {
@@ -113,10 +119,18 @@ func TestPolicyFramesOnlyTheNoCookieYouTubeHost(t *testing.T) {
 			frameSrc = strings.TrimPrefix(d, "frame-src ")
 		}
 	}
-	if frameSrc != "'self' https://www.youtube-nocookie.com" {
-		t.Errorf("frame-src = %q, want exactly 'self' plus the nocookie host", frameSrc)
+	want := "'self' https://www.youtube-nocookie.com https://www.google.com/maps/embed https://www.openstreetmap.org/export/embed.html"
+	if frameSrc != want {
+		t.Errorf("frame-src = %q, want exactly %q", frameSrc, want)
 	}
 	if strings.Contains(policy, "https://www.youtube.com") || strings.Contains(policy, "https://youtube.com") {
 		t.Error("policy must not admit the cookie-setting youtube.com host")
+	}
+	// A bare origin would let any google.com page be framed inside this
+	// site, which is how a map embed turns into a phishing surface.
+	for _, tooBroad := range []string{"https://www.google.com ", "https://www.google.com;", "https://www.openstreetmap.org "} {
+		if strings.Contains(policy+";", tooBroad) {
+			t.Errorf("policy admits the whole of %q rather than the one embed path", strings.TrimRight(tooBroad, " ;"))
+		}
 	}
 }

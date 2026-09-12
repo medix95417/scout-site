@@ -27,6 +27,30 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **Directions to where you meet.** The homepage's Meeting Info box can
+  now carry the unit's address, set on "Edit Homepage", and turns it into
+  a panel a family taps to open their own phone's map app with the route
+  already set — rather than reading an address off the screen and
+  retyping it. A unit can also paste a map's embed link (Google Maps'
+  "Share → Embed a map", or OpenStreetMap's "Share → HTML") to show the
+  map itself above that button; only those two are accepted, and leaving
+  it blank is the private option, since an embedded map means that
+  provider sees every visit to the homepage whether or not anyone looks
+  at it. With no address set, the box reads exactly as it did before and
+  the page makes no request to anybody.
+
+### Changed
+
+- **The homepage's Leadership & Contact box links to Our Leaders.** Both
+  the heading and a "Meet our leaders" link at the foot of the box go to
+  the full page, so the few lines a leader typed there are a way in
+  rather than the end of the road. Offered only once the unit has
+  published at least one leader profile — until then there is no link,
+  because a link to a page saying "no leaders listed yet" is worse than
+  none.
+
 ## [2.11.0] — 2026-09-12
 
 ### Added
