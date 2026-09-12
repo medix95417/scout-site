@@ -8,7 +8,7 @@
 
   <div class="space-y-6">
     {{range .Sections}}
-      <section class="rounded-lg border border-gray-200 bg-white p-4">
+      <section id="{{.Slug}}" class="rounded-lg border border-gray-200 bg-white p-4">
         <h2 class="text-lg font-semibold mb-1">{{.Label}}</h2>
         {{if .Help}}<p class="text-xs text-gray-500 mb-2">{{.Help}}</p>{{end}}
         {{if not .Saved}}
@@ -51,6 +51,33 @@
               placeholder="{{.Placeholder}}"
             >{{.Body}}</textarea>
             {{template "eventAccordionPicker" (dict "Slug" .Slug "Groups" $.PublicMediaGroups "Ungrouped" $.PublicMediaUngrouped "Mode" "append" "AppendTarget" (printf "gallery-body-%s" .Slug))}}
+          {{else if eq .Kind "map"}}
+            {{/* A textarea, not <input type="url">, because what a
+                 provider's "embed this map" dialog copies is a whole
+                 <iframe ...></iframe> tag — which a url input refuses
+                 before the form is even submitted. The snippet is
+                 unpicked server-side and only the embed URL is stored,
+                 so this box shows that URL back after a save. */}}
+            {{if $.MapRejected}}
+              <p class="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
+                That wasn't a map embed, so nothing was saved and the homepage is unchanged.
+                It has to be the <strong>embed</strong> code, which is a different thing from the link
+                Share offers first — an address bar URL, or a
+                <code>maps.app.goo.gl</code> short link, won't work.
+                In OpenStreetMap: <strong>Share</strong> &rarr; the <strong>HTML</strong> tab.
+                In Google Maps: <strong>Share</strong> &rarr; <strong>Embed a map</strong> &rarr; <strong>COPY HTML</strong>.
+                Paste the whole thing it copies, starting with <code>&lt;iframe</code>.
+              </p>
+            {{end}}
+            <textarea aria-label="{{.Label}}"
+              name="body"
+              rows="3"
+              class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
+              placeholder="&lt;iframe src=&quot;https://www.openstreetmap.org/export/embed?bbox=…&quot;&gt;&lt;/iframe&gt;"
+            >{{.Body}}</textarea>
+            {{if .Body}}
+              <p class="text-xs text-gray-500">Showing this map on the homepage. Clear the box and save to remove it.</p>
+            {{end}}
           {{else if eq .Kind "url"}}
             <input aria-label="{{.Label}}"
               type="url"

@@ -19,7 +19,9 @@ package web
 // is fetched until it is clicked.
 
 import (
+	"html"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -76,14 +78,49 @@ func mapsSearchURL(address string) string {
 // homepage. Anything not on this list is refused, so a pasted link to
 // somewhere else — by mistake, or by someone who has got at the admin
 // page — cannot put an arbitrary page inside this site's front page. The
-// same two entries appear in the Content-Security-Policy (see
-// internal/csp), so a browser refuses what this function would too.
+// same entries appear in the Content-Security-Policy (see internal/csp),
+// so a browser refuses what this function would too — which is also why
+// adding one here means adding it there, and why a test checks that the
+// two lists agree.
 var allowedMapEmbeds = []string{
 	// Google Maps: Share → Embed a map.
 	"https://www.google.com/maps/embed",
 	// OpenStreetMap: Share → HTML. No account, no cookie, no tracking —
 	// the one to recommend, and the help text does.
+	//
+	// Both spellings, because OpenStreetMap's share dialog has emitted
+	// both: the older ".html" and the bare path it hands out now. Only
+	// the second was listed here at first, so the link a unit copied
+	// today was refused and the homepage showed no map and said nothing
+	// about why. Neither is going to stop working, so both stay.
+	"https://www.openstreetmap.org/export/embed",
 	"https://www.openstreetmap.org/export/embed.html",
+}
+
+// iframeSrcPattern pulls the src out of a pasted <iframe> tag.
+//
+// Both providers' "embed this map" dialogs hand over a whole element —
+// <iframe src="..." width=... ></iframe> — and that is what lands in a
+// leader's clipboard. Asking someone to select the part between two
+// quotation marks and nothing else is a demand the paste should not make,
+// so a whole snippet is accepted and the src taken out of it. Nothing is
+// trusted by having been extracted: the result goes through exactly the
+// same allowlist a typed URL does.
+var iframeSrcPattern = regexp.MustCompile(`(?is)<iframe\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']`)
+
+// mapEmbedCandidate turns what a leader pasted into the URL to check.
+//
+// Two shapes arrive: a bare URL, or the provider's whole <iframe> tag.
+// Either way the attribute value is HTML — the src of a copied snippet
+// spells its separators "&amp;" — so entities are decoded here rather
+// than being carried into the query string, where "&amp;layer=mapnik"
+// would become a parameter named "amp;layer".
+func mapEmbedCandidate(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if m := iframeSrcPattern.FindStringSubmatch(raw); m != nil {
+		raw = m[1]
+	}
+	return strings.TrimSpace(html.UnescapeString(raw))
 }
 
 // safeMapEmbedURL returns the URL only if it is one of the allowed map
@@ -93,7 +130,7 @@ var allowedMapEmbeds = []string{
 // is a prefix of "https://www.google.com/maps/embed.evil.example/..." only
 // if you compare text, and the point of this function is that it doesn't.
 func safeMapEmbedURL(raw string) string {
-	raw = strings.TrimSpace(raw)
+	raw = mapEmbedCandidate(raw)
 	if raw == "" {
 		return ""
 	}

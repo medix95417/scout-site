@@ -1556,6 +1556,7 @@ func (h *Handlers) HomeContentList(w http.ResponseWriter, r *http.Request) {
 		baseData
 		Sections              []homeAdminRow
 		HeroSections          []homeAdminRow
+		MapRejected           bool
 		PublicImageGroups     []files.EventFileGroup
 		PublicImagesUngrouped []files.File
 		PublicMediaGroups     []files.EventFileGroup
@@ -1564,6 +1565,7 @@ func (h *Handlers) HomeContentList(w http.ResponseWriter, r *http.Request) {
 		baseData:              h.base(r, "Edit Homepage"),
 		Sections:              rows,
 		HeroSections:          heroRows,
+		MapRejected:           r.URL.Query().Get("map") == "rejected",
 		PublicImageGroups:     publicImageGroups,
 		PublicImagesUngrouped: publicImagesUngrouped,
 		PublicMediaGroups:     publicMediaGroups,
@@ -1586,13 +1588,14 @@ func (h *Handlers) HomeContentSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slug := r.PathValue("slug")
-	var label string
+	var label, kind string
 	var isHeroImage bool
 	valid := false
 	for _, def := range content.HomepageSections(unit.UnitType) {
 		if def.Slug == slug {
 			valid = true
 			label = def.Label
+			kind = def.Kind
 			isHeroImage = slug == "home-hero-image"
 			break
 		}
@@ -1602,6 +1605,7 @@ func (h *Handlers) HomeContentSave(w http.ResponseWriter, r *http.Request) {
 			if def.Slug == slug {
 				valid = true
 				label = def.Label
+				kind = def.Kind
 				isHeroImage = true
 				break
 			}
@@ -1623,7 +1627,27 @@ func (h *Handlers) HomeContentSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := content.UpsertSection(r.Context(), h.Pool, unit.ID, slug, label, r.FormValue("body"), actor.ID); err != nil {
+	body := r.FormValue("body")
+
+	// A map section stores the embed URL, not the paste. What arrives is
+	// whichever of the two shapes the provider's dialog put on the
+	// clipboard; safeMapEmbedURL is the one thing that decides whether
+	// it is a map this site will frame, so it decides here — at the
+	// point the leader can still be told — rather than only on the
+	// homepage, where a refusal used to be an empty space and no
+	// explanation. Blank is a real answer (it removes the map); anything
+	// else that isn't recognised goes back to the form as an error
+	// instead of being saved to render nothing.
+	if kind == "map" {
+		if clean := safeMapEmbedURL(body); clean != "" {
+			body = clean
+		} else if strings.TrimSpace(body) != "" {
+			http.Redirect(w, r, "/admin/home?map=rejected#"+slug, http.StatusSeeOther)
+			return
+		}
+	}
+
+	if _, err := content.UpsertSection(r.Context(), h.Pool, unit.ID, slug, label, body, actor.ID); err != nil {
 		log.Printf("web: saving homepage section: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

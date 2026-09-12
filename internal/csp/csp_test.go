@@ -119,7 +119,7 @@ func TestPolicyFramesOnlyTheHostsAFeatureNeeds(t *testing.T) {
 			frameSrc = strings.TrimPrefix(d, "frame-src ")
 		}
 	}
-	want := "'self' https://www.youtube-nocookie.com https://www.google.com/maps/embed https://www.openstreetmap.org/export/embed.html"
+	want := "'self' https://www.youtube-nocookie.com https://www.google.com/maps/embed https://www.openstreetmap.org/export/embed https://www.openstreetmap.org/export/embed.html"
 	if frameSrc != want {
 		t.Errorf("frame-src = %q, want exactly %q", frameSrc, want)
 	}

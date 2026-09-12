@@ -27,6 +27,29 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The homepage map now accepts what OpenStreetMap and Google Maps
+  actually hand you.** Pasting a map's embed code produced no map and no
+  explanation. Three separate causes, all of them ours: OpenStreetMap's
+  share dialog emits `/export/embed` and only the older `/export/embed.html`
+  spelling was allowed; what both providers copy is a whole `<iframe>`
+  snippet, which the field refused to even accept because it was an
+  `<input type="url">`; and the Content-Security-Policy named only the
+  `.html` path, so a browser would have refused to frame the map even
+  once the server allowed it. A pasted snippet is now unpicked
+  server-side and stored as the bare embed URL, both OpenStreetMap paths
+  are accepted, and the policy matches the allowlist — with a test that
+  fails if the two ever drift apart again.
+- **A rejected map link now says so.** A link that isn't a map embed was
+  accepted by the form, dropped silently, and left a leader looking at an
+  unchanged homepage. It is now refused at the point of saving, with a
+  message naming the difference between a share link and an embed code
+  and where to find the latter.
+- **A map with no address shows the map.** The whole panel was gated
+  behind the meeting address, so a unit that pasted an embed link and
+  nothing else got an empty homepage. Each half now stands on its own.
+
 ## [2.12.1] — 2026-09-12
 
 ### Fixed
