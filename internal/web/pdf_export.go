@@ -251,11 +251,67 @@ func calendarEventsPDF(title, dateRangeLabel string, events []calendarPDFEvent) 
 // This section renders /treasury/reports' PDF exports — see
 // TreasuryReportExportPDF in treasury_reports.go.
 
+// Table geometry. A cell holds as many lines as its text needs at the
+// column's width, and a row is as tall as its tallest cell — see
+// simpleTablePDF for why that is not the obvious "one line per row".
+const (
+	tablePadX     = 1.0 // breathing room inside a cell's left/right border
+	tablePadY     = 1.0
+	tableLineH    = 4.5 // one wrapped line of 9pt text
+	tableMinRowH  = 7.0 // an empty row is still a row
+	tableHeaderH  = 7.0
+	tableFontSize = 9.0
+)
+
+// wrapCell splits one cell's text into the lines it needs at width.
+//
+// The text is translated to the PDF's own encoding first and the
+// translated lines are what get written, since translating twice would
+// mangle anything non-ASCII. Explicit newlines are honoured — that is how
+// a caller says "these belong on separate lines" (a member's roles, a
+// family's phone numbers) rather than leaving it to where the wrap
+// happens to fall.
+func wrapCell(pdf *fpdf.Fpdf, tr func(string) string, text string, width float64) []string {
+	if strings.TrimSpace(text) == "" {
+		return []string{""}
+	}
+	usable := width - 2*tablePadX
+	var out []string
+	for _, para := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		if strings.TrimSpace(para) == "" {
+			out = append(out, "")
+			continue
+		}
+		for _, line := range pdf.SplitLines([]byte(tr(para)), usable) {
+			out = append(out, string(line))
+		}
+	}
+	if len(out) == 0 {
+		return []string{""}
+	}
+	return out
+}
+
 // simpleTablePDF renders a title, an optional subtitle, and a single
-// table — the shared layout behind every Treasury report export, so each
-// report type only supplies its own headers/rows, not its own PDF layout
-// code. widths are column widths in mm; aligns is "L"/"R" per column,
-// same length as headers/each row.
+// table — the shared layout behind the roster, the event attendee list
+// and every Treasury report export, so each of them only supplies its
+// own headers/rows, not its own PDF layout code. widths are column
+// widths in mm; aligns is "L"/"R" per column, same length as
+// headers/each row.
+//
+// Cells wrap, and a row is as tall as its tallest cell. They did not
+// always: every row was one fixed-height line, and anything longer than
+// its column — a member with three roles, an address, a long report
+// description — was drawn straight over the neighbouring columns and
+// their borders. On screen the same roster wraps, so the PDF was the one
+// place the information came out unreadable, which is the place it gets
+// printed and handed round. Wrapping is also why this draws its own
+// borders with Rect and writes the lines inside: fpdf's bordered cell
+// can only do one line.
+//
+// A table that runs past the bottom of the page repeats its header on
+// the next one, for the same reason — page two of a printed roster with
+// no column headings is a puzzle.
 func simpleTablePDF(title, subtitle string, headers []string, widths []float64, aligns []string, rows [][]string) ([]byte, error) {
 	pdf := fpdf.New("P", "mm", "Letter", "")
 	pdf.SetMargins(15, 15, 15)
@@ -276,28 +332,61 @@ func simpleTablePDF(title, subtitle string, headers []string, widths []float64, 
 		tableWidth += w
 	}
 
-	pdf.SetFillColor(240, 240, 240)
-	pdf.SetFont("Helvetica", "B", 9)
-	for i, hdr := range headers {
-		ln := 0
-		if i == len(headers)-1 {
-			ln = 1
-		}
-		pdf.CellFormat(widths[i], 7, tr(hdr), "1", ln, aligns[i], true, 0, "")
-	}
+	leftMargin, _, _, bottomMargin := pdf.GetMargins()
+	_, pageHeight := pdf.GetPageSize()
+	pageBottom := pageHeight - bottomMargin
 
-	pdf.SetFont("Helvetica", "", 9)
-	if len(rows) == 0 {
-		pdf.CellFormat(tableWidth, 7, tr("No data for this report."), "1", 1, "L", false, 0, "")
-	}
-	for _, row := range rows {
-		for i, cell := range row {
+	drawHeader := func() {
+		pdf.SetFillColor(240, 240, 240)
+		pdf.SetFont("Helvetica", "B", tableFontSize)
+		for i, hdr := range headers {
 			ln := 0
-			if i == len(row)-1 {
+			if i == len(headers)-1 {
 				ln = 1
 			}
-			pdf.CellFormat(widths[i], 7, tr(cell), "1", ln, aligns[i], false, 0, "")
+			pdf.CellFormat(widths[i], tableHeaderH, tr(hdr), "1", ln, aligns[i], true, 0, "")
 		}
+		pdf.SetFont("Helvetica", "", tableFontSize)
+	}
+	drawHeader()
+
+	if len(rows) == 0 {
+		pdf.CellFormat(tableWidth, tableMinRowH, tr("No data for this report."), "1", 1, "L", false, 0, "")
+	}
+
+	for _, row := range rows {
+		// Wrap every cell before drawing any of them: the row's height
+		// is the tallest one, and the borders have to be that tall too.
+		cells := make([][]string, len(row))
+		tallest := 1
+		for i, cell := range row {
+			cells[i] = wrapCell(pdf, tr, cell, widths[i])
+			if len(cells[i]) > tallest {
+				tallest = len(cells[i])
+			}
+		}
+		rowHeight := float64(tallest)*tableLineH + 2*tablePadY
+		if rowHeight < tableMinRowH {
+			rowHeight = tableMinRowH
+		}
+
+		if pdf.GetY()+rowHeight > pageBottom {
+			pdf.AddPage()
+			drawHeader()
+		}
+
+		x, y := leftMargin, pdf.GetY()
+		for i := range row {
+			pdf.Rect(x, y, widths[i], rowHeight, "D")
+			pdf.SetXY(x+tablePadX, y+tablePadY)
+			for _, line := range cells[i] {
+				// ln=2 drops to the next line at the same x, which is
+				// what stacks a wrapped cell's lines inside its box.
+				pdf.CellFormat(widths[i]-2*tablePadX, tableLineH, line, "", 2, aligns[i], false, 0, "")
+			}
+			x += widths[i]
+		}
+		pdf.SetXY(leftMargin, y+rowHeight)
 	}
 
 	var buf bytes.Buffer

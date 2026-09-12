@@ -27,6 +27,19 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The printed roster no longer runs its columns into each other.** A
+  member with more than one role showed them stacked on the website but
+  ran them together on one line in the PDF, where — along with a long
+  address or a full set of contact details — the text was drawn straight
+  across the neighbouring columns and their borders, which is exactly
+  where it gets printed and handed round. Every cell in the roster,
+  attendee-list and Treasury report PDFs now wraps inside its own column,
+  and a row is as tall as its tallest cell. Roles and contact details are
+  listed one per line, matching what the page shows, and a table long
+  enough to spill onto a second page repeats its column headings there.
+
 ## [2.12.0] — 2026-09-12
 
 ### Added

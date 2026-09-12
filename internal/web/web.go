@@ -1827,12 +1827,15 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 
 // --- Roster ---------------------------------------------------------------
 
-// rosterContactDisplay joins whichever of a roster entry's Email/HomePhone/
+// rosterContactParts is whichever of a roster entry's Email/HomePhone/
 // CellPhone fields are actually set (i.e. released — see
-// family.RosterEntry's doc comment) into one "· "-separated string for a
-// single-line/single-cell display, used by both roster.html and the
-// roster PDF export so the two stay in sync.
-func rosterContactDisplay(e family.RosterEntry) string {
+// family.RosterEntry's doc comment), in display order.
+//
+// Returned as parts rather than one joined string because the roster PDF
+// puts each on its own line, the same as roster.html does with <br> —
+// they used to be joined with "·" into a single line that the PDF then
+// could not wrap.
+func rosterContactParts(e family.RosterEntry) []string {
 	var parts []string
 	if e.Email != "" {
 		parts = append(parts, e.Email)
@@ -1843,7 +1846,7 @@ func rosterContactDisplay(e family.RosterEntry) string {
 	if e.CellPhone != "" {
 		parts = append(parts, "cell "+e.CellPhone)
 	}
-	return strings.Join(parts, " · ")
+	return parts
 }
 
 func (h *Handlers) Roster(w http.ResponseWriter, r *http.Request) {
@@ -1888,7 +1891,12 @@ func (h *Handlers) RosterExportPDF(w http.ResponseWriter, r *http.Request) {
 		if subGroup == "" {
 			subGroup = "—"
 		}
-		contact := rosterContactDisplay(e)
+		// One per line, the way the page shows them: a member with
+		// three roles reads as three roles, and an email sits above its
+		// phone numbers rather than running off the end of the column.
+		// simpleTablePDF wraps anything still too long, and sizes the
+		// row to whichever cell needs the most lines.
+		contact := strings.Join(rosterContactParts(e), "\n")
 		if contact == "" {
 			contact = "—"
 		}
@@ -1896,12 +1904,20 @@ func (h *Handlers) RosterExportPDF(w http.ResponseWriter, r *http.Request) {
 		if address == "" {
 			address = "—"
 		}
-		rows = append(rows, []string{e.FirstName + " " + e.LastName, e.MemberType, subGroup, strings.Join(e.RoleLabels, ", "), contact, address})
+		roles := strings.Join(e.RoleLabels, "\n")
+		if roles == "" {
+			roles = "—"
+		}
+		rows = append(rows, []string{e.FirstName + " " + e.LastName, e.MemberType, subGroup, roles, contact, address})
 	}
 
+	// 186mm of usable width on Letter portrait at 15mm margins; these
+	// add to 185. Contact is the widest of the free-text columns because
+	// an email address is the one value with no good place to break, and
+	// a column too narrow for a typical one wraps it mid-word.
 	data, err := simpleTablePDF(unit.Name+" — Roster", "",
 		[]string{"Name", "Type", "Den/Patrol", "Roles", "Contact", "Address"},
-		[]float64{40, 14, 22, 28, 38, 38}, []string{"L", "L", "L", "L", "L", "L"}, rows)
+		[]float64{35, 14, 21, 28, 47, 40}, []string{"L", "L", "L", "L", "L", "L"}, rows)
 	if err != nil {
 		log.Printf("web: rendering roster PDF: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
