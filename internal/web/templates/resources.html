@@ -23,16 +23,16 @@
         </div>
 
         <div data-resource-panel="file">
-          {{if .LibraryFiles}}
-            <select class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="file_id">
-              {{range .LibraryFiles}}
-                <option value="{{.ID}}">{{.DisplayLabel}}</option>
-              {{end}}
-            </select>
+          {{if .HasDocuments}}
+            <p class="text-xs text-gray-500 mb-2">
+              Documents only — grouped by the event they're linked to, newest first. Photos and videos aren't
+              listed here; they belong on <a href="/gallery" class="underline" style="color: var(--unit-color);">Photos</a>.
+            </p>
+            {{template "documentPicker" (dict "Groups" .DocumentGroups "Ungrouped" .DocumentsUngrouped "Name" "file_id")}}
           {{else}}
             <p class="text-xs text-gray-500">
-              No files in your <a href="/files" class="underline" style="color: var(--unit-color);">file library</a> yet —
-              upload one there first, then come back to add it here.
+              No documents in your <a href="/files" class="underline" style="color: var(--unit-color);">file library</a> yet —
+              upload one there first (a handbook, a form, a packing list), then come back to add it here.
             </p>
           {{end}}
         </div>
@@ -152,5 +152,58 @@
         <span class="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 font-medium">Members only</span>
       {{end}}
     </div>
+  </div>
+{{end}}
+
+{{/* documentPicker is the Resources page's "which document" chooser — the
+     same per-event accordion the photo pickers use (see
+     _image-picker.html), with radio rows instead of thumbnails, since a
+     document has nothing to show a picture of and a resource points at
+     exactly one of them.
+
+     Every group starts closed, so a unit with years of paperwork renders
+     a short list of event names rather than four hundred filenames.
+
+     Takes a dict with:
+       Groups    []files.EventFileGroup
+       Ungrouped []files.File — documents linked to no event
+       Name      the radio inputs' shared name ("file_id") */}}
+{{define "documentPicker"}}
+  <div class="space-y-2">
+    {{range .Groups}}
+      <details class="rounded-md border border-gray-200">
+        <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-gray-50">
+          {{.EventTitle}} <span class="text-gray-400 font-normal">({{len .Files}})</span>
+        </summary>
+        <div class="p-2">
+          {{template "documentPickerRows" (dict "Files" .Files "Name" $.Name)}}
+        </div>
+      </details>
+    {{end}}
+    {{if .Ungrouped}}
+      <details class="rounded-md border border-gray-200">
+        <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-gray-50">
+          Not linked to an event <span class="text-gray-400 font-normal">({{len .Ungrouped}})</span>
+        </summary>
+        <div class="p-2">
+          {{template "documentPickerRows" (dict "Files" .Ungrouped "Name" .Name)}}
+        </div>
+      </details>
+    {{end}}
+  </div>
+{{end}}
+
+{{define "documentPickerRows"}}
+  <div class="space-y-1">
+    {{$name := .Name}}
+    {{range .Files}}
+      <label class="flex items-start gap-2 text-sm">
+        <input type="radio" name="{{$name}}" value="{{.ID}}" class="mt-1 flex-shrink-0">
+        <span class="min-w-0">
+          <span class="block truncate">{{.DisplayLabel}}</span>
+          {{if .DisplayName}}<span class="block text-xs text-gray-400 truncate">{{.Filename}}</span>{{end}}
+        </span>
+      </label>
+    {{end}}
   </div>
 {{end}}

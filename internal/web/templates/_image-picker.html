@@ -51,17 +51,19 @@
   {{if or .Groups .Ungrouped}}
     <div class="space-y-2">
       {{range .Groups}}
-        <details class="rounded-md border border-gray-200">
-          <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-gray-50">{{.EventTitle}}</summary>
+        <details class="rounded-md border border-gray-200" data-picker-group>
+          <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-gray-50">{{.EventTitle}} <span class="text-gray-400 font-normal">({{len .Files}})</span></summary>
           <div class="p-2">
+            {{if eq $.Mode "append"}}{{template "pickerGroupTools" (dict "Count" (len .Files))}}{{end}}
             {{template "eventAccordionPickerStrip" (dict "Slug" $.Slug "Files" .Files "Mode" $.Mode "AppendTarget" $.AppendTarget "CurrentURL" $.CurrentURL "ShowPrivateBadge" $.ShowPrivateBadge)}}
           </div>
         </details>
       {{end}}
       {{if .Ungrouped}}
-        <details class="rounded-md border border-gray-200">
-          <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-gray-50">Not linked to an event</summary>
+        <details class="rounded-md border border-gray-200" data-picker-group>
+          <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-gray-50">Not linked to an event <span class="text-gray-400 font-normal">({{len .Ungrouped}})</span></summary>
           <div class="p-2">
+            {{if eq .Mode "append"}}{{template "pickerGroupTools" (dict "Count" (len .Ungrouped))}}{{end}}
             {{template "eventAccordionPickerStrip" (dict "Slug" .Slug "Files" .Ungrouped "Mode" .Mode "AppendTarget" .AppendTarget "CurrentURL" .CurrentURL "ShowPrivateBadge" .ShowPrivateBadge)}}
           </div>
         </details>
@@ -73,6 +75,30 @@
       upload one and mark it "Public" there to pick it here instead of pasting a URL.
     </p>
   {{end}}
+{{end}}
+
+{{/* pickerGroupTools is the "add all / remove all" pair at the top of one
+     append-mode group — building an album out of an event's photos means
+     wanting all of them far more often than wanting six of them, and
+     clicking forty thumbnails to find that out is the part nobody does
+     twice. Only rendered in append mode: in single-select mode "all of
+     them" is not a thing one field can hold.
+
+     Both buttons need JavaScript, which is why they are buttons and not
+     links — with it off, the individual thumbnails still work exactly as
+     they always have.
+
+     Takes a dict with: Count (how many files are in this group). */}}
+{{define "pickerGroupTools"}}
+  <div class="mb-2 flex flex-wrap items-center gap-3 text-xs">
+    <button type="button" class="underline" style="color: var(--unit-color);" data-picker-select-all>
+      Add all {{.Count}}
+    </button>
+    <button type="button" class="underline text-gray-500" data-picker-clear-all>
+      Remove them
+    </button>
+    <span class="text-gray-400" data-picker-group-count></span>
+  </div>
 {{end}}
 
 {{/* eventAccordionPickerStrip renders one group's horizontally-scrollable
@@ -478,39 +504,145 @@
      that slug, not just the one the click happened in. */}}
 {{define "imagePickerScript"}}
   <script nonce="{{.CSPNonce}}">
-    document.querySelectorAll('[data-image-picker]').forEach(function (picker) {
-      var slug = picker.getAttribute('data-image-picker');
-      var append = picker.getAttribute('data-image-picker-mode') === 'append';
-      var target = append
-        ? document.getElementById(picker.getAttribute('data-image-append-target'))
-        : document.querySelector('[data-image-url-input="' + slug + '"]');
-      if (!target) return;
+    (function () {
+      // --- append mode: the target <textarea> holds one item per line,
+      // "URL | caption | video" (see content.ParseGalleryPhotos). Every
+      // operation below is a line operation on that text, so a caption a
+      // leader typed is never disturbed by adding or removing some other
+      // photo. ---
+      var lineURL = function (line) {
+        var bar = line.indexOf('|');
+        return (bar === -1 ? line : line.slice(0, bar)).trim();
+      };
+      var lines = function (target) {
+        return target.value.split('\n');
+      };
+      var hasURL = function (target, url) {
+        return lines(target).some(function (line) { return lineURL(line) === url; });
+      };
+      var addURL = function (target, url, isVideo) {
+        if (hasURL(target, url)) { return false; }
+        var sep = target.value && !target.value.endsWith('\n') ? '\n' : '';
+        target.value += sep + url + ' | ' + (isVideo ? ' | video' : '');
+        return true;
+      };
+      var removeURL = function (target, url) {
+        var kept = lines(target).filter(function (line) {
+          // A blank line is dropped along the way; the field is a list,
+          // and a stray empty line in it means nothing.
+          return line.trim() !== '' && lineURL(line) !== url;
+        });
+        var next = kept.join('\n');
+        if (next === target.value) { return false; }
+        target.value = next;
+        return true;
+      };
+      var changed = function (target) {
+        // Setting .value directly doesn't fire a native input event —
+        // dispatch one so a page-specific script (e.g. a live preview)
+        // can react to a picker selection the same way it would to the
+        // visitor typing a URL by hand.
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+      };
 
-      picker.querySelectorAll('[data-image-picker-option]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
+      var appendTargetFor = function (btn) {
+        var picker = btn.closest('[data-image-picker]');
+        if (!picker || picker.getAttribute('data-image-picker-mode') !== 'append') { return null; }
+        return document.getElementById(picker.getAttribute('data-image-append-target'));
+      };
+
+      // A thumbnail already in the list is ringed, so "which of these
+      // forty have I got" is answerable by looking. Recomputed from the
+      // textarea after every change, and once on load, so a leader who
+      // edits the text by hand still sees the truth.
+      var marks = [];
+      var refreshMarks = function () {
+        marks.forEach(function (m) {
+          var on = hasURL(m.target, m.url);
+          var media = m.button.querySelector('img,video');
+          if (media) {
+            media.classList.toggle('border-blue-500', on);
+            media.classList.toggle('border-gray-200', !on);
+          }
+          m.button.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        document.querySelectorAll('[data-picker-group]').forEach(function (group) {
+          var label = group.querySelector('[data-picker-group-count]');
+          if (!label) { return; }
+          var options = group.querySelectorAll('[data-image-picker-option]');
+          var n = 0;
+          options.forEach(function (btn) {
+            var target = appendTargetFor(btn);
+            if (target && hasURL(target, btn.getAttribute('data-image-picker-option'))) { n++; }
+          });
+          label.textContent = n === 0 ? '' : n + ' of ' + options.length + ' added';
+        });
+      };
+
+      document.querySelectorAll('[data-image-picker]').forEach(function (picker) {
+        var slug = picker.getAttribute('data-image-picker');
+        var append = picker.getAttribute('data-image-picker-mode') === 'append';
+        var target = append
+          ? document.getElementById(picker.getAttribute('data-image-append-target'))
+          : document.querySelector('[data-image-url-input="' + slug + '"]');
+        if (!target) return;
+
+        picker.querySelectorAll('[data-image-picker-option]').forEach(function (btn) {
           var url = btn.getAttribute('data-image-picker-option');
           var isVideo = btn.getAttribute('data-image-picker-kind') === 'video';
-          if (append) {
-            var sep = target.value && !target.value.endsWith('\n') ? '\n' : '';
-            target.value += sep + url + ' | ' + (isVideo ? ' | video' : '');
-            target.focus();
-          } else {
-            target.value = url;
-            document.querySelectorAll('[data-image-picker="' + slug + '"] img, [data-image-picker="' + slug + '"] video').forEach(function (el) {
-              el.classList.remove('border-blue-500');
-              el.classList.add('border-gray-200');
-            });
-            var chosen = btn.querySelector('img,video');
-            chosen.classList.remove('border-gray-200');
-            chosen.classList.add('border-blue-500');
-          }
-          // Setting .value directly doesn't fire a native input event —
-          // dispatch one so a page-specific script (e.g. a live preview)
-          // can react to a picker selection the same way it would to the
-          // visitor typing a URL by hand.
-          target.dispatchEvent(new Event('input', { bubbles: true }));
+          if (append) { marks.push({ button: btn, url: url, target: target }); }
+
+          btn.addEventListener('click', function () {
+            if (append) {
+              // A second click takes it back out again. Adding forty
+              // photos and then removing the two blurry ones is the
+              // actual job; without this the only way back is editing
+              // the text by hand.
+              if (hasURL(target, url)) {
+                removeURL(target, url);
+              } else {
+                addURL(target, url, isVideo);
+                target.focus();
+              }
+              refreshMarks();
+            } else {
+              target.value = url;
+              document.querySelectorAll('[data-image-picker="' + slug + '"] img, [data-image-picker="' + slug + '"] video').forEach(function (el) {
+                el.classList.remove('border-blue-500');
+                el.classList.add('border-gray-200');
+              });
+              var chosen = btn.querySelector('img,video');
+              chosen.classList.remove('border-gray-200');
+              chosen.classList.add('border-blue-500');
+            }
+            changed(target);
+          });
         });
       });
-    });
+
+      // Group-level "add all" / "remove them". The group root is the
+      // whole <details>, so this reaches the thumbnails still folded away
+      // behind its nested "Show more" pages too — otherwise "all" would
+      // quietly mean "the first 25".
+      document.querySelectorAll('[data-picker-select-all], [data-picker-clear-all]').forEach(function (btn) {
+        var adding = btn.hasAttribute('data-picker-select-all');
+        btn.addEventListener('click', function () {
+          var group = btn.closest('[data-picker-group]');
+          if (!group) { return; }
+          var touched = null;
+          group.querySelectorAll('[data-image-picker-option]').forEach(function (option) {
+            var target = appendTargetFor(option);
+            if (!target) { return; }
+            var url = option.getAttribute('data-image-picker-option');
+            var isVideo = option.getAttribute('data-image-picker-kind') === 'video';
+            if (adding ? addURL(target, url, isVideo) : removeURL(target, url)) { touched = target; }
+          });
+          refreshMarks();
+          if (touched) { changed(touched); }
+        });
+      });
+
+      refreshMarks();
+    })();
   </script>
 {{end}}

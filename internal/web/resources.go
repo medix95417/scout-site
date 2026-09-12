@@ -60,7 +60,8 @@ func (h *Handlers) ResourcesList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var canManage bool
-	var libraryFiles []files.File
+	var documentGroups []files.EventFileGroup
+	var documentsUngrouped []files.File
 	if loggedIn {
 		caps, err := h.capabilitiesFor(r.Context(), user, unit.ID)
 		if err != nil {
@@ -68,25 +69,43 @@ func (h *Handlers) ResourcesList(w http.ResponseWriter, r *http.Request) {
 		}
 		canManage = units.CanEditUnitContent(caps)
 		if canManage {
-			libraryFiles, err = files.ListForUnit(r.Context(), h.Pool, unit.ID)
+			// Documents only, and grouped by event the way the photo
+			// pickers are. A resource is a handbook, a form, a map —
+			// offering every photo in the library alongside them made the
+			// list long enough to be useless and put the wrong things in
+			// it. Pictures belong on Photos; a picture that genuinely
+			// needs to be a resource can be added as a link.
+			documentGroups, documentsUngrouped, err = files.ListDocumentFilesGroupedByEvent(r.Context(), h.Pool, unit.ID)
 			if err != nil {
-				log.Printf("web: listing files for resource picker: %v", err)
+				log.Printf("web: listing documents for resource picker: %v", err)
 			}
 		}
 	}
 
 	data := struct {
 		baseData
-		Resources    []resourceRow
-		CanManage    bool
-		LibraryFiles []files.File
+		Resources          []resourceRow
+		CanManage          bool
+		DocumentGroups     []files.EventFileGroup
+		DocumentsUngrouped []files.File
+		HasDocuments       bool
 	}{
-		baseData:     h.base(r, "Resources"),
-		Resources:    rows,
-		CanManage:    canManage,
-		LibraryFiles: libraryFiles,
+		baseData:           h.base(r, "Resources"),
+		Resources:          rows,
+		CanManage:          canManage,
+		DocumentGroups:     documentGroups,
+		DocumentsUngrouped: documentsUngrouped,
+		HasDocuments:       len(documentGroups) > 0 || len(documentsUngrouped) > 0,
 	}
 	h.render(w, h.resourcesList, data)
+}
+
+// isDocumentFile is the "not a picture" test the Resources page uses,
+// defined by exclusion for the same reason files.ListDocumentFilesGroupedByEvent
+// is: content type is what a file IS, where the general/event_photo
+// category is only where a leader filed it.
+func isDocumentFile(contentType string) bool {
+	return !strings.HasPrefix(contentType, "image/") && !strings.HasPrefix(contentType, "video/")
 }
 
 func (h *Handlers) ResourceCreate(w http.ResponseWriter, r *http.Request) {
@@ -134,15 +153,25 @@ func (h *Handlers) ResourceCreate(w http.ResponseWriter, r *http.Request) {
 	default:
 		fileID := r.FormValue("file_id")
 		if fileID == "" {
-			http.Error(w, "choose a file from the library", http.StatusBadRequest)
+			http.Error(w, "choose a document from the library", http.StatusBadRequest)
 			return
 		}
-		if _, found, ferr := files.Get(r.Context(), h.Pool, fileID, unit.ID); ferr != nil {
+		f, found, ferr := files.Get(r.Context(), h.Pool, fileID, unit.ID)
+		if ferr != nil {
 			log.Printf("web: loading file for resource: %v", ferr)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
-		} else if !found {
+		}
+		if !found {
 			http.Error(w, "that file doesn't exist in this unit's library", http.StatusBadRequest)
+			return
+		}
+		// The picker only offers documents; this is the same rule applied
+		// to what actually arrives, since a form value is only ever a
+		// suggestion.
+		if !isDocumentFile(f.ContentType) {
+			http.Error(w, "that's a picture or a video, not a document — photos belong on the Photos page. "+
+				"If it really needs to be here, add it as a link instead.", http.StatusBadRequest)
 			return
 		}
 		_, err = resources.CreateFile(r.Context(), h.Pool, resources.CreateFileInput{
