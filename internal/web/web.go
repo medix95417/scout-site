@@ -200,16 +200,18 @@ type Handlers struct {
 // cent amounts as "$12.34"/"-$12.34" and Go templates have no arithmetic
 // or number-formatting of their own.
 var templateFuncs = template.FuncMap{
-	"formatCents":       formatCents,
-	"hasPrefix":         strings.HasPrefix,
-	"dict":              templateDict,
-	"galleryPhotos":     templateGalleryPhotos,
-	"chunkFiles":        chunkFiles,
-	"chunkFileRows":     chunkFileRows,
-	"heroSizeClass":     heroSizeClass,
-	"homeHeroSizeClass": homeHeroSizeClass,
-	"thumbURL":          thumbURL,
-	"photoFocusClass":   photoFocusClass,
+	"formatCents":        formatCents,
+	"hasPrefix":          strings.HasPrefix,
+	"dict":               templateDict,
+	"galleryPhotos":      templateGalleryPhotos,
+	"chunkFiles":         chunkFiles,
+	"chunkFileRows":      chunkFileRows,
+	"heroSizeClass":      heroSizeClass,
+	"homeHeroSizeClass":  homeHeroSizeClass,
+	"thumbURL":           thumbURL,
+	"photoFocusClass":    photoFocusClass,
+	"eventsForFile":      eventsForFile,
+	"otherEventsForFile": otherEventsForFile,
 }
 
 // thumbURL rewrites one of this app's own /files/{id}/download URLs to
@@ -805,6 +807,9 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	// File library and event photos (internal/web/files.go).
 	mux.HandleFunc("GET /files", h.FileLibrary)
 	mux.HandleFunc("POST /files/upload", h.FileUpload)
+	// Two segments, like /files/upload — no collision with the
+	// /files/{id}/... actions below, which are all three.
+	mux.HandleFunc("POST /files/bulk", h.FileBulkUpdate)
 	mux.HandleFunc("GET /files/{id}/download", h.FileDownload)
 	mux.HandleFunc("GET /files/{id}/thumb", h.FileThumbnail)
 	mux.HandleFunc("POST /files/{id}/delete", h.FileDelete)
