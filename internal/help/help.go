@@ -212,8 +212,10 @@ var Topics = []Topic{
 		Title:    "Keeping your family's details up to date",
 		Audience: AudienceEveryone,
 		Body: []string{
-			"\"My Family\" shows what the unit has on file for you: names, contact details, and your household address.",
-			"You control what the rest of the unit sees. Each of email, phone, and address has its own sharing switch, and they're all off until you turn them on. Leaders can always see your details regardless — the switches govern the family directory other members read.",
+			"\"My Family\" shows what the unit has on file for your household: everyone in it, their contact details, and your address.",
+			"It's a parent or guardian's page. An adult in the family can update anyone's email and phone numbers, the shared address, and what's shared about each of them — a Scout's own login doesn't open it, so decisions about what the unit sees of a child are made by an adult in that child's family.",
+			"You control what the rest of the unit sees. Each of email, phone, and address has its own sharing switch, and they're all off until you turn them on. Whatever you set here is what counts, including for a family member who once set it differently. Leaders can always see your details regardless — the switches govern the family directory other members read.",
+			"Passwords aren't managed here. Each login changes its own under Security, and nothing on this page can sign in as anyone.",
 		},
 	},
 	{
@@ -222,7 +224,7 @@ var Topics = []Topic{
 		Audience: AudienceEveryone,
 		Body: []string{
 			"News and Photos carry what the unit has been up to. Some posts are public and some are members-only; signed in, you see both.",
-			"Resources holds handbooks, forms, and useful links. The same split applies — some are public, some appear only once you're signed in.",
+			"Resources holds handbooks, forms, and useful links — documents rather than pictures, which live on Photos. The same public/members-only split applies: some are public, some appear only once you're signed in.",
 		},
 	},
 	{
@@ -296,7 +298,20 @@ var Topics = []Topic{
 			"The homepage's text and photos are edited from \"Edit Homepage\" — the hero banner, what your program offers, meeting details, and contact information.",
 			"News posts and photo galleries are each marked public or members-only when you write them. Public ones show to anyone; members-only ones only appear once someone signs in. The homepage follows the same rule, so a members-only post never shows to a visitor.",
 			"A news post is plain text, but a web address in it becomes a link by itself, and a YouTube link on a line of its own shows as a video right in the post. Put the link in the middle of a sentence if you'd rather it stayed a link.",
+			"A photo album is built from your file library, grouped by the event each photo is linked to. \"Add all\" puts a whole event's photos in at once; clicking a photo that's already in takes it back out, which is usually the quicker way round — add the lot, then drop the few you don't want.",
 			"Unpublishing a news post takes it off the site and keeps it, so you can put it back. Deleting one removes it for good, and only an Admin can do that — everything else about a post can be undone, and that cannot. If you need one gone rather than hidden, unpublish it and ask an Admin.",
+		},
+	},
+	{
+		ID:                 "files",
+		Title:              "The file library",
+		Audience:           AudienceLeader,
+		RequiredCapability: units.CapEditContent,
+		Body: []string{
+			"Files holds everything the site serves that isn't typed into a page: photos and video from events, and documents like packing lists, forms and handbooks. Everything is members-only unless you mark it public, and a public file can be opened by anyone with the link, signed in or not.",
+			"Linking a file to an event is what keeps the library usable — it's how photos group themselves on this page, how a document shows up under the event on the calendar, and how you find anything a year later. The list of events to link to opens on the ones that fit: the last 30 days for a photo or video, the next 30 for a document, since photos arrive after the thing they show and a packing list goes up before the trip. \"Show every event\" opens the rest, and an event a file is already linked to is always listed whatever its date.",
+			"You can act on several files at once. Tick them and the bar at the top will make them all public or all members-only, add them to an event, move them to one, or unlink them entirely. \"Move\" replaces whatever they were filed under, which is the fix for a batch uploaded against the wrong event; \"also link\" keeps what they had, for a campout that belongs to two events.",
+			"Deleting a file is permanent and doesn't ask what was using it. If a photo is on the homepage or in an album, it goes blank there — make it members-only instead if you only want it off the public site.",
 		},
 	},
 	{
@@ -342,6 +357,7 @@ var Topics = []Topic{
 			"A family who fills in the enquiry form on the public site lands on the Prospects page, with what they told us about themselves and their child.",
 			"Move each one along as you go — contacted, visited a meeting, joined, or not joining — and note what was said. That's what stops an enquiry going cold because everyone assumed somebody else had called.",
 			"An Admin sets who gets emailed about a new enquiry in Site Settings. Nobody has to be: the enquiry is recorded either way, so the list is the record rather than somebody's inbox.",
+			"\"Automatic email to prospects\", further down this page, is the note the family gets back the moment they submit the form — a reply while they're still at the keyboard rather than whenever someone next opens this page. Write it once and turn it on; leave it off and nothing is sent. It doesn't replace getting in touch properly, and like every message from this page it carries an unsubscribe link.",
 			"Joining is still a separate step. When a family signs up, add them on the Manage Roster page and mark the enquiry as joined — a prospect deliberately isn't a roster member until you make them one.",
 			"You can write to prospective families in bulk from this page, choosing who by where they've got to — everyone still at \"new\" and \"contacted\" when sign-up night comes round, say. You write it in a formatting editor, and you can save a letter as a template to start from next time.",
 			"These families gave their address to ask about joining, so every message carries an unsubscribe link and anyone who uses it is left out of everything afterwards. You can also take somebody off the list yourself, for when they ask in person or by reply. Opting out never deletes the enquiry — the record stays, so the next campaign doesn't quietly add them back.",
@@ -457,6 +473,7 @@ var Topics = []Topic{
 		RequiredCapability: units.CapSuperAdmin,
 		Body: []string{
 			"Every action of consequence is recorded: roster changes, content edits, approvals, and every ledger entry. The log can be filtered by date, by person, and by what was affected, and exported as a CSV.",
+			"Sign-ins are recorded too, with the address each one came from, under \"From\". That's what turns \"did someone else use this account\" into a question with an answer — an unfamiliar address next to a sign-in is the thing to look for, and the entries either side of it say what was done.",
 			"This is what makes an unexpected change answerable after the fact — who did it, when, and what it looked like before.",
 		},
 	},

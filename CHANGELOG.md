@@ -29,6 +29,50 @@ tagged commit with an accurate date.
 
 ### Added
 
+- **Act on several files at once.** The Files page lets a leader tick any
+  number of files and apply one action to all of them: make them public
+  or members-only, add them to an event, move them to one, or unlink them
+  entirely. "Move" replaces whatever events those files were filed under,
+  which is the fix for a batch uploaded against the wrong one; "also
+  link" keeps the links they already had. Every one of these is scoped to
+  the unit in the database rather than by checking ids in the handler, so
+  a file id from the other unit's library is skipped rather than acted
+  on.
+
+- **The event list when linking a file now opens on the right 30 days.**
+  Photos and video list events from the last 30 days, documents list the
+  next 30 — photos arrive after the thing they show, a packing list goes
+  up before the trip. Nothing is removed: "show every event" opens the
+  rest, and an event a file is already linked to is always listed
+  whatever its date, so saving the form can never drop a link that was
+  out of view.
+
+- **Add a whole event's photos to an album at once.** The album editor's
+  event photo picker gained "Add all" per event, and clicking a photo
+  that's already in the album takes it back out — add the lot, then drop
+  the few you don't want. Photos already in the album are ringed, and the
+  count is read back from the album itself, so editing the list by hand
+  still shows the truth.
+
+- **Sign-ins in the activity log, with the address they came from.** Every
+  session the site issues is now recorded — password, authenticator app
+  or security key alike — under a "Sign-ins" entry with a new "From"
+  column carrying the IP address, on the page and in the CSV export. This
+  is what turns "did someone else use this account" into a question with
+  an answer. The address is only taken from a proxy header when the app
+  is configured to sit behind one, since an address a visitor can choose
+  is an address they can write into the log.
+
+- **An automatic reply to a new "interested in joining" enquiry.** A
+  family who fills in the form can now get an email straight back, while
+  they are still at the keyboard, instead of silence until a leader next
+  opens the Prospects page. It is written on that page, in an "Automatic
+  email to prospects" section that stays closed until opened, and is off
+  until a unit turns it on. Like every other message to prospective
+  families it carries an unsubscribe link, never goes to an address that
+  has opted out, and escapes every value substituted into it — all of
+  them were typed by a stranger into a public form.
+
 - **Links and YouTube videos in news posts.** A web address in a news
   post is now a link a reader can click, opening in a new tab. A YouTube
   link on a line of its own shows as a video player right in the post,
@@ -40,6 +84,27 @@ tagged commit with an accurate date.
   treated as formatting, and the announcement editor now says so.
   Den and patrol pages, which show whole posts, get the same treatment;
   the news listing and homepage keep their short text previews.
+
+### Changed
+
+- **My Family is now an adult's page, covering the whole household.** It
+  lists every member of the family with their email, phone numbers and
+  the shared address all editable, and the sharing switches that decide
+  what the rest of the unit sees. What an adult sets replaces what that
+  person set for themselves, which is the point: a parent deciding their
+  child's number stays off the directory has to be able to make that
+  stick. A Scout's own login no longer opens the page — it is told to ask
+  a parent or guardian, and the nav link is hidden for it. Nothing on the
+  page touches passwords; each login still changes its own under
+  Security.
+
+- **The Resources page offers documents, not photos.** Its "a document
+  from the file library" chooser was a flat dropdown of every file in the
+  library, pictures included. It now lists documents only — anything that
+  isn't an image or a video — grouped by event in the same
+  closed-by-default accordion the photo pickers use. A picture posted to
+  it directly is refused, with a note that photos belong on Photos and
+  that a link is the way to add one anyway.
 
 ## [2.10.0] — 2026-09-10
 

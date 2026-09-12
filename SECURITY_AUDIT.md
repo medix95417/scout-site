@@ -894,3 +894,114 @@ rule, the nocookie host, the start offset). A render test proves the
 detail page passes the markup through intact while still escaping the
 title. A source-reading test fails if any other file in `internal/web`
 constructs `template.HTML`, so the reviewed function stays the only one.
+
+# Design note: bulk file actions, sign-in logging, and who manages a family's details
+
+Three of the changes in this batch touch things the audit has opinions
+about. What each one does, and why it is safe.
+
+## A bulk action is scoped by the database, not by the handler
+
+`/files/bulk` takes a list of file ids straight off a form. The handler
+does not loop over them checking ownership; every statement behind it
+(`files.SetPublicMany`, `LinkEventMany`, `UnlinkEventsMany`) carries
+`WHERE unit_id = $1 AND id = ANY($2)`, so an id belonging to the other
+unit's library matches nothing. The leader is told how many files were
+actually changed, which is the honest number, and nothing reveals
+whether a skipped id exists.
+
+Two specific hazards, both closed:
+
+- **The second entity.** "Move these files to that event" names an event
+  as well as the files. It is verified to belong to this unit *before*
+  the existing links are cleared — otherwise posting the other unit's
+  event id would unlink everything and link nothing, which is data loss
+  dressed up as a permission error.
+- **The size of one request.** A submission is capped at 500 file ids,
+  comfortably above a phone's camera roll and well below what a
+  hand-written post could otherwise ask one transaction to do.
+
+The action itself is gated by `CanEditUnitContent`, the same permission
+the per-file rename/delete/link controls already required. Nothing here
+lets someone do in bulk what they could not do one at a time.
+
+The result message shown afterwards is built from a fixed set of action
+names and an integer parsed out of the redirect, never from text carried
+in the URL — `html/template` would escape it regardless, but a reflected
+message is still a message somebody else wrote.
+
+## Sign-ins are recorded, with the address
+
+Every session the app issues now goes through `Handlers.startSession`,
+which writes an `entity_type = "login"` audit entry naming the member
+who signed in, how (password, authenticator app, security key), and the
+address the request came from. `TestOnlyStartSessionIssuesASession`
+fails any other file in `internal/web` that calls `auth.CreateSession`,
+so a new login route cannot quietly be a session nothing recorded.
+
+Points worth stating plainly:
+
+- **The address is not taken from a header a visitor controls.** It
+  comes from `clientIP`, which ignores `X-Forwarded-For` entirely unless
+  the app is configured as sitting behind a proxy, and then reads the
+  *rightmost* value — the one the proxy itself appended. A visitor who
+  can choose their apparent address can write whatever they like into
+  this log, which is exactly the failure this avoids.
+- **An IP address is personal data**, and this is a site used by
+  children's families. It is visible only where the rest of the activity
+  log is: to leaders and the Treasurer (`requireAuditViewer`), never on
+  any member-facing page, and it is covered by whatever retention the
+  audit log itself has. It is recorded because "who has been in this
+  account" is unanswerable without it, and that question is the reason
+  the log exists.
+- **Failing to log never blocks a sign-in.** `audit.Log` is best-effort
+  by design; a login that has correctly authenticated is not refused
+  because a log write failed. A failure is reported to the process log.
+- **Scoping is unchanged.** The entry is filed against the member who
+  signed in, so it appears in the log of each unit that member holds a
+  role in — the same rule every other member-keyed entry already
+  followed — and in neither unit's log for someone who holds none.
+
+## `/my-family` is an adult's page
+
+The household contact page used to be open to any logged-in account,
+with an individual member login seeing only its own row. It is now gated
+on being an adult in that family: an individual member login passes only
+if `member_type = 'adult'`, and a family-wide login passes if the family
+has an adult in it at all.
+
+- **This is a tightening, not a loosening.** The page shows more to the
+  people who may open it (every member of their own household, which a
+  family-wide login already saw) and nothing to anyone who may not. No
+  login can reach another family's details: `MemberBelongsToFamily`
+  still gates the member id posted, and the address form only ever
+  writes `user.FamilyID`.
+- **A Scout's own login lost access on purpose.** What is shared about a
+  child on the family directory is a parent or guardian's decision, and
+  this is where that decision is made. The refusal says who to ask, and
+  the nav link is hidden rather than left to fail on click.
+- **An adult's setting overrides the member's own.** The release flags
+  are one column per member, so an adult writing them replaces whatever
+  was there. That is the intended behaviour rather than a collision —
+  the alternative is a parent who cannot keep their child's phone number
+  off a directory other families read.
+- **Nothing on the page touches credentials.** No password field, no
+  reset link, no login management; a rendered-page test enforces that.
+  An adult managing contact details is not thereby able to take over a
+  Scout's login.
+
+## Verification
+
+Unit tests cover the window classification and the split that decides
+what a link form shows, the bulk result messages (including a junk count
+from a hand-edited URL), the documents-only predicate, and the prospect
+auto-reply's substitution — escaping of every stranger-typed value, and
+a subject that cannot carry a newline into a mail header. Integration
+tests against Postgres cover each bulk statement's unit scoping, the
+refused cross-unit move leaving existing links untouched,
+`files.ListDocumentFilesGroupedByEvent` excluding pictures, the sign-in
+entry's address surviving the round trip into the activity log, and a
+sign-in staying out of the other unit's log. Source-reading guards cover
+the one-place-issues-a-session rule, that all three `/my-family` routes
+check for an adult, and that a new enquiry still triggers the automatic
+reply after the record is stored.
