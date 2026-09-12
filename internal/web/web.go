@@ -1770,13 +1770,7 @@ func (h *Handlers) completeLogin(w http.ResponseWriter, r *http.Request, userID,
 		return
 	}
 
-	token, expiresAt, err := auth.CreateSession(r.Context(), h.Pool, userID)
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	auth.SetSessionCookie(w, token, expiresAt, h.CookieDomain, h.SecureCookie)
-	http.Redirect(w, r, next, http.StatusSeeOther)
+	h.startSession(w, r, userID, next, signInWithPassword)
 }
 
 func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {

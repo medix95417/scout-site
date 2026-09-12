@@ -74,6 +74,16 @@ type LogEntry struct {
 	ActorName  string // resolved from members, "system" if ActorID was nil
 	Action     string
 	OccurredAt string // pre-formatted for display; see internal/web
+	// IPAddress is where the action came from, for the entries that
+	// record one — today that means sign-ins (see internal/web's
+	// startSession), which are the entries where "who did this" is worth
+	// nothing without "and from where".
+	//
+	// Read back out of after_state's "ip" key rather than getting a
+	// column of its own: audit_log is one generic table with a JSON
+	// payload, and an address is a fact about the action, exactly what
+	// that payload is for. Blank for every entry that doesn't record one.
+	IPAddress string
 }
 
 // entityScopeSQL is "which audit_log.entity_id values belong to this
@@ -138,6 +148,10 @@ const entityScopeSQL = `
 	UNION
 	SELECT id FROM role_assignments WHERE unit_id = $1
 	UNION
+	-- Also how a sign-in (entity_type "login") is scoped: it is logged
+	-- against the member who signed in, so it shows in the log of each
+	-- unit that member holds a role in, and in neither for someone who
+	-- holds none.
 	SELECT member_id FROM role_assignments WHERE unit_id = $1
 	UNION
 	SELECT members.family_id FROM role_assignments JOIN members ON members.id = role_assignments.member_id WHERE role_assignments.unit_id = $1
@@ -239,7 +253,8 @@ func ForUnitFiltered(ctx context.Context, pool *pgxpool.Pool, f Filter) ([]LogEn
 			COALESCE(audit_log.actor_id::text, ''),
 			COALESCE(members.first_name || ' ' || members.last_name, 'system'),
 			audit_log.action,
-			to_char(audit_log.occurred_at, 'YYYY-MM-DD HH24:MI')
+			to_char(audit_log.occurred_at, 'YYYY-MM-DD HH24:MI'),
+			COALESCE(audit_log.after_state->>'ip', '')
 		FROM audit_log
 		LEFT JOIN members ON members.id = audit_log.actor_id
 		WHERE audit_log.entity_id IN (`+entityScopeSQL+`)`+extraWhere+`
@@ -253,7 +268,7 @@ func ForUnitFiltered(ctx context.Context, pool *pgxpool.Pool, f Filter) ([]LogEn
 	var entries []LogEntry
 	for rows.Next() {
 		var e LogEntry
-		if err := rows.Scan(&e.ID, &e.EntityType, &e.EntityID, &e.ActorID, &e.ActorName, &e.Action, &e.OccurredAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.EntityType, &e.EntityID, &e.ActorID, &e.ActorName, &e.Action, &e.OccurredAt, &e.IPAddress); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)

@@ -500,12 +500,6 @@ func (h *Handlers) LoginSecurityKeyFinish(w http.ResponseWriter, r *http.Request
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	sessionToken, expiresAt, err := auth.CreateSession(r.Context(), h.Pool, userID)
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
 	auth.ClearPendingTwoFactorCookie(w, h.CookieDomain, h.SecureCookie)
-	auth.SetSessionCookie(w, sessionToken, expiresAt, h.CookieDomain, h.SecureCookie)
-	http.Redirect(w, r, sanitizeNextPath(next), http.StatusSeeOther)
+	h.startSession(w, r, userID, next, signInWithSecurityKey)
 }

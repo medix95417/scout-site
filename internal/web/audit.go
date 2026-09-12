@@ -53,6 +53,7 @@ var entityTypeLabels = map[string]string{
 	"member":                "Roster members",
 	"role_assignment":       "Roles",
 	"sub_group":             "Dens/patrols",
+	"login":                 "Sign-ins",
 }
 
 func entityTypeLabel(entityType string) string {
@@ -196,9 +197,9 @@ func (h *Handlers) AuditExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 
 	cw := csv.NewWriter(w)
-	_ = cw.Write([]string{"When", "Who", "Action", "Function", "Entity ID"})
+	_ = cw.Write([]string{"When", "Who", "Action", "Function", "IP address", "Entity ID"})
 	for _, e := range entries {
-		_ = cw.Write([]string{e.OccurredAt, csvCell(e.ActorName), csvCell(e.Action), entityTypeLabel(e.EntityType), csvCell(e.EntityID)})
+		_ = cw.Write([]string{e.OccurredAt, csvCell(e.ActorName), csvCell(e.Action), entityTypeLabel(e.EntityType), csvCell(e.IPAddress), csvCell(e.EntityID)})
 	}
 	cw.Flush()
 	if err := cw.Error(); err != nil {

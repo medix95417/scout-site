@@ -87,14 +87,8 @@ func (h *Handlers) LoginTwoFactorSubmit(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	token, expiresAt, err := auth.CreateSession(r.Context(), h.Pool, userID)
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
 	auth.ClearPendingTwoFactorCookie(w, h.CookieDomain, h.SecureCookie)
-	auth.SetSessionCookie(w, token, expiresAt, h.CookieDomain, h.SecureCookie)
-	http.Redirect(w, r, sanitizeNextPath(next), http.StatusSeeOther)
+	h.startSession(w, r, userID, next, signInWithAuthenticator)
 }
 
 // expirePendingTwoFactorLogin clears a stale/invalid pending-login cookie
