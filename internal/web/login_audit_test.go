@@ -125,3 +125,33 @@ func TestSignInRecordsTheAddressUnderTheKeyTheLogReads(t *testing.T) {
 		t.Error(`the activity log no longer reads after_state->>'ip', so recorded addresses will never be shown`)
 	}
 }
+
+// readSource / functionBody are small source-reading helpers shared by
+// the guards in this package that care about what a handler does rather
+// than what it returns. Source-level because the alternative — standing
+// a whole server, database and mail server up to observe one
+// best-effort call — tests the harness more than the code.
+func readSource(file string) (string, error) {
+	b, err := os.ReadFile(file)
+	return string(b), err
+}
+
+// functionBody returns the text of one top-level func, from its
+// signature to the closing brace at column 0.
+func functionBody(src, name string) (string, bool) {
+	start := strings.Index(src, "func "+name+"(")
+	if start == -1 {
+		// A method: "func (h *Handlers) Name(".
+		marker := ") " + name + "("
+		i := strings.Index(src, marker)
+		if i == -1 {
+			return "", false
+		}
+		start = strings.LastIndex(src[:i], "\nfunc ") + 1
+	}
+	end := strings.Index(src[start:], "\n}\n")
+	if end == -1 {
+		return src[start:], true
+	}
+	return src[start : start+end+3], true
+}

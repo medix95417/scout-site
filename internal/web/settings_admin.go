@@ -145,6 +145,11 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 			paymentToggleViews = append(paymentToggleViews, v)
 		case "social":
 			socialToggleViews = append(socialToggleViews, v)
+		case "prospect_auto_email":
+			// Rendered on /admin/prospects instead, next to the message
+			// it switches on — see Handlers.ProspectAutoReplyUpdate.
+			// Dropped here rather than shown in two places, which is how
+			// a leader ends up unsure which one is in effect.
 		default:
 			unitViews = append(unitViews, v)
 		}
@@ -185,6 +190,9 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 			treasuryControlViews = append(treasuryControlViews, v)
 		case "prospects":
 			prospectTextViews = append(prospectTextViews, v)
+		case "prospect_auto_email":
+			// Same reasoning as the toggle above: it lives on
+			// /admin/prospects.
 		default:
 			paymentTextViews = append(paymentTextViews, v)
 		}

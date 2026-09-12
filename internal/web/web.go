@@ -651,6 +651,10 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /join", h.JoinForm)
 	mux.HandleFunc("POST /join", h.JoinSubmit)
 	mux.HandleFunc("GET /admin/prospects", h.ProspectsList)
+	// A literal segment where the routes below take a {id}, which Go's
+	// ServeMux resolves as the more specific pattern — no ambiguity, and
+	// TestRoutesRegisterWithoutPanic is what says so.
+	mux.HandleFunc("POST /admin/prospects/auto-email", h.ProspectAutoReplyUpdate)
 	mux.HandleFunc("POST /admin/prospects/{id}", h.ProspectUpdate)
 	mux.HandleFunc("POST /admin/prospects/{id}/delete", h.ProspectDelete)
 	mux.HandleFunc("POST /admin/prospects/{id}/opt-out", h.ProspectOptOut)

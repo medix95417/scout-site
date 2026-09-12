@@ -278,6 +278,12 @@ const (
 	// environment rather than a key prefix that implies it, so the app
 	// needs this told to it explicitly to know which API base URL to call.
 	PayPalLiveMode = "payments_paypal_live_mode"
+
+	// ProspectAutoReplyEnabled is the on/off for the automatic reply
+	// above. Off by default: a unit that has not written the message yet
+	// should not start sending one, and turning it off is how a unit
+	// pauses it without losing the text.
+	ProspectAutoReplyEnabled = "prospect_auto_reply_enabled"
 )
 
 // UnitToggle is a per-unit sibling of Toggle. Section groups related
@@ -348,6 +354,14 @@ var UnitToggles = []UnitToggle{
 		Description: "Off (default) checks the sandbox credentials below — PayPal's test environment, no real money moves. Turn on only once you've entered real, live PayPal credentials and are ready to accept actual payments.",
 		Default:     false,
 		Section:     "payments",
+	},
+	{
+		Key:   ProspectAutoReplyEnabled,
+		Label: "Send an automatic reply to a new enquiry",
+		Description: "Emails the family back the moment they submit the \"interested in joining\" form. " +
+			"Edited on the Prospects page, not here. Off until a unit has written the message.",
+		Default: false,
+		Section: "prospect_auto_email",
 	},
 	{
 		Key:         SocialFacebookEnabled,
@@ -699,6 +713,15 @@ const (
 	// never lost, just not pushed to anyone.
 	ProspectNotifyEmails = "prospect_notify_emails"
 
+	// ProspectAutoReplySubject/Body are the email a family gets back
+	// automatically the moment they fill in the "interested in joining"
+	// form — the reply that says someone has it and what happens next,
+	// sent while they are still at the keyboard rather than whenever a
+	// leader next checks the Prospects page. Edited on /admin/prospects,
+	// not here, since that is where the rest of the prospect mail lives.
+	ProspectAutoReplySubject = "prospect_auto_reply_subject"
+	ProspectAutoReplyBody    = "prospect_auto_reply_body"
+
 	WelcomeEmailSubject = "welcome_email_subject"
 	WelcomeEmailBody    = "welcome_email_body"
 
@@ -829,6 +852,11 @@ func validateUnitTextValue(key, trimmed string) error {
 			return ErrWelcomeEmailNeedsPassword
 		}
 	}
+	// The same ceiling, without the password rule — this one has no
+	// credential to carry, so there is nothing it must mention.
+	if key == ProspectAutoReplyBody && len(trimmed) > MaxEmailTemplateBytes {
+		return ErrTemplateTooLarge
+	}
 	if key == ExpenseApprovalThreshold {
 		if dollars, err := strconv.ParseInt(trimmed, 10, 32); err != nil || dollars < 0 {
 			return ErrInvalidThreshold
@@ -928,6 +956,24 @@ var UnitTextSettings = []UnitTextSetting{
 		Placeholder: "cubmaster@example.com\nmembership@example.com",
 		Multiline:   true,
 		Section:     "prospects",
+	},
+	{
+		Key:         ProspectAutoReplySubject,
+		Label:       "Automatic reply subject",
+		Description: "Placeholders: {{parent_name}}, {{child_name}}, {{unit_name}}, {{site_url}}. Left blank, a sensible default is used.",
+		Placeholder: "Thanks for getting in touch with {{unit_name}}",
+		Section:     "prospect_auto_email",
+	},
+	{
+		Key:   ProspectAutoReplyBody,
+		Label: "Automatic reply body",
+		Description: "Same placeholders as the subject. HTML is allowed — write tags and they're sent as formatting; " +
+			"a message with no tags is sent as plain paragraphs. Values substituted for the placeholders are always " +
+			"escaped, so a family name containing < or & can't break the layout. Every copy carries an unsubscribe " +
+			"link, the same as a recruiting campaign.",
+		Placeholder: "",
+		Multiline:   true,
+		Section:     "prospect_auto_email",
 	},
 	{
 		Key:         WelcomeEmailSubject,
