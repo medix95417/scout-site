@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.12.0] — 2026-09-12
+
 ### Added
 
 - **Directions to where you meet.** The homepage's Meeting Info box can
