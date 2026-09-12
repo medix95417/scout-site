@@ -878,20 +878,25 @@ type baseData struct {
 	// "this page is for X families" refusal on clicking them. Self-scoped
 	// links (My Family, Help, Security) stay under LoggedIn, since they
 	// work on either site. See internal/web/unit_membership.go.
-	IsUnitMember       bool
-	NavSubGroups       []roster.SubGroup // every patrol/den in this unit, for the hamburger nav's Patrols/Dens submenu (see base.html) — named distinctly from any page's own "Groups" field (e.g. internal/web/groups.go's GroupsList) so embedding baseData never shadows a page's own data
-	PageHeroImageURL   string            // this request's page hero banner image, if the current path is one of content.HeroPages and a leader has set one — see heroKeyForPath and base.html. Named distinctly from the Home handler's own "HeroImageURL" field (for the homepage's separate, richer hero mechanism) so embedding baseData never lets one shadow the other
-	PageHeroSize       string            // content.HeroSize{Short,Medium,Tall} for PageHeroImageURL, already normalized — see base.html's heroSizeClass
-	MainWidthClass     string            // overrides <main>'s default max-w-4xl (see base.html) for pages that need extra width — currently just the homepage, whose Recent Activities gallery grid needs the room; empty means "use the default" for every other page
-	FooterFacebookURL  string            // site-wide footer's social icons — see h.socialLinks. Named distinctly from the Home handler's own FacebookURL/InstagramURL/TikTokURL fields so embedding baseData never lets one shadow the other
-	FooterInstagramURL string
-	FooterTikTokURL    string
-	FooterYear         int // current year, for the footer's copyright line
-	PageTitle          string
-	Flash              string
-	CSPNonce           string // per-request Content-Security-Policy nonce — every inline <script> in a template must carry it or the browser won't run it (see internal/csp)
-	CSRFToken          string // embedded as a hidden field in every <form method="post"> — see internal/csrf
-	Version            string // this build's release version — see internal/version, shown in base.html's footer
+	IsUnitMember bool
+	// ManagesFamilyContacts drives the "My Family" nav link: an adult in
+	// their own family, which is who that page is for (see
+	// internal/web/my_family.go). A Scout's own login isn't, and gets
+	// told to ask a parent if they reach it by URL.
+	ManagesFamilyContacts bool
+	NavSubGroups          []roster.SubGroup // every patrol/den in this unit, for the hamburger nav's Patrols/Dens submenu (see base.html) — named distinctly from any page's own "Groups" field (e.g. internal/web/groups.go's GroupsList) so embedding baseData never shadows a page's own data
+	PageHeroImageURL      string            // this request's page hero banner image, if the current path is one of content.HeroPages and a leader has set one — see heroKeyForPath and base.html. Named distinctly from the Home handler's own "HeroImageURL" field (for the homepage's separate, richer hero mechanism) so embedding baseData never lets one shadow the other
+	PageHeroSize          string            // content.HeroSize{Short,Medium,Tall} for PageHeroImageURL, already normalized — see base.html's heroSizeClass
+	MainWidthClass        string            // overrides <main>'s default max-w-4xl (see base.html) for pages that need extra width — currently just the homepage, whose Recent Activities gallery grid needs the room; empty means "use the default" for every other page
+	FooterFacebookURL     string            // site-wide footer's social icons — see h.socialLinks. Named distinctly from the Home handler's own FacebookURL/InstagramURL/TikTokURL fields so embedding baseData never lets one shadow the other
+	FooterInstagramURL    string
+	FooterTikTokURL       string
+	FooterYear            int // current year, for the footer's copyright line
+	PageTitle             string
+	Flash                 string
+	CSPNonce              string // per-request Content-Security-Policy nonce — every inline <script> in a template must carry it or the browser won't run it (see internal/csp)
+	CSRFToken             string // embedded as a hidden field in every <form method="post"> — see internal/csrf
+	Version               string // this build's release version — see internal/version, shown in base.html's footer
 }
 
 // rolesFor resolves the current login's roles in a unit. A family-wide
@@ -1119,6 +1124,16 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 		data.CanManageLedger = units.CanManageLedger(caps)
 		data.CanApproveExpenses = units.CanApproveExpenses(caps)
 		data.IsSuperAdmin = units.IsSuperAdmin(caps)
+
+		// Drives the "My Family" nav link. One indexed lookup, and it is
+		// the same question the page itself asks — a link that refuses on
+		// click is worse than no link, and a Scout being told "ask a
+		// parent" is better served by not seeing it at all.
+		if adult, err := h.adultInOwnFamily(r.Context(), user); err != nil {
+			log.Printf("web: checking family-contact access for nav: %v", err)
+		} else {
+			data.ManagesFamilyContacts = adult
+		}
 
 		if enabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.AdvancementEnabled); err != nil {
 			log.Printf("web: checking advancement-enabled setting: %v", err)

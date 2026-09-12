@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strings"
@@ -11,17 +12,33 @@ import (
 	"github.com/47-yonkers/scout-site/internal/units"
 )
 
-// This file is the self-service contact-info page — /my-family — where
-// any logged-in login manages its own household's email/phone/address
-// and whether each is released to the rest of the unit (see migration
-// 0015). Deliberately not gated by CanEditUnitContent: a family should be
-// able to update its own contact info and privacy choices without needing
-// any leader role, same "manage your own stuff" posture as /accounts.
-// An individual member login (see auth.User.MemberID) only ever manages
-// its own contact fields, not the rest of its family's — matching the
-// "just their own stuff" rule used everywhere else in this codebase — but
-// still shares in editing the one household address, since that's their
-// home too.
+// This file is the household contact page — /my-family — where an adult
+// in a family manages the email, phone and address on file for everyone
+// in it, and decides which of those the rest of the unit may see (see
+// migration 0015).
+//
+// Deliberately not gated by CanEditUnitContent: a family updates its own
+// details without needing any leader role, the same "manage your own
+// stuff" posture as /accounts. It IS gated on being an adult in that
+// family, which is the one permission rule on this page:
+//
+//   - An individual member login (see auth.User.MemberID) reaches it
+//     only if that member is an adult. A Scout's own login does not —
+//     their contact details and what is shared about them are a parent
+//     or guardian's call, and this is the page where that call gets
+//     made. They are told to ask one rather than shown a page they
+//     can't use.
+//   - A family-wide login is the household's login, so it reaches the
+//     page as long as the family actually has an adult in it.
+//
+// An adult's change to a share toggle replaces what that person set for
+// themselves. That is the point rather than a side effect: a parent
+// deciding their child's phone number stays off the directory has to be
+// able to make that stick.
+//
+// Nothing here touches passwords or logins. Who can sign in, and how, is
+// /accounts and the roster admin pages; this page is contact details and
+// their privacy, for people who may not have a login at all.
 
 // myFamilyMember decorates roster.MemberDetail with what's on file in
 // this unit specifically (den/patrol, roles) — read-only "here's your
@@ -36,27 +53,68 @@ type myFamilyMember struct {
 	RoleLabels []string
 }
 
-func (h *Handlers) MyFamily(w http.ResponseWriter, r *http.Request) {
-	unit, _ := units.UnitFromContext(r.Context())
+// adultInOwnFamily is the one permission question this page asks. See
+// the file comment for why it is the question.
+//
+// An error is reported as "no": a page that shows a household's contact
+// details is not something to fall open when the check itself fails.
+func (h *Handlers) adultInOwnFamily(ctx context.Context, user auth.User) (bool, error) {
+	if user.MemberID != nil {
+		m, found, err := family.GetMember(ctx, h.Pool, *user.MemberID)
+		if err != nil || !found {
+			return false, err
+		}
+		return m.MemberType == "adult", nil
+	}
+	return family.HasAdult(ctx, h.Pool, user.FamilyID)
+}
+
+// notAnAdultMsg is what a Scout's own login is told instead.
+const notAnAdultMsg = "Contact details for your family are managed by a parent or guardian — ask them to " +
+	"sign in and open My Family. (Your login, password and security keys are still yours, under Security.)"
+
+// requireFamilyAdult resolves the login and checks it, writing the
+// refusal itself. Shared by all three handlers on this page so the page
+// and the two forms that post to it can never disagree about who may.
+func (h *Handlers) requireFamilyAdult(w http.ResponseWriter, r *http.Request, next string) (auth.User, bool) {
 	user, loggedIn := auth.UserFromContext(r.Context())
 	if !loggedIn {
-		http.Redirect(w, r, "/login?next=/my-family", http.StatusSeeOther)
+		http.Redirect(w, r, "/login?next="+next, http.StatusSeeOther)
+		return auth.User{}, false
+	}
+	adult, err := h.adultInOwnFamily(r.Context(), user)
+	if err != nil {
+		log.Printf("web: checking whether this login is an adult in its family: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return auth.User{}, false
+	}
+	if !adult {
+		http.Error(w, notAnAdultMsg, http.StatusForbidden)
+		return auth.User{}, false
+	}
+	return user, true
+}
+
+func (h *Handlers) MyFamily(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	user, ok := h.requireFamilyAdult(w, r, "/my-family")
+	if !ok {
 		return
 	}
 
+	// Everyone in the household, including the Scouts — an adult manages
+	// all of it, which is the whole point of the page. (It used to show
+	// an individual login only its own row, back when a Scout's login
+	// could open this too.)
 	var memberIDs []string
-	if user.MemberID != nil {
-		memberIDs = []string{*user.MemberID}
-	} else {
-		members, err := family.MembersForFamily(r.Context(), h.Pool, user.FamilyID)
-		if err != nil {
-			log.Printf("web: loading family members: %v", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		for _, m := range members {
-			memberIDs = append(memberIDs, m.ID)
-		}
+	members, err := family.MembersForFamily(r.Context(), h.Pool, user.FamilyID)
+	if err != nil {
+		log.Printf("web: loading family members: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	for _, m := range members {
+		memberIDs = append(memberIDs, m.ID)
 	}
 
 	unitRoster, err := family.RosterForUnit(r.Context(), h.Pool, unit.ID)
@@ -101,27 +159,22 @@ func (h *Handlers) MyFamily(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) MyFamilyUpdateMember(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
-	user, loggedIn := auth.UserFromContext(r.Context())
-	if !loggedIn {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	user, ok := h.requireFamilyAdult(w, r, "/my-family")
+	if !ok {
 		return
 	}
 	memberID := r.PathValue("id")
 
-	owns := false
-	var err error
-	if user.MemberID != nil {
-		owns = *user.MemberID == memberID
-	} else {
-		owns, err = family.MemberBelongsToFamily(r.Context(), h.Pool, memberID, user.FamilyID)
-	}
+	// Being an adult is permission over your OWN household and no one
+	// else's — the member id still has to be one of this family's.
+	owns, err := family.MemberBelongsToFamily(r.Context(), h.Pool, memberID, user.FamilyID)
 	if err != nil {
 		log.Printf("web: checking family membership: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	if !owns {
-		http.Error(w, "that's not your own contact info to edit", http.StatusForbidden)
+		http.Error(w, "that's not someone in your family", http.StatusForbidden)
 		return
 	}
 
@@ -205,9 +258,8 @@ func (h *Handlers) DirectoryExportPDF(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) MyFamilyUpdateAddress(w http.ResponseWriter, r *http.Request) {
 	unit, _ := units.UnitFromContext(r.Context())
-	user, loggedIn := auth.UserFromContext(r.Context())
-	if !loggedIn {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	user, ok := h.requireFamilyAdult(w, r, "/my-family")
+	if !ok {
 		return
 	}
 

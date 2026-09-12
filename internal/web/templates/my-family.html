@@ -1,10 +1,16 @@
 {{define "content"}}
   <h1 class="text-2xl font-bold mb-1">My Family</h1>
-  <p class="text-sm text-gray-500 mb-4">
-    Here's what's on file for your household — update contact info below as needed. Anything you mark "share"
-    becomes visible to the rest of the unit on the
-    <a href="/directory" class="underline" style="color: var(--unit-color);">Family Directory</a> — everything else
-    stays private. Den/patrol and role assignments are managed by a leader.
+  <p class="text-sm text-gray-500 mb-2 max-w-2xl">
+    Everyone in your household is listed here. As an adult in the family you can update anyone's email, phone
+    numbers and your shared address, and decide which of those the rest of the unit may see.
+  </p>
+  <p class="text-sm text-gray-500 mb-6 max-w-2xl">
+    Anything marked "share" appears on the
+    <a href="/directory" class="underline" style="color: var(--unit-color);">Family Directory</a> for other
+    families in the unit; everything else stays private, visible only to you and your leaders. What you set here
+    is what counts — it replaces anything a family member set for themselves. Den/patrol and role assignments
+    are managed by a leader, and passwords aren't managed here at all: each login changes its own under
+    <a href="/settings/2fa" class="underline" style="color: var(--unit-color);">Security</a>.
   </p>
 
   <div class="grid gap-6 sm:grid-cols-2">
@@ -19,10 +25,13 @@
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Update Contact Info</p>
         <form method="post" action="/my-family/members/{{.ID}}" class="space-y-2">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-          <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Email" value="{{.Email}}">
+          <label class="sr-only" for="email-{{.ID}}">Email for {{.FirstName}} {{.LastName}}</label>
+          <input id="email-{{.ID}}" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Email" value="{{.Email}}">
           <div class="flex gap-2">
-            <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="tel" name="home_phone" placeholder="Home phone" value="{{.HomePhone}}">
-            <input class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="tel" name="cell_phone" placeholder="Cell phone" value="{{.CellPhone}}">
+            <label class="sr-only" for="home-{{.ID}}">Home phone for {{.FirstName}} {{.LastName}}</label>
+            <input id="home-{{.ID}}" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="tel" name="home_phone" placeholder="Home phone" value="{{.HomePhone}}">
+            <label class="sr-only" for="cell-{{.ID}}">Cell phone for {{.FirstName}} {{.LastName}}</label>
+            <input id="cell-{{.ID}}" class="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" type="tel" name="cell_phone" placeholder="Cell phone" value="{{.CellPhone}}">
           </div>
           <div class="flex gap-4 text-xs text-gray-600">
             <label class="flex items-center gap-1"><input type="checkbox" name="release_email" value="1" {{if .ReleaseEmail}}checked{{end}}> Share email</label>
@@ -33,13 +42,22 @@
           </button>
         </form>
       </section>
+    {{else}}
+      <section class="rounded-lg border border-gray-200 bg-white p-4 sm:col-span-2">
+        <p class="text-sm text-gray-500">
+          Nobody is on file for your family yet. A leader adds members to the roster — ask yours, and they'll
+          appear here.
+        </p>
+      </section>
     {{end}}
 
     <section class="rounded-lg border border-gray-200 bg-white p-4">
-      <h2 class="text-lg font-semibold mb-3">Household Address</h2>
+      <h2 class="text-lg font-semibold mb-1">Household Address</h2>
+      <p class="text-xs text-gray-500 mb-3">Shared by everyone in the family.</p>
       <form method="post" action="/my-family/address" class="space-y-2">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="address" rows="2" placeholder="Street, City, State ZIP">{{if .Members}}{{(index .Members 0).FamilyAddress}}{{end}}</textarea>
+        <label class="sr-only" for="address">Household address</label>
+        <textarea id="address" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="address" rows="2" placeholder="Street, City, State ZIP">{{if .Members}}{{(index .Members 0).FamilyAddress}}{{end}}</textarea>
         <label class="flex items-center gap-1 text-xs text-gray-600">
           <input type="checkbox" name="release_address" value="1" {{if .Members}}{{if (index .Members 0).ReleaseAddress}}checked{{end}}{{end}}> Share address
         </label>

@@ -84,6 +84,21 @@ func MemberBelongsToFamily(ctx context.Context, pool *pgxpool.Pool, memberID, fa
 // members acting independently in the same unit at the same time (e.g. an
 // SPL and their ASM parent in the same troop) — Phase 1 assumes that's rare
 // enough to not block on.
+// HasAdult reports whether a family has at least one adult member.
+//
+// The question behind /my-family: a family-wide login is the household's
+// login, and the household's contact details are an adult's to manage.
+// A family with no adult on the roster at all is not a household anyone
+// can be signing in as, so it gets the same answer as a Scout's own
+// login — no.
+func HasAdult(ctx context.Context, pool *pgxpool.Pool, familyID string) (bool, error) {
+	var exists bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM members WHERE family_id = $1 AND member_type = 'adult')
+	`, familyID).Scan(&exists)
+	return exists, err
+}
+
 func ActingMemberForFamilyInUnit(ctx context.Context, pool *pgxpool.Pool, familyID, unitID string) (Member, error) {
 	var m Member
 	err := pool.QueryRow(ctx, `
