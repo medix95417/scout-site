@@ -155,10 +155,72 @@
     <section class="rounded-xl border border-gray-200 bg-white p-5">
       <h2 class="text-lg font-semibold mb-2">Meeting Info</h2>
       <p class="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{{.Meeting}}</p>
+
+      {{/* Where we meet, and how to get there. Everything below appears
+           only once a unit has filled in the address (see
+           internal/web/meeting_map.go) — without one this card is
+           exactly the paragraph it always was.
+
+           The map itself is optional on top of that: a unit that pastes
+           an embed link gets the map above the button, and a unit that
+           doesn't gets the button alone and makes no request to any map
+           provider until a visitor actually asks for directions. */}}
+      {{if .DirectionsURL}}
+        <div class="mt-4 rounded-lg border border-gray-200 overflow-hidden">
+          {{if .MapEmbedURL}}
+            <iframe src="{{.MapEmbedURL}}" title="Map of where we meet" loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    class="block w-full h-48 border-0"></iframe>
+          {{end}}
+
+          {{/* The whole panel is the link, so tapping the address on a
+               phone is the same gesture as tapping the button. */}}
+          <a href="{{.DirectionsURL}}" target="_blank" rel="noopener noreferrer"
+             class="flex items-start gap-3 p-4 hover:bg-gray-50 focus-visible:bg-gray-50">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0 mt-0.5" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 style="color: var(--unit-color);" aria-hidden="true">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+            <span class="min-w-0">
+              <span class="block text-sm text-gray-700">{{.MeetingAddress}}</span>
+              <span class="block text-sm font-medium mt-1" style="color: var(--unit-color);">
+                Get directions &#8594;
+              </span>
+            </span>
+          </a>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">
+          Opens in your phone&#39;s map app.
+          {{if .MapSearchURL}}
+            <a href="{{.MapSearchURL}}" target="_blank" rel="noopener noreferrer" class="underline" style="color: var(--unit-color);">See it on a map</a>
+            without setting off.
+          {{end}}
+        </p>
+      {{end}}
     </section>
-    <section class="rounded-xl border border-gray-200 bg-white p-5">
-      <h2 class="text-lg font-semibold mb-2">Leadership &amp; Contact</h2>
+    <section class="rounded-xl border border-gray-200 bg-white p-5 flex flex-col">
+      {{/* The heading links through to the full Our Leaders page when
+           there is one to read — this card is a summary a leader typed,
+           and the page behind it is who they all are. Offered only when
+           the unit has published a profile, so nobody is sent to a page
+           that says there aren't any. */}}
+      <h2 class="text-lg font-semibold mb-2">
+        {{if .HasLeaders}}
+          <a href="/leaders" class="hover:underline" style="color: var(--unit-color);">Leadership &amp; Contact</a>
+        {{else}}
+          Leadership &amp; Contact
+        {{end}}
+      </h2>
       <p class="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{{.Leadership}}</p>
+      {{if .HasLeaders}}
+        <p class="mt-4 pt-3 border-t border-gray-100 text-sm">
+          <a href="/leaders" class="font-medium hover:underline" style="color: var(--unit-color);">
+            Meet our leaders &#8594;
+          </a>
+        </p>
+      {{end}}
     </section>
   </div>
 

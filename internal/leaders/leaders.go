@@ -188,3 +188,19 @@ func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Lead
 func ListPublishedForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) ([]Leader, error) {
 	return list(ctx, pool, `WHERE unit_id = $1 AND status = 'published'`, unitID)
 }
+
+// AnyPublishedForUnit reports whether the public "Our Leaders" page has
+// anything on it.
+//
+// The homepage asks before offering a link to that page: a unit that has
+// not written any profiles yet would be sending families to a page that
+// says so, which is worse than not offering the link. A cheap EXISTS
+// rather than ListPublishedForUnit, since the homepage needs the answer
+// and not the profiles.
+func AnyPublishedForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (bool, error) {
+	var exists bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM leaders WHERE unit_id = $1 AND status = 'published')
+	`, unitID).Scan(&exists)
+	return exists, err
+}

@@ -71,7 +71,14 @@ func Policy(nonce string) string {
 		// It is the nocookie host specifically: the ordinary
 		// youtube.com embed sets tracking cookies before play, and some
 		// of this site's readers are minors.
-		"frame-src 'self' https://www.youtube-nocookie.com",
+		// The two map embeds a unit may opt into for its meeting
+		// location (see internal/web/meeting_map.go) are pinned to the
+		// exact embed endpoint each provider's "embed this map" dialog
+		// produces — CSP matches the path and ignores the query, so
+		// these cover the real URLs without opening the whole of
+		// google.com to being framed here. A unit that pastes no map
+		// makes no request to either.
+		"frame-src 'self' https://www.youtube-nocookie.com https://www.google.com/maps/embed https://www.openstreetmap.org/export/embed.html",
 		"frame-ancestors 'none'",
 		"object-src 'none'",
 		"base-uri 'self'",

@@ -1396,18 +1396,38 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 	bd := h.base(r, "")
 	bd.MainWidthClass = "max-w-6xl"
 
+	hasLeaders, err := leaders.AnyPublishedForUnit(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		// Logged and treated as "none": the homepage is worth rendering
+		// without the link, and never worth failing over one.
+		log.Printf("web: checking for published leaders: %v", err)
+	}
+
 	data := struct {
 		baseData
-		Events              []calendar.Event
-		News                []homeNewsItem
-		Activities          []homeActivity
-		Hero                string
-		HeroImageURL        string
-		HeroSize            string
-		ProgramItems        []string
-		ProgramImageURL     string
-		Meeting             string
-		Leadership          string
+		Events          []calendar.Event
+		News            []homeNewsItem
+		Activities      []homeActivity
+		Hero            string
+		HeroImageURL    string
+		HeroSize        string
+		ProgramItems    []string
+		ProgramImageURL string
+		Meeting         string
+		// MeetingAddress/MapEmbedURL/DirectionsURL are the "how do we
+		// get there" half of the Meeting Info card — see
+		// internal/web/meeting_map.go. All three are empty until a unit
+		// fills the address in, and the card renders exactly as it did
+		// before.
+		MeetingAddress string
+		MapEmbedURL    string
+		DirectionsURL  string
+		MapSearchURL   string
+		Leadership     string
+		// HasLeaders decides whether the Leadership & Contact card links
+		// through to /leaders. A link to a page reading "no leaders
+		// listed yet" is worse than no link.
+		HasLeaders          bool
 		SocialURL           string
 		StorefrontActive    bool
 		StorefrontName      string
@@ -1430,7 +1450,12 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		ProgramItems:        programItems,
 		ProgramImageURL:     text["home-program-image"],
 		Meeting:             text["home-meeting"],
+		MeetingAddress:      normalizeAddress(text["home-meeting-address"]),
+		MapEmbedURL:         safeMapEmbedURL(text["home-meeting-map"]),
+		DirectionsURL:       directionsURL(text["home-meeting-address"]),
+		MapSearchURL:        mapsSearchURL(text["home-meeting-address"]),
 		Leadership:          text["home-leadership"],
+		HasLeaders:          hasLeaders,
 		SocialURL:           text["home-social"],
 		StorefrontActive:    storefrontActive,
 		StorefrontName:      storefront.Name,

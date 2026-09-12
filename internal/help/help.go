@@ -296,6 +296,8 @@ var Topics = []Topic{
 		RequiredCapability: units.CapEditContent,
 		Body: []string{
 			"The homepage's text and photos are edited from \"Edit Homepage\" — the hero banner, what your program offers, meeting details, and contact information.",
+			"Fill in the meeting address there and the homepage adds a \"Get directions\" panel under your meeting details: a family taps it and their own map app opens with the route already set, which saves them retyping an address into a phone. You can also paste a map's embed link to show the map itself above it — worth knowing that an embedded map means that map provider sees every visit to your homepage, so leaving it blank is the quieter choice and the directions button works either way.",
+			"Once you've published a leader profile or two, the homepage's Leadership & Contact box links through to the full Our Leaders page. Until then it doesn't, so nobody is sent to an empty page.",
 			"News posts and photo galleries are each marked public or members-only when you write them. Public ones show to anyone; members-only ones only appear once someone signs in. The homepage follows the same rule, so a members-only post never shows to a visitor.",
 			"A news post is plain text, but a web address in it becomes a link by itself, and a YouTube link on a line of its own shows as a video right in the post. Put the link in the middle of a sentence if you'd rather it stayed a link.",
 			"A photo album is built from your file library, grouped by the event each photo is linked to. \"Add all\" puts a whole event's photos in at once; clicking a photo that's already in takes it back out, which is usually the quicker way round — add the lot, then drop the few you don't want.",

@@ -75,6 +75,8 @@ func HomepageSections(unitType string) []SectionDef {
 			{Slug: "home-program", Label: "Our program (one activity per line)", Placeholder: "Weekly troop meetings\nMonthly campouts\nService projects\nMerit badge workshops\nHigh-adventure trips", Help: "Each line becomes one bullet point on the homepage."},
 			{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 			{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Meetings are held weekly — contact us for the current time and location."},
+			{Slug: "home-meeting-address", Label: "Meeting address (for the map and directions)", Placeholder: "", Help: "Where you actually meet — street, town, ZIP. Write it as you would on an envelope; the homepage turns it into a \"Get directions\" panel that opens the visitor's own map app. Leave blank for no map at all."},
+			{Slug: "home-meeting-map", Label: "Map to show (optional)", Kind: "url", Help: "Paste a map's embed link to show the map itself above the directions button — in Google Maps, Share \u2192 Embed a map; in OpenStreetMap, Share \u2192 HTML. Only those two are accepted. Leaving this blank is the private option: an embedded map means that provider sees every visit to this page, and the directions button works either way."},
 			{Slug: "home-leadership", Label: "Leadership & contact", Placeholder: "Contact our Scoutmaster to learn more about joining."},
 			{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your troop's Facebook or Instagram page."},
 		}
@@ -85,6 +87,8 @@ func HomepageSections(unitType string) []SectionDef {
 		{Slug: "home-program", Label: "Our program (one activity per line)", Placeholder: "Monthly pack meetings\nDens meeting every other week\nCamping (tent and cabin)\nPinewood Derby\nCommunity service projects", Help: "Each line becomes one bullet point on the homepage, like pack6crestwood.org's \"Our Program\" list."},
 		{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 		{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Contact us for our current meeting time and location."},
+		{Slug: "home-meeting-address", Label: "Meeting address (for the map and directions)", Placeholder: "", Help: "Where you actually meet — street, town, ZIP. Write it as you would on an envelope; the homepage turns it into a \"Get directions\" panel that opens the visitor's own map app. Leave blank for no map at all."},
+		{Slug: "home-meeting-map", Label: "Map to show (optional)", Kind: "url", Help: "Paste a map's embed link to show the map itself above the directions button — in Google Maps, Share \u2192 Embed a map; in OpenStreetMap, Share \u2192 HTML. Only those two are accepted. Leaving this blank is the private option: an embedded map means that provider sees every visit to this page, and the directions button works either way."},
 		{Slug: "home-leadership", Label: "Leadership & contact", Placeholder: "Contact our Cubmaster to learn more about joining."},
 		{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your pack's Instagram or Facebook page."},
 	}
