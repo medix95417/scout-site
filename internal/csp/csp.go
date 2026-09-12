@@ -78,7 +78,7 @@ func Policy(nonce string) string {
 		// these cover the real URLs without opening the whole of
 		// google.com to being framed here. A unit that pastes no map
 		// makes no request to either.
-		"frame-src 'self' https://www.youtube-nocookie.com https://www.google.com/maps/embed https://www.openstreetmap.org/export/embed.html",
+		"frame-src 'self' https://www.youtube-nocookie.com https://www.google.com/maps/embed https://www.openstreetmap.org/export/embed https://www.openstreetmap.org/export/embed.html",
 		"frame-ancestors 'none'",
 		"object-src 'none'",
 		"base-uri 'self'",

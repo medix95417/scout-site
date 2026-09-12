@@ -165,7 +165,12 @@
            an embed link gets the map above the button, and a unit that
            doesn't gets the button alone and makes no request to any map
            provider until a visitor actually asks for directions. */}}
-      {{if .DirectionsURL}}
+      {{/* Either half stands on its own: an address with no map is the
+           directions button alone, and a map with no address is the map
+           alone. Gating both on the address is what this used to do, and
+           it meant a unit that pasted a map and nothing else got an
+           empty homepage and no clue why. */}}
+      {{if or .DirectionsURL .MapEmbedURL}}
         <div class="mt-4 rounded-lg border border-gray-200 overflow-hidden">
           {{if .MapEmbedURL}}
             <iframe src="{{.MapEmbedURL}}" title="Map of where we meet" loading="lazy"
@@ -173,6 +178,7 @@
                     class="block w-full h-48 border-0"></iframe>
           {{end}}
 
+          {{if .DirectionsURL}}
           {{/* The whole panel is the link, so tapping the address on a
                phone is the same gesture as tapping the button. */}}
           <a href="{{.DirectionsURL}}" target="_blank" rel="noopener noreferrer"
@@ -190,14 +196,17 @@
               </span>
             </span>
           </a>
-        </div>
-        <p class="text-xs text-gray-500 mt-2">
-          Opens in your phone&#39;s map app.
-          {{if .MapSearchURL}}
-            <a href="{{.MapSearchURL}}" target="_blank" rel="noopener noreferrer" class="underline" style="color: var(--unit-color);">See it on a map</a>
-            without setting off.
           {{end}}
-        </p>
+        </div>
+        {{if .DirectionsURL}}
+          <p class="text-xs text-gray-500 mt-2">
+            Opens in your phone&#39;s map app.
+            {{if .MapSearchURL}}
+              <a href="{{.MapSearchURL}}" target="_blank" rel="noopener noreferrer" class="underline" style="color: var(--unit-color);">See it on a map</a>
+              without setting off.
+            {{end}}
+          </p>
+        {{end}}
       {{end}}
     </section>
     <section class="rounded-xl border border-gray-200 bg-white p-5 flex flex-col">

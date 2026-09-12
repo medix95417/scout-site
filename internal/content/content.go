@@ -35,7 +35,7 @@ type SectionDef struct {
 	Slug        string
 	Label       string // shown in the admin "edit homepage" list
 	Placeholder string // shown on the live site until a leader edits it
-	Kind        string // "" (default) = multi-line text box; "url" = single-line link field; "image" = single-line image-URL field (gets a preview + "choose from library" picker on /admin/home — see content-admin.html)
+	Kind        string // "" (default) = multi-line text box; "url" = single-line link field; "image" = single-line image-URL field (gets a preview + "choose from library" picker on /admin/home — see content-admin.html); "images" = gallery strip; "map" = a map embed, pasted as the provider's whole <iframe> snippet and stored as the bare URL (see internal/web/meeting_map.go)
 	Help        string // optional short instructions shown under the field in the admin list
 }
 
@@ -76,7 +76,7 @@ func HomepageSections(unitType string) []SectionDef {
 			{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 			{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Meetings are held weekly — contact us for the current time and location."},
 			{Slug: "home-meeting-address", Label: "Meeting address (for the map and directions)", Placeholder: "", Help: "Where you actually meet — street, town, ZIP. Write it as you would on an envelope; the homepage turns it into a \"Get directions\" panel that opens the visitor's own map app. Leave blank for no map at all."},
-			{Slug: "home-meeting-map", Label: "Map to show (optional)", Kind: "url", Help: "Paste a map's embed link to show the map itself above the directions button — in Google Maps, Share \u2192 Embed a map; in OpenStreetMap, Share \u2192 HTML. Only those two are accepted. Leaving this blank is the private option: an embedded map means that provider sees every visit to this page, and the directions button works either way."},
+			{Slug: "home-meeting-map", Label: "Map to show (optional)", Kind: "map", Help: "Paste a map's embed code to show the map itself above the directions button — in OpenStreetMap, Share \u2192 HTML; in Google Maps, Share \u2192 Embed a map \u2192 COPY HTML. Paste the whole snippet it gives you, tags and all. Only those two maps are accepted, and an ordinary map link (the one Share offers first, or anything from maps.app.goo.gl) is not an embed code. Leaving this blank is the private option: an embedded map means that provider sees every visit to this page, and the directions button works either way."},
 			{Slug: "home-leadership", Label: "Leadership & contact", Placeholder: "Contact our Scoutmaster to learn more about joining."},
 			{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your troop's Facebook or Instagram page."},
 		}
@@ -88,7 +88,7 @@ func HomepageSections(unitType string) []SectionDef {
 		{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 		{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Contact us for our current meeting time and location."},
 		{Slug: "home-meeting-address", Label: "Meeting address (for the map and directions)", Placeholder: "", Help: "Where you actually meet — street, town, ZIP. Write it as you would on an envelope; the homepage turns it into a \"Get directions\" panel that opens the visitor's own map app. Leave blank for no map at all."},
-		{Slug: "home-meeting-map", Label: "Map to show (optional)", Kind: "url", Help: "Paste a map's embed link to show the map itself above the directions button — in Google Maps, Share \u2192 Embed a map; in OpenStreetMap, Share \u2192 HTML. Only those two are accepted. Leaving this blank is the private option: an embedded map means that provider sees every visit to this page, and the directions button works either way."},
+		{Slug: "home-meeting-map", Label: "Map to show (optional)", Kind: "map", Help: "Paste a map's embed code to show the map itself above the directions button — in OpenStreetMap, Share \u2192 HTML; in Google Maps, Share \u2192 Embed a map \u2192 COPY HTML. Paste the whole snippet it gives you, tags and all. Only those two maps are accepted, and an ordinary map link (the one Share offers first, or anything from maps.app.goo.gl) is not an embed code. Leaving this blank is the private option: an embedded map means that provider sees every visit to this page, and the directions button works either way."},
 		{Slug: "home-leadership", Label: "Leadership & contact", Placeholder: "Contact our Cubmaster to learn more about joining."},
 		{Slug: "home-social", Label: "Social media link (optional)", Kind: "url", Help: "e.g. your pack's Instagram or Facebook page."},
 	}

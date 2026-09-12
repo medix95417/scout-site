@@ -6,6 +6,8 @@ import (
 
 	"github.com/47-yonkers/scout-site/internal/calendar"
 	"github.com/47-yonkers/scout-site/internal/content"
+	"github.com/47-yonkers/scout-site/internal/csp"
+	"github.com/47-yonkers/scout-site/internal/files"
 )
 
 func TestNormalizeAddress(t *testing.T) {
@@ -55,6 +57,29 @@ func TestSafeMapEmbedURL(t *testing.T) {
 			"https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3021",
 		},
 		{
+			// The bug this case exists for: OpenStreetMap's share dialog
+			// hands out this path — no ".html" — and only the ".html"
+			// spelling was allowed, so a link copied straight out of
+			// OSM was refused and the homepage showed nothing.
+			"an OpenStreetMap embed on the bare path OSM hands out now",
+			"https://www.openstreetmap.org/export/embed?bbox=-73.88%2C40.90%2C-73.87%2C40.91&layer=mapnik",
+			"https://www.openstreetmap.org/export/embed?bbox=-73.88%2C40.90%2C-73.87%2C40.91&layer=mapnik",
+		},
+		{
+			// The other half of the same bug: what the dialog copies is
+			// a whole element, entity-escaped, and that is what gets
+			// pasted. Taking the src out of it is this site's job, not
+			// the leader's.
+			"the whole iframe snippet OpenStreetMap copies",
+			`<iframe width="425" height="350" src="https://www.openstreetmap.org/export/embed?bbox=-73.88%2C40.90%2C-73.87%2C40.91&amp;layer=mapnik" style="border: 1px solid black"></iframe><br/><small><a href="https://www.openstreetmap.org/#map=18/40.91/-73.87">View Larger Map</a></small>`,
+			"https://www.openstreetmap.org/export/embed?bbox=-73.88%2C40.90%2C-73.87%2C40.91&layer=mapnik",
+		},
+		{
+			"the whole iframe snippet Google Maps copies",
+			`<iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy"></iframe>`,
+			"https://www.google.com/maps/embed?pb=!1m18!1m12",
+		},
+		{
 			"an OpenStreetMap embed",
 			"https://www.openstreetmap.org/export/embed.html?bbox=-73.9%2C40.9%2C-73.8%2C41.0&marker=40.95%2C-73.86",
 			"https://www.openstreetmap.org/export/embed.html?bbox=-73.9%2C40.9%2C-73.8%2C41.0&marker=40.95%2C-73.86",
@@ -95,6 +120,13 @@ func TestSafeMapEmbedURL(t *testing.T) {
 		{"a data URL", "data:text/html,<script>alert(1)</script>"},
 		{"credentials smuggled into the authority", "https://www.google.com@evil.example/maps/embed"},
 		{"a protocol-relative URL", "//www.google.com/maps/embed?pb=xyz"},
+		// Unpicking a snippet is a convenience, not a way in: the src
+		// that comes out of one faces the same allowlist.
+		{"an iframe snippet pointed somewhere else", `<iframe src="https://evil.example/maps/embed?pb=x"></iframe>`},
+		{"an iframe snippet with a javascript src", `<iframe src="javascript:alert(1)"></iframe>`},
+		{"an iframe with no src at all", `<iframe width="425"></iframe>`},
+		{"the short link Google Share offers first", "https://maps.app.goo.gl/abc123"},
+		{"an ordinary Google Maps page URL", "https://www.google.com/maps/place/Yonkers,+NY/@40.93,-73.89,13z"},
 	}
 	for _, c := range bad {
 		t.Run("refuses "+c.name, func(t *testing.T) {
@@ -124,8 +156,11 @@ func TestHomepageOffersTheAddressAndMapFields(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s homepage has no map field", unitType)
 		}
-		if mapField.Kind != "url" {
-			t.Errorf("%s: the map field should be a link field, got kind %q", unitType, mapField.Kind)
+		// "map", not "url": an <input type="url"> refuses the whole
+		// <iframe> snippet both providers' embed dialogs copy, before
+		// the form is even submitted.
+		if mapField.Kind != "map" {
+			t.Errorf("%s: the map field should be a map field, got kind %q", unitType, mapField.Kind)
 		}
 		// The help has to say the map is optional and what the cost of
 		// using one is — it is the only place a leader is told.
@@ -289,5 +324,110 @@ func TestARefusedMapLinkRendersNothing(t *testing.T) {
 	}
 	if !strings.Contains(out, "Get directions") {
 		t.Error("refusing the map also lost the directions link")
+	}
+}
+
+// A map with no address used to render nothing at all: the whole panel
+// was gated on the address, so a unit that pasted an embed link and
+// stopped there got an empty homepage and no hint why.
+func TestMeetingCardShowsAMapWithoutAnAddress(t *testing.T) {
+	data := homePage()
+	data.MapEmbedURL = safeMapEmbedURL("https://www.openstreetmap.org/export/embed?bbox=1%2C2%2C3%2C4")
+	if data.MapEmbedURL == "" {
+		t.Fatal("the fixture's own map URL was refused")
+	}
+	out := renderPage(t, "home.html", data)
+
+	if !strings.Contains(out, "<iframe") {
+		t.Error("a map was given but nothing was embedded")
+	}
+	if !strings.Contains(out, "openstreetmap.org/export/embed") {
+		t.Error("the map URL didn't reach the page")
+	}
+	// No address means no directions to offer, and no empty link where
+	// the address would have been.
+	if strings.Contains(out, "Get directions") {
+		t.Error("directions were offered to an address nobody gave")
+	}
+	if strings.Contains(out, "Opens in your phone") {
+		t.Error("the directions footnote showed with no directions link above it")
+	}
+}
+
+// Whatever a leader pastes is turned into the stored URL — or refused —
+// at the moment they can still be told, rather than silently becoming an
+// empty space on the homepage. The check is the same function the
+// homepage uses, so the two can't drift apart.
+func TestSavingAMapSectionValidatesThePaste(t *testing.T) {
+	src, err := readSource("web.go")
+	if err != nil {
+		t.Fatalf("reading web.go: %v", err)
+	}
+	body, ok := functionBody(src, "HomeContentSave")
+	if !ok {
+		t.Fatal("HomeContentSave not found in web.go")
+	}
+	if !strings.Contains(body, "safeMapEmbedURL(") {
+		t.Error("HomeContentSave doesn't run a map paste through safeMapEmbedURL, so a bad one saves silently")
+	}
+	if !strings.Contains(body, "map=rejected") {
+		t.Error("a refused map paste doesn't send the leader anything to read")
+	}
+}
+
+// The admin page has to actually render that refusal, and has to take
+// the paste in a field a whole <iframe> snippet fits in — an
+// <input type="url"> refuses one before the form is even submitted.
+func TestMapSectionTakesASnippetAndReportsARefusal(t *testing.T) {
+	var mapDef content.SectionDef
+	for _, def := range content.HomepageSections("troop") {
+		if def.Slug == "home-meeting-map" {
+			mapDef = def
+		}
+	}
+	if mapDef.Kind != "map" {
+		t.Fatalf("the map section's Kind is %q, want \"map\"", mapDef.Kind)
+	}
+
+	data := struct {
+		baseData
+		Sections              []homeAdminRow
+		HeroSections          []homeAdminRow
+		MapRejected           bool
+		PublicImageGroups     []files.EventFileGroup
+		PublicImagesUngrouped []files.File
+		PublicMediaGroups     []files.EventFileGroup
+		PublicMediaUngrouped  []files.File
+	}{
+		Sections:    []homeAdminRow{{Slug: mapDef.Slug, Label: mapDef.Label, Help: mapDef.Help, Kind: mapDef.Kind}},
+		MapRejected: true,
+	}
+	out := renderPage(t, "content-admin.html", data)
+
+	if !strings.Contains(out, "<textarea") {
+		t.Error("the map field isn't a textarea, so a pasted <iframe> snippet can't be submitted")
+	}
+	if strings.Contains(htmlBetween(t, out, "home-meeting-map", "</section>"), `type="url"`) {
+		t.Error("the map field is still a url input, which rejects the snippet the provider copies")
+	}
+	if !strings.Contains(out, "wasn't a map embed") {
+		t.Error("a refused paste produces no message on the page")
+	}
+	if !strings.Contains(out, "COPY HTML") {
+		t.Error("the refusal doesn't say where to get a link that would work")
+	}
+}
+
+// The allowlist and the Content-Security-Policy have to name the same
+// endpoints. They are two lists in two packages, and a map that passes
+// safeMapEmbedURL but isn't in frame-src is a blank box in the browser
+// with a console error nobody is looking at — which is the shape of the
+// bug that sent a leader here in the first place.
+func TestEveryAllowedMapEmbedIsAlsoInTheCSP(t *testing.T) {
+	policy := csp.Policy("nonce")
+	for _, allowed := range allowedMapEmbeds {
+		if !strings.Contains(policy, allowed+" ") && !strings.Contains(policy, allowed+";") {
+			t.Errorf("%s is accepted by safeMapEmbedURL but missing from frame-src, so the browser will refuse it", allowed)
+		}
 	}
 }
