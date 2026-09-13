@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.13.1] — 2026-09-13
+
 ### Added
 
 - **A "why us" intro on the homepage**, directly under the hero. A short
