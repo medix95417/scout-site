@@ -191,6 +191,7 @@ type homeFixture struct {
 	MapSearchURL        string
 	Leadership          string
 	HasLeaders          bool
+	Leaders             []homeLeader
 	SocialURL           string
 	StorefrontActive    bool
 	StorefrontName      string

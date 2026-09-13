@@ -155,12 +155,27 @@ func Get(ctx context.Context, pool *pgxpool.Pool, id, unitID string) (Leader, bo
 }
 
 func list(ctx context.Context, pool *pgxpool.Pool, where string, unitID string) ([]Leader, error) {
-	rows, err := pool.Query(ctx, `
-		SELECT `+selectColumns+`
+	return listLimited(ctx, pool, where, unitID, 0)
+}
+
+// listLimited is list with an optional cap. A limit of 0 means no cap.
+//
+// Split out rather than given to every caller, because "the first few"
+// is only meaningful alongside the ORDER BY — sort_order then name, the
+// order a unit arranged its leaders in — and that ordering lives here.
+func listLimited(ctx context.Context, pool *pgxpool.Pool, where string, unitID string, limit int) ([]Leader, error) {
+	sql := `
+		SELECT ` + selectColumns + `
 		FROM leaders
-		`+where+`
+		` + where + `
 		ORDER BY sort_order, name
-	`, unitID)
+	`
+	args := []any{unitID}
+	if limit > 0 {
+		sql += ` LIMIT $2`
+		args = append(args, limit)
+	}
+	rows, err := pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -189,18 +204,21 @@ func ListPublishedForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string
 	return list(ctx, pool, `WHERE unit_id = $1 AND status = 'published'`, unitID)
 }
 
-// AnyPublishedForUnit reports whether the public "Our Leaders" page has
-// anything on it.
+// FirstPublishedForUnit returns at most n published leader profiles, in
+// the order the "Our Leaders" page shows them.
 //
-// The homepage asks before offering a link to that page: a unit that has
-// not written any profiles yet would be sending families to a page that
-// says so, which is worse than not offering the link. A cheap EXISTS
-// rather than ListPublishedForUnit, since the homepage needs the answer
-// and not the profiles.
-func AnyPublishedForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (bool, error) {
-	var exists bool
-	err := pool.QueryRow(ctx, `
-		SELECT EXISTS (SELECT 1 FROM leaders WHERE unit_id = $1 AND status = 'published')
-	`, unitID).Scan(&exists)
-	return exists, err
+// The homepage introduces a unit's leaders by showing the first few and
+// linking through to the rest, so "the first three" has to mean the same
+// three a family then sees at the top of that page — which is why this
+// shares list's ORDER BY rather than ordering its own way.
+//
+// It also answers the question the homepage used to ask separately:
+// whether to offer the link to /leaders at all. An empty result means a
+// unit has written no profiles yet, and sending families to a page that
+// says so is worse than not offering the link.
+func FirstPublishedForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string, n int) ([]Leader, error) {
+	if n <= 0 {
+		return nil, nil
+	}
+	return listLimited(ctx, pool, `WHERE unit_id = $1 AND status = 'published'`, unitID, n)
 }
