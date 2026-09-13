@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
@@ -210,6 +211,7 @@ var templateFuncs = template.FuncMap{
 	"homeHeroSizeClass":  homeHeroSizeClass,
 	"thumbURL":           thumbURL,
 	"photoFocusClass":    photoFocusClass,
+	"initial":            initial,
 	"eventsForFile":      eventsForFile,
 	"otherEventsForFile": otherEventsForFile,
 }
@@ -281,6 +283,22 @@ func photoFocusClass(focus string) string {
 	default:
 		return "object-center"
 	}
+}
+
+// initial is the first letter of a name, uppercased — what stands in for
+// a leader's headshot on the homepage when they haven't got one.
+//
+// Ranges over runes rather than indexing bytes, because the first
+// character of a name is not reliably one byte and half of a multi-byte
+// one is not a letter. A name that is empty or has no letters at all
+// gives "", and the template draws a plain circle.
+func initial(name string) string {
+	for _, r := range name {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return string(unicode.ToUpper(r))
+		}
+	}
+	return ""
 }
 
 // chunkFiles splits fs into pages of at most size files each — the "show
@@ -1241,6 +1259,39 @@ type homeNewsItem struct {
 	MembersOnly bool
 }
 
+// homeLeader is one leader as the Leadership & Contact card shows them:
+// who they are, what they do, and enough of their bio to be worth
+// reading in a card this size.
+type homeLeader struct {
+	Name       string
+	RoleTitle  string
+	Bio        string
+	PhotoURL   string
+	PhotoFocus string
+}
+
+// homeLeaderCount is how many leaders that card introduces before
+// handing off to /leaders. Three: enough to show this is a real group of
+// people rather than a token name, few enough to stay a summary next to
+// the Meeting Info card it shares a row with.
+const homeLeaderCount = 3
+
+// homeLeaderBioLength caps the bio shown there.
+//
+// Shorter than the news excerpt on the same page, because these sit
+// three to a half-width card rather than one to a full-width row, and a
+// bio is also the one field on a leader profile with no length limit —
+// somebody's whole Scouting history pasted in would otherwise push the
+// card past the one beside it.
+const homeLeaderBioLength = 130
+
+// homeLeaderBio shortens one leader's bio for that card. The full text
+// is on /leaders, which is where the link goes.
+func homeLeaderBio(bio string) string {
+	short, _ := excerpt(bio, homeLeaderBioLength)
+	return short
+}
+
 // maxHomeActivities caps how many Photo Album posts the homepage
 // previews at once — ListPublishedPublicForUnit returns every published
 // public one, but the homepage only has room for a couple rows before it
@@ -1396,11 +1447,24 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 	bd := h.base(r, "")
 	bd.MainWidthClass = "max-w-6xl"
 
-	hasLeaders, err := leaders.AnyPublishedForUnit(r.Context(), h.Pool, unit.ID)
+	// The leaders the card introduces, and — by whether there are any —
+	// whether it links through to the rest at all.
+	featured, err := leaders.FirstPublishedForUnit(r.Context(), h.Pool, unit.ID, homeLeaderCount)
 	if err != nil {
 		// Logged and treated as "none": the homepage is worth rendering
-		// without the link, and never worth failing over one.
-		log.Printf("web: checking for published leaders: %v", err)
+		// without this card's contents, and never worth failing over
+		// them.
+		log.Printf("web: loading leaders for the homepage: %v", err)
+	}
+	homeLeaders := make([]homeLeader, 0, len(featured))
+	for _, l := range featured {
+		homeLeaders = append(homeLeaders, homeLeader{
+			Name:       l.Name,
+			RoleTitle:  l.RoleTitle,
+			Bio:        homeLeaderBio(l.Bio),
+			PhotoURL:   l.PhotoURL,
+			PhotoFocus: l.PhotoFocus,
+		})
 	}
 
 	data := struct {
@@ -1427,7 +1491,11 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		// HasLeaders decides whether the Leadership & Contact card links
 		// through to /leaders. A link to a page reading "no leaders
 		// listed yet" is worse than no link.
-		HasLeaders          bool
+		HasLeaders bool
+		// Leaders is the first few of them, shown in that card above the
+		// link, so the page introduces some actual people rather than
+		// only offering to.
+		Leaders             []homeLeader
 		SocialURL           string
 		StorefrontActive    bool
 		StorefrontName      string
@@ -1455,7 +1523,8 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		DirectionsURL:       directionsURL(text["home-meeting-address"]),
 		MapSearchURL:        mapsSearchURL(text["home-meeting-address"]),
 		Leadership:          text["home-leadership"],
-		HasLeaders:          hasLeaders,
+		HasLeaders:          len(homeLeaders) > 0,
+		Leaders:             homeLeaders,
 		SocialURL:           text["home-social"],
 		StorefrontActive:    storefrontActive,
 		StorefrontName:      storefront.Name,

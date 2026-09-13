@@ -27,6 +27,17 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **The homepage introduces your first three leaders.** The Leadership &
+  Contact box showed a typed paragraph and a link; it now shows the first
+  three published leader profiles above that link — photo (or their
+  initial), name, role, and the start of each bio, shortened to fit.
+  They are the same three, in the same order, that the Our Leaders page
+  lists first, so the sort order set on a profile moves someone up in
+  both places at once. Drafts stay off it, and a unit that has published
+  no profiles gets the card exactly as it was, paragraph and no link.
+
 ## [2.12.2] — 2026-09-12
 
 ### Fixed
