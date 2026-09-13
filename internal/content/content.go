@@ -72,6 +72,7 @@ func HomepageSections(unitType string) []SectionDef {
 		return []SectionDef{
 			{Slug: "home-hero", Label: "Hero tagline", Placeholder: "Adventure, leadership, and lifelong friendships — join our Scouts BSA troop."},
 			{Slug: "home-hero-image", Label: "Hero background photo URL", Kind: "image", Placeholder: stockPhotoPhilmont, Help: imageHelp},
+			{Slug: "home-why", Label: "\"Why us\" intro (optional)", Placeholder: "", Help: "A short paragraph directly under the hero, for the question a family asks first: why this unit? The heading is written for you — \"Why\" followed by this unit's name — so write the answer, not the question. Left blank, nothing shows at all and the page reads exactly as it does now."},
 			{Slug: "home-program", Label: "Our program (one activity per line)", Placeholder: "Weekly troop meetings\nMonthly campouts\nService projects\nMerit badge workshops\nHigh-adventure trips", Help: "Each line becomes one bullet point on the homepage."},
 			{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 			{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Meetings are held weekly — contact us for the current time and location."},
@@ -84,6 +85,7 @@ func HomepageSections(unitType string) []SectionDef {
 	return []SectionDef{
 		{Slug: "home-hero", Label: "Hero tagline", Placeholder: "Adventure starts here — join our Cub Scout pack!"},
 		{Slug: "home-hero-image", Label: "Hero background photo URL", Kind: "image", Placeholder: stockPhotoCampfire, Help: imageHelp},
+		{Slug: "home-why", Label: "\"Why us\" intro (optional)", Placeholder: "", Help: "A short paragraph directly under the hero, for the question a family asks first: why this unit? The heading is written for you — \"Why\" followed by this unit's name — so write the answer, not the question. Left blank, nothing shows at all and the page reads exactly as it does now."},
 		{Slug: "home-program", Label: "Our program (one activity per line)", Placeholder: "Monthly pack meetings\nDens meeting every other week\nCamping (tent and cabin)\nPinewood Derby\nCommunity service projects", Help: "Each line becomes one bullet point on the homepage, like pack6crestwood.org's \"Our Program\" list."},
 		{Slug: "home-program-image", Label: "\"Our Program\" photo URL", Kind: "image", Placeholder: stockPhotoHiking, Help: imageHelp},
 		{Slug: "home-meeting", Label: "Meeting info", Placeholder: "Contact us for our current meeting time and location."},

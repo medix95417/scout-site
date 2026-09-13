@@ -12,7 +12,13 @@
         <h2 class="text-lg font-semibold mb-1">{{.Label}}</h2>
         {{if .Help}}<p class="text-xs text-gray-500 mb-2">{{.Help}}</p>{{end}}
         {{if not .Saved}}
-          {{if eq .Kind ""}}
+          {{/* Only where there IS default copy. A text section with no
+               placeholder (the meeting address, the "why us" intro)
+               shows nothing on the live site until someone writes
+               something, and telling a leader that a placeholder they
+               cannot see is currently published is worse than saying
+               nothing. */}}
+          {{if and (eq .Kind "") .Placeholder}}
             <p class="text-xs text-amber-700 mb-2">
               Not set yet — the placeholder below is what's currently showing on the live site.
             </p>

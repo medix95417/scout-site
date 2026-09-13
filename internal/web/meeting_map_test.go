@@ -180,6 +180,7 @@ type homeFixture struct {
 	News                []homeNewsItem
 	Activities          []homeActivity
 	Hero                string
+	Why                 string
 	HeroImageURL        string
 	HeroSize            string
 	ProgramItems        []string
