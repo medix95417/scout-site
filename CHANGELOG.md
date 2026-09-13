@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.13.0] — 2026-09-13
+
 ### Added
 
 - **The homepage introduces your first three leaders.** The Leadership &
