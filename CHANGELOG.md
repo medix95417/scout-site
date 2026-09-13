@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.13.2] — 2026-09-13
+
 ### Changed
 
 - **The hamburger menu is grouped and shorter.** The fourteen admin links
