@@ -27,6 +27,32 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Changed
+
+- **The hamburger menu is grouped and shorter.** The fourteen admin links
+  that ran together under one "ADMIN" heading are now three collapsible
+  groups — **Manage** (roster, advancement, homepage, news, photos,
+  leaders, prospects, newsletters), **Money** (authorize spending,
+  treasury, reports, reconciliation) and **Site** (activity log, roles,
+  settings) — each opening on demand, so the menu opens at a readable
+  length. The group holding the page you are on opens with it. Members'
+  own links (roster, directory, patrols/dens, advancement, files,
+  accounts) sit under an "Our unit" heading, and the personal ones — My
+  Family, Security, Help, Log out — are together at the bottom where a
+  menu's account items belong. No link was removed.
+
+### Fixed
+
+- **A missing divider in the menu.** For a member of this unit, "My
+  Family" and "Help" ran straight on from the unit's links with no
+  separator; the divider was only drawn for a login that was not a
+  member.
+- **A leader who can authorize spending but not edit content now sees
+  that link.** The whole admin block was gated on editing content,
+  managing the ledger, or being an admin — approval was not among them,
+  so a unit that used a capability override to grant approval alone left
+  that leader no way to reach the page from the menu.
+
 ## [2.13.1] — 2026-09-13
 
 ### Added

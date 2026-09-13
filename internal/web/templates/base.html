@@ -1,3 +1,24 @@
+{{/* A small-caps section label inside the hamburger. */}}
+{{define "navHeading"}}
+  <div class="px-4 pt-1 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">{{.}}</div>
+{{end}}
+
+{{/* The clickable header of a collapsible submenu in the hamburger —
+     the Patrols/Dens list and each of the admin groups. A <summary>
+     rather than a button on purpose: <details> opens with no JS at all,
+     and because a <summary> is neither an <a> nor a <button>, expanding
+     one doesn't trip the outer menu's close-on-click listener. The
+     chevron flips via the group-open: variant on the parent <details
+     class="group">. */}}
+{{define "navGroupSummary"}}
+  <summary class="list-none cursor-pointer select-none flex items-center justify-between px-4 py-2 hover:bg-gray-100">
+    <span>{{.Label}}</span>
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <polyline points="6 9 12 15 18 9"></polyline>
+    </svg>
+  </summary>
+{{end}}
+
 {{define "base"}}
 <!DOCTYPE html>
 <html lang="en">
@@ -117,22 +138,20 @@
           <a href="/resources" class="block px-4 py-2 hover:bg-gray-100">Resources</a>
           {{if .IsUnitMember}}
             <div class="border-t border-gray-100 my-1"></div>
+            {{template "navHeading" "Our unit"}}
             <a href="/roster" class="block px-4 py-2 hover:bg-gray-100">Roster</a>
             <a href="/directory" class="block px-4 py-2 hover:bg-gray-100">Family Directory</a>
             {{if .NavSubGroups}}
               <!-- Nested <details> for the Patrols/Dens submenu — same
-                   no-JS disclosure pattern as the outer hamburger. Its
-                   <summary> isn't an <a>/<button>, so opening/closing it
-                   doesn't trip the outer menu's "close on link/button
-                   click" listener below; only navigating to one of the
-                   den/patrol links does. -->
+                   no-JS disclosure pattern as the outer hamburger and as
+                   the admin groups below. Its <summary> isn't an
+                   <a>/<button>, so opening/closing it doesn't trip the
+                   outer menu's "close on link/button click" listener
+                   below; only navigating to one of the den/patrol links
+                   does. -->
               <details class="group">
-                <summary class="list-none cursor-pointer select-none flex items-center justify-between px-4 py-2 hover:bg-gray-100">
-                  <span>{{if eq .Unit.UnitType "troop"}}Patrols{{else}}Dens{{end}}</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                </summary>
+                {{$subLabel := "Dens"}}{{if eq .Unit.UnitType "troop"}}{{$subLabel = "Patrols"}}{{end}}
+                {{template "navGroupSummary" (dict "Label" $subLabel)}}
                 <div class="bg-gray-50">
                   {{range .NavSubGroups}}
                     <a href="/groups/{{.ID}}" class="block px-6 py-2 hover:bg-gray-100 text-sm">{{.Name}}</a>
@@ -147,43 +166,72 @@
             <a href="/files" class="block px-4 py-2 hover:bg-gray-100">Files</a>
             {{if and .TreasuryEnabled (or .ScoutAccountsSelfService .CanManageLedger)}}<a href="/accounts" class="block px-4 py-2 hover:bg-gray-100">My Accounts</a>{{end}}
           {{end}}
-          {{/* Self-scoped links: these work on either unit's site, so they
-               follow the session rather than membership in this unit. */}}
           {{if .LoggedIn}}
-            {{if not .IsUnitMember}}<div class="border-t border-gray-100 my-1"></div>{{end}}
-            {{if .ManagesFamilyContacts}}<a href="/my-family" class="block px-4 py-2 hover:bg-gray-100">My Family</a>{{end}}
-            <a href="/help" class="block px-4 py-2 hover:bg-gray-100">Help</a>
-            {{if or .CanEditContent .CanManageLedger .IsSuperAdmin}}
+            {{/* The admin half of the menu: three collapsed groups rather
+                 than fourteen links in a row. Each group renders only if
+                 this login can reach something inside it, so nobody is
+                 offered a heading that opens onto nothing — see the
+                 conditions on each <details> below, which mirror the
+                 conditions on their own items. The group holding the
+                 current page is open (NavOpenGroup, see nav_groups.go). */}}
+            {{$manage := .CanEditContent}}
+            {{$money := and .TreasuryEnabled (or .CanApproveExpenses .CanManageLedger)}}
+            {{$site := or .CanEditContent .CanManageLedger .IsSuperAdmin}}
+            {{if or $manage $money $site}}
               <div class="border-t border-gray-100 my-1"></div>
-              <div class="px-4 pt-1 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">Admin</div>
-              {{if .CanEditContent}}
-                <a href="/admin/roster" class="block px-4 py-2 hover:bg-gray-100">Manage Roster</a>
-                {{if .AdvancementEnabled}}<a href="/admin/advancement" class="block px-4 py-2 hover:bg-gray-100">Manage Advancement</a>{{end}}
-                <a href="/admin/home" class="block px-4 py-2 hover:bg-gray-100">Edit Homepage</a>
-                <a href="/admin/news" class="block px-4 py-2 hover:bg-gray-100">Manage News</a>
-                <a href="/admin/gallery" class="block px-4 py-2 hover:bg-gray-100">Manage Photos</a>
-                <a href="/admin/leaders" class="block px-4 py-2 hover:bg-gray-100">Manage Leaders</a>
-                <a href="/admin/prospects" class="block px-4 py-2 hover:bg-gray-100">Prospects</a>
-                {{if .NewsletterEnabled}}<a href="/admin/newsletters" class="block px-4 py-2 hover:bg-gray-100">Newsletters</a>{{end}}
-              {{end}}
-              {{if and .TreasuryEnabled .CanApproveExpenses}}
-                <a href="/expense-approvals" class="block px-4 py-2 hover:bg-gray-100">Authorize Spending</a>
-              {{end}}
-              {{if and .TreasuryEnabled .CanManageLedger}}
-                <a href="/treasury" class="block px-4 py-2 hover:bg-gray-100">Treasury</a>
-                <a href="/treasury/reports" class="block px-4 py-2 hover:bg-gray-100">Reports</a>
-                <a href="/treasury/reconciliations" class="block px-4 py-2 hover:bg-gray-100">Bank Reconciliation</a>
-              {{end}}
-              {{if or .CanEditContent .CanManageLedger}}
-                <a href="/audit" class="block px-4 py-2 hover:bg-gray-100">Activity Log</a>
-              {{end}}
-              {{if .IsSuperAdmin}}
-                <a href="/admin/custom-roles" class="block px-4 py-2 hover:bg-gray-100">Roles &amp; Permissions</a>
-                <a href="/admin/settings" class="block px-4 py-2 hover:bg-gray-100">Site Settings</a>
-              {{end}}
             {{end}}
+
+            {{if $manage}}
+              <details class="group" {{if eq .NavOpenGroup "manage"}}open{{end}}>
+                {{template "navGroupSummary" (dict "Label" "Manage")}}
+                <div class="bg-gray-50">
+                  <a href="/admin/roster" class="block px-6 py-2 hover:bg-gray-100">Roster</a>
+                  {{if .AdvancementEnabled}}<a href="/admin/advancement" class="block px-6 py-2 hover:bg-gray-100">Advancement</a>{{end}}
+                  <a href="/admin/home" class="block px-6 py-2 hover:bg-gray-100">Homepage</a>
+                  <a href="/admin/news" class="block px-6 py-2 hover:bg-gray-100">News</a>
+                  <a href="/admin/gallery" class="block px-6 py-2 hover:bg-gray-100">Photos</a>
+                  <a href="/admin/leaders" class="block px-6 py-2 hover:bg-gray-100">Leaders</a>
+                  <a href="/admin/prospects" class="block px-6 py-2 hover:bg-gray-100">Prospects</a>
+                  {{if .NewsletterEnabled}}<a href="/admin/newsletters" class="block px-6 py-2 hover:bg-gray-100">Newsletters</a>{{end}}
+                </div>
+              </details>
+            {{end}}
+
+            {{if $money}}
+              <details class="group" {{if eq .NavOpenGroup "money"}}open{{end}}>
+                {{template "navGroupSummary" (dict "Label" "Money")}}
+                <div class="bg-gray-50">
+                  {{if .CanApproveExpenses}}<a href="/expense-approvals" class="block px-6 py-2 hover:bg-gray-100">Authorize Spending</a>{{end}}
+                  {{if .CanManageLedger}}
+                    <a href="/treasury" class="block px-6 py-2 hover:bg-gray-100">Treasury</a>
+                    <a href="/treasury/reports" class="block px-6 py-2 hover:bg-gray-100">Treasury Reports</a>
+                    <a href="/treasury/reconciliations" class="block px-6 py-2 hover:bg-gray-100">Bank Reconciliation</a>
+                  {{end}}
+                </div>
+              </details>
+            {{end}}
+
+            {{if $site}}
+              <details class="group" {{if eq .NavOpenGroup "site"}}open{{end}}>
+                {{template "navGroupSummary" (dict "Label" "Site")}}
+                <div class="bg-gray-50">
+                  {{if or .CanEditContent .CanManageLedger}}<a href="/audit" class="block px-6 py-2 hover:bg-gray-100">Activity Log</a>{{end}}
+                  {{if .IsSuperAdmin}}
+                    <a href="/admin/custom-roles" class="block px-6 py-2 hover:bg-gray-100">Roles &amp; Permissions</a>
+                    <a href="/admin/settings" class="block px-6 py-2 hover:bg-gray-100">Site Settings</a>
+                  {{end}}
+                </div>
+              </details>
+            {{end}}
+
+            {{/* Yours rather than the unit's, and last because that is
+                 where a menu's account items belong. Self-scoped: these
+                 work on either unit's site, so they follow the session
+                 rather than membership here. */}}
             <div class="border-t border-gray-100 my-1"></div>
+            {{if .ManagesFamilyContacts}}<a href="/my-family" class="block px-4 py-2 hover:bg-gray-100">My Family</a>{{end}}
             <a href="/settings/2fa" class="block px-4 py-2 hover:bg-gray-100">Security</a>
+            <a href="/help" class="block px-4 py-2 hover:bg-gray-100">Help</a>
             <form method="post" action="/logout">
               <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
               <button type="submit" class="block w-full text-left px-4 py-2 hover:bg-gray-100">Log out</button>
