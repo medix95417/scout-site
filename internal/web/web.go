@@ -1469,12 +1469,17 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 
 	data := struct {
 		baseData
-		Events          []calendar.Event
-		News            []homeNewsItem
-		Activities      []homeActivity
-		Hero            string
-		HeroImageURL    string
-		HeroSize        string
+		Events       []calendar.Event
+		News         []homeNewsItem
+		Activities   []homeActivity
+		Hero         string
+		HeroImageURL string
+		HeroSize     string
+		// Why is the short "why this unit" paragraph under the hero.
+		// Empty until a leader writes one, and the section renders
+		// nothing at all until then — there is no default copy to fall
+		// back to, because nobody but the unit can answer this.
+		Why             string
 		ProgramItems    []string
 		ProgramImageURL string
 		Meeting         string
@@ -1513,6 +1518,7 @@ func (h *Handlers) Home(w http.ResponseWriter, r *http.Request) {
 		News:                news,
 		Activities:          activities,
 		Hero:                text["home-hero"],
+		Why:                 strings.TrimSpace(text["home-why"]),
 		HeroImageURL:        text["home-hero-image"],
 		HeroSize:            heroSize,
 		ProgramItems:        programItems,

@@ -27,6 +27,23 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **A "why us" intro on the homepage**, directly under the hero. A short
+  paragraph a unit writes for the question a family asks first, with the
+  heading built from the unit's own name. It starts empty and stays
+  invisible until someone writes something — there is no default copy,
+  because this is the one section no stock sentence about Scouting can
+  write for a particular unit.
+
+### Fixed
+
+- **Edit Homepage no longer claims a placeholder is live when there
+  isn't one.** A text section with no default copy — the meeting address,
+  and now the "why us" intro — showed "Not set yet: the placeholder below
+  is what's currently showing on the live site", which was untrue: those
+  show nothing at all until they are filled in.
+
 ## [2.13.0] — 2026-09-13
 
 ### Added

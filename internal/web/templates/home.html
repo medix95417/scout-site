@@ -2,7 +2,8 @@
   {{/* Homepage flow, in the order a reader actually needs it:
 
          1. Hero — who this unit is, and the one action that matters
-            (log in, or find out how to join).
+            (log in, or find out how to join), then the unit's own
+            answer to "why us" when it has written one.
          2. What's happening — news and upcoming events, side by side.
             The freshest, most-changing content, and the reason a family
             comes back to the site at all.
@@ -43,6 +44,19 @@
       {{end}}
     </div>
   </section>
+
+  {{/* "Why us" — the first thing a family wants to know, in the first
+       place they look. Deliberately has no default copy and renders
+       nothing until a leader writes some: an empty heading over a stock
+       sentence about Scouting in general is worse than the page not
+       asking the question, and this is the one section of the homepage
+       nobody but the unit itself can write. */}}
+  {{if .Why}}
+    <section class="mb-12 max-w-3xl mx-auto text-center">
+      <h2 class="text-xl font-semibold mb-3">Why {{.Unit.Name}}</h2>
+      <p class="text-gray-700 leading-relaxed whitespace-pre-line">{{.Why}}</p>
+    </section>
+  {{end}}
 
   {{if .StorefrontActive}}
     <a href="/fundraiser" class="block mb-12 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow">
