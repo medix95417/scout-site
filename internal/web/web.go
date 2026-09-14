@@ -211,6 +211,7 @@ var templateFuncs = template.FuncMap{
 	"homeHeroSizeClass":  homeHeroSizeClass,
 	"thumbURL":           thumbURL,
 	"bannerURL":          bannerURL,
+	"splitUnitName":      splitUnitName,
 	"photoFocusClass":    photoFocusClass,
 	"initial":            initial,
 	"eventsForFile":      eventsForFile,

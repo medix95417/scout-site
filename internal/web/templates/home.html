@@ -34,7 +34,21 @@
           Follow us &#8599;
         </a>
       {{end}}
-      <h1 class="text-4xl sm:text-6xl font-bold mb-4 drop-shadow-lg">{{.Unit.Name}}</h1>
+      {{/* A pack's name is set as its word plus its unit numeral — see
+           .unit-wordmark and .unit-numeral in base.html. Only when the
+           name actually ends in a number: "Lakeside Pack" has no numeral
+           to set apart, and gets the plain heading like a troop does.
+           The text content is the same either way, so this reads as
+           "Pack 47" to a screen reader exactly as it did before. */}}
+      {{$name := splitUnitName .Unit.Name}}
+      <h1 class="text-4xl sm:text-6xl font-bold mb-4 drop-shadow-lg">
+        {{if and (eq .Unit.UnitType "pack") $name.Numeral}}
+          <span class="unit-wordmark">{{$name.Label}}</span>
+          <span class="unit-numeral">{{$name.Numeral}}</span>
+        {{else}}
+          {{.Unit.Name}}
+        {{end}}
+      </h1>
       <p class="text-lg sm:text-2xl max-w-2xl mx-auto opacity-95 drop-shadow whitespace-pre-line">{{.Hero}}</p>
       {{if not .LoggedIn}}
         <div class="mt-8 flex flex-wrap justify-center gap-3">

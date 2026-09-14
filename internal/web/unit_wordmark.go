@@ -1,0 +1,49 @@
+package web
+
+import (
+	"strings"
+	"unicode"
+)
+
+// The homepage hero's unit name, split so the two halves can be styled
+// apart: "Pack 47" is a word and a unit numeral, and a Cub Scout pack
+// wants them to look like it — the numeral set as the red-on-white
+// numeral patch that goes on the uniform sleeve, the word in something
+// with more personality than the site's body face.
+//
+// Split here rather than in the template because "the last word, if it
+// is a number" is a rule with edge cases (a unit with no number, a name
+// ending in a word), and a template is the wrong place to get those
+// right.
+
+// unitNameParts is a unit's name divided into the part that is words and
+// the part that is its number.
+type unitNameParts struct {
+	Label   string // "Pack", or the whole name when it has no trailing number
+	Numeral string // "47", or "" when the name doesn't end in one
+}
+
+// splitUnitName divides a unit name at its trailing number.
+//
+// Only an actual trailing run of digits counts: "Pack 47" splits, and
+// "Pack 47 Yonkers" or "Lakeside Pack" do not, because there is no
+// numeral at the end to set apart. A name that doesn't split comes back
+// whole in Label, which is what the template falls back to rendering.
+func splitUnitName(name string) unitNameParts {
+	name = strings.TrimSpace(name)
+	fields := strings.Fields(name)
+	if len(fields) < 2 {
+		return unitNameParts{Label: name}
+	}
+
+	last := fields[len(fields)-1]
+	for _, r := range last {
+		if !unicode.IsDigit(r) {
+			return unitNameParts{Label: name}
+		}
+	}
+	return unitNameParts{
+		Label:   strings.Join(fields[:len(fields)-1], " "),
+		Numeral: last,
+	}
+}
