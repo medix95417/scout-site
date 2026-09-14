@@ -43,8 +43,11 @@
 
     <div>
       <label class="block text-sm font-medium mb-1" for="photo_url">Photo</label>
+      {{/* type="text", not type="url": the library picker fills this
+           with a /files/…/download path, which a url input refuses. See
+           the fuller note in content-admin.html. */}}
       <input
-        id="photo_url" name="photo_url" type="url"
+        id="photo_url" name="photo_url" type="text"
         value="{{.Leader.PhotoURL}}"
         placeholder="https://… or choose from your library below"
         class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"

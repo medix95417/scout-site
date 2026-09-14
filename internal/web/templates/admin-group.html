@@ -17,8 +17,11 @@
           Shows as a banner at the top of {{.Group.Name}}'s page. Click a photo from your library below, or paste a
           link to one hosted elsewhere. Leave blank for no banner.
         </p>
+        {{/* type="text", not type="url": the library picker fills this
+             with a /files/…/download path, which a url input refuses.
+             See the fuller note in content-admin.html. */}}
         <input
-          id="hero_image_url" name="hero_image_url" type="url"
+          id="hero_image_url" name="hero_image_url" type="text"
           value="{{.Group.HeroImageURL}}"
           placeholder="https://… or choose from your library below"
           class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
