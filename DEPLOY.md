@@ -503,6 +503,93 @@ An untested backup is a guess. Once, after setting this up, restore onto
 a scratch machine (or a second copy of the stack on a different port) and
 sign in. Ten minutes now versus finding out during an actual outage.
 
+## Starting over — clearing the data
+
+Two different things get called "starting from scratch", and they need
+different work. Both are irreversible, so both start the same way:
+
+```bash
+scripts/backup.sh
+```
+
+That is the whole safety net. If the wipe turns out to be a mistake,
+`scripts/restore.sh` (see "Restoring" above) puts both halves back.
+
+### Removing the demo data only
+
+If you ran `-seed-demo` to try the site out and now want the fake
+families gone, `DEMO_DATA.md` has a targeted `DELETE` — deleting a
+family cascades to its logins, members, roles, RSVPs and ledger
+accounts.
+
+It is deliberately incomplete, and that is worth knowing before you rely
+on it: it removes the families, but not the demo calendar events, the
+seeded news posts and galleries, the fundraisers, the patrols/dens, or
+the units' ledger accounts. Nothing there is owned by a family, so
+nothing cascades. Fine for tidying a staging site; not a clean slate.
+
+For an actual clean slate, do the next thing instead.
+
+### A genuine clean slate
+
+Two stores hold data, and **wiping one does not touch the other**:
+
+| | Holds | Cleared by |
+|---|---|---|
+| Postgres | roster, logins, calendar, content, ledger, audit log | the SQL below |
+| S3 bucket | every uploaded photo and document | your object-storage client |
+
+Drop the schema and rebuild it:
+
+```bash
+docker compose stop app
+docker compose exec db psql -U scoutsite -d scoutsite \
+  -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+docker compose run --rm app -migrate
+docker compose run --rm app -seed
+docker compose run --rm \
+  -e ADMIN_EMAIL=you@example.com -e ADMIN_PASSWORD=a-real-password \
+  -e ADMIN_FIRST_NAME=Your -e ADMIN_LAST_NAME=Name app -bootstrap-admin
+docker compose up -d app
+```
+
+That is the same sequence section 7 runs on a fresh install. `-seed`
+recreates the two unit rows; `-migrate` rebuilds every table from the
+migrations, so the schema comes back at whatever version the code is on.
+
+Dropping the schema rather than deleting the volume is deliberate: it
+touches the database and nothing else. `docker compose down -v` would
+also destroy `caddy_data`, which holds your TLS certificates — and
+re-issuing those runs into Let's Encrypt's rate limits, so a site that
+was working can come back without HTTPS for an hour or more.
+
+**Then empty the bucket**, or every uploaded file becomes an orphan:
+still stored, still billed, no longer referenced by any row.
+
+```bash
+# example using the MinIO client; adapt to your provider
+mc rm --recursive --force myminio/scoutsite-files/
+```
+
+Skipping this is a legitimate choice if you are only resetting the
+roster and want the photo library kept — just know that the site will
+not show those files, because nothing points at them any more.
+
+### Things that surprise people
+
+- **`-bootstrap-admin` refuses to run twice for the same email.** It
+  exits with "a user with email X already exists — nothing to do". After
+  a wipe that is fine. On a database that still has your admin, use
+  `-grant-role` instead.
+- **Everyone is signed out.** Sessions live in the database, so every
+  login on every device stops working the moment the schema goes.
+- **Never run `-seed-demo` once real families are in.** It creates
+  obviously-fake `@example.com` logins alongside the real ones, and
+  telling them apart afterwards is manual work.
+- **The homepage text goes too.** Everything set under Edit Homepage —
+  hero, "why us", meeting address and map, leader profiles — is
+  `content_pages` and `leaders` rows, and comes back empty.
+
 ## Ongoing operations, continued
 
 **Thumbnail backfill** — every new upload generates its own small resized

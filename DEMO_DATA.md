@@ -260,3 +260,8 @@ accounts, the fundraisers, the sub-groups, the seeded news posts/
 galleries) — those are harmless to leave in place, but if you want a
 fully clean slate, the more thorough option is dropping and recreating
 the whole database, then re-running `-migrate -seed`.
+
+That fuller wipe is written up step by step — including the part this
+page cannot do anything about, emptying the S3 bucket so uploaded photos
+and documents don't outlive the rows that referenced them — under
+"Starting over — clearing the data" in `DEPLOY.md`.
