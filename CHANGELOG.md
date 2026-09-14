@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.13.3] — 2026-09-14
+
 ### Documentation
 
 - **How to clear the data and start from scratch**, in `DEPLOY.md` under
