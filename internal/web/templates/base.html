@@ -29,6 +29,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;700&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  {{/* The Cub Scout pack's homepage sets its name in a display face (see
+       .unit-wordmark below). Fetched only on a pack's pages — a troop
+       never uses it, and a font nobody renders is a request every visitor
+       pays for and nobody sees. */}}
+  {{if eq .Unit.UnitType "pack"}}
+    <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&display=swap" rel="stylesheet">
+  {{end}}
   <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.3/htmx.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -40,6 +47,50 @@
        over the bare-tag default below, since a class selector outranks one. */
     body { font-family: 'Roboto', -apple-system, 'Segoe UI', sans-serif; }
     h1, h2, h3, h4, h5 { font-family: 'Roboto Slab', Georgia, serif; font-weight: 700; }
+
+    /* The homepage hero's unit name, in two parts (see splitUnitName).
+       Only a pack uses these; a troop's hero keeps the plain heading. */
+
+    /* The word — "Pack" — in the display face loaded above. Weight 400
+       explicitly, overriding the h1 rule: Luckiest Guy ships one weight,
+       and asking a browser for 700 of a font that has no bold makes it
+       synthesise one by smearing the outline, which on a face this heavy
+       turns to mud. The fallbacks are the ordinary heading stack, so a
+       blocked or slow font leaves the old look rather than a serif-less
+       default. */
+    .unit-wordmark {
+      font-family: 'Luckiest Guy', 'Roboto Slab', Georgia, serif;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+    }
+
+    /* The number — "47" — as the unit numeral patch it is on a uniform
+       sleeve: red digits on white, inside a red border. Scouting Red
+       (#CE1126) rather than the unit's own accent colour, because this is
+       the numeral's colour in the brand guidelines and not a theme choice;
+       a pack's accent is gold, which would be unreadable on white.
+       Kept in the heading face rather than the display one: it reads as a
+       patch, which is a different object from the word beside it. */
+    /* The same numeral, drawn with the real BSA numeral images when this
+       build carries a complete set (static/numerals). Sized off the
+       heading's own font-size so it tracks the responsive type scale
+       instead of needing its own breakpoints, and aligned on the text
+       baseline rather than the image box, which would otherwise hang the
+       digits below the word beside them. */
+    .unit-numeral-images { display: inline-flex; gap: 0.06em; vertical-align: baseline; }
+    .unit-numeral-images img { height: 0.95em; width: auto; display: block; }
+
+    .unit-numeral {
+      font-family: 'Roboto Slab', Georgia, serif;
+      font-weight: 700;
+      color: #CE1126;
+      background-color: #fff;
+      border: 0.06em solid #CE1126;
+      border-radius: 0.12em;
+      padding: 0 0.18em;
+      display: inline-block;
+      line-height: 1.15;
+    }
 
     /* The one reusable "primary action" button style, used everywhere a
        page needs its unit's accent color as a button background. Text

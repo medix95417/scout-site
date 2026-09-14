@@ -27,6 +27,27 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Changed
+
+- **A Cub Scout pack's name in the homepage hero is set the way it is on
+  the uniform.** "Pack 47" is now the word in a display face and the
+  number as its unit numeral — red digits on white inside a red border,
+  in Scouting Red rather than the unit's own accent colour, which for a
+  pack is a gold that white would swallow. Only a pack: a troop's hero
+  keeps the plain heading, and the display font is fetched only on a
+  pack's pages so a troop never downloads a typeface it does not render.
+
+  A pack whose name has no number on the end of it — "Lakeside Pack" —
+  gets the plain heading too, since there is no numeral to set apart. The
+  heading still reads as one name to a screen reader either way.
+
+  The numeral can also be drawn with the real BSA numeral images instead
+  of the CSS one: commit a file per digit under
+  `internal/web/static/numerals/` (see the README there) and a pack's
+  heading uses them. Only a complete set counts, so a number is never
+  half pictures and half text, and with none committed the CSS numeral is
+  what renders.
+
 ## [2.13.5] — 2026-09-14
 
 ### Fixed

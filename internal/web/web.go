@@ -211,10 +211,24 @@ var templateFuncs = template.FuncMap{
 	"homeHeroSizeClass":  homeHeroSizeClass,
 	"thumbURL":           thumbURL,
 	"bannerURL":          bannerURL,
+	"splitUnitName":      splitUnitName,
+	"numeralImages":      templateNumeralImages,
 	"photoFocusClass":    photoFocusClass,
 	"initial":            initial,
 	"eventsForFile":      eventsForFile,
 	"otherEventsForFile": otherEventsForFile,
+}
+
+// templateNumeralImages is numeralImagesFor bound to this build's
+// embedded assets, for the homepage hero. Separate from the function it
+// calls so that one stays testable against an arbitrary file system
+// rather than only against whatever happens to be committed.
+func templateNumeralImages(numeral string) []string {
+	sub, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		return nil
+	}
+	return numeralImagesFor(numeral, sub)
 }
 
 // thumbURL rewrites one of this app's own /files/{id}/download URLs to
