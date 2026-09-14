@@ -340,7 +340,7 @@
          a distinct field name from the homepage's own "HeroImageURL" (see
          web.go's baseData.PageHeroImageURL comment) so the two hero
          mechanisms never shadow one another. -->
-    <section class="w-full {{heroSizeClass .PageHeroSize}} bg-gray-200 bg-cover bg-center" style="background-image: url('{{.PageHeroImageURL}}');"></section>
+    <section class="w-full {{heroSizeClass .PageHeroSize}} bg-gray-200 bg-cover bg-center" style="background-image: url('{{bannerURL .PageHeroImageURL}}');"></section>
   {{end}}
 
   <main id="main-content" class="{{if .MainWidthClass}}{{.MainWidthClass}}{{else}}max-w-4xl{{end}} mx-auto px-4 py-8">
