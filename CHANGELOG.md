@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.13.5] — 2026-09-14
+
 ### Fixed
 
 - **Choosing a photo from your own library no longer fails with "enter a
