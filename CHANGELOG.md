@@ -27,6 +27,18 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Documentation
+
+- **How to clear the data and start from scratch**, in `DEPLOY.md` under
+  "Starting over". Covers both the targeted demo-data delete and a full
+  wipe, and — the part that was written down nowhere — that the S3 bucket
+  is a second store the database wipe does not touch, so uploaded photos
+  and documents outlive their rows unless the bucket is emptied too.
+  Notes why dropping the schema beats `docker compose down -v` (that also
+  destroys Caddy's TLS certificates, and re-issuing runs into Let's
+  Encrypt rate limits). Every command was run against a real database
+  before being written down.
+
 ## [2.13.2] — 2026-09-13
 
 ### Changed
