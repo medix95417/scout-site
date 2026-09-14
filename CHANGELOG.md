@@ -27,6 +27,23 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Choosing a photo from your own library no longer fails with "enter a
+  URL".** The picker fills the field in with a path to the file on this
+  site (`/files/…/download`), but the field was an `<input type="url">`,
+  which requires an absolute address — so the browser refused the form
+  before it could be submitted and the picker looked broken. It affected
+  every photo field with a library picker: the homepage hero and "Our
+  Program" photo, all seven page banners, a den or patrol's hero, and a
+  leader's photo. Pasting a link to a photo hosted elsewhere worked,
+  which is why this went unnoticed.
+
+  The two fields that are genuinely external-only — the homepage's social
+  media link and the resources page's direct link — keep the browser's
+  URL checking. A test now fails if a field the picker can fill is ever
+  given it again, since nothing on the server side would notice.
+
 ## [2.13.4] — 2026-09-14
 
 ### Fixed

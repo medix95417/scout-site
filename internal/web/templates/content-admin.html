@@ -38,8 +38,17 @@
         <form method="post" action="/admin/home/{{.Slug}}" class="space-y-2">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
           {{if eq .Kind "image"}}
+{{/* type="text", not type="url": choosing a photo from this
+                 site's own library fills this in with a path
+                 (/files/…/download) rather than an absolute URL, and a
+                 url input rejects that before the form can even be
+                 submitted — the browser says "enter a URL" and the
+                 picker looks broken. An external link pasted here still
+                 works; what stops a dangerous one is html/template's URL
+                 filtering where this value is rendered, not the input
+                 type, which any client can ignore anyway. */}}
             <input aria-label="{{.Label}}"
-              type="url"
+              type="text"
               name="body"
               value="{{.Body}}"
               class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
@@ -126,8 +135,9 @@
         {{end}}
         <form method="post" action="/admin/home/{{.Slug}}" class="space-y-2">
           <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          {{/* type="text" — see the note on the same field above. */}}
           <input aria-label="{{.Label}}"
-            type="url"
+            type="text"
             name="body"
             value="{{.Body}}"
             class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
