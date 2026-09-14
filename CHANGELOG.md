@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.13.4] — 2026-09-14
+
 ### Fixed
 
 - **Hero photos are served resized instead of full size.** The three
