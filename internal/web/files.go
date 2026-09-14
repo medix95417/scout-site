@@ -498,6 +498,19 @@ func (h *Handlers) FileDownload(w http.ResponseWriter, r *http.Request) {
 // orphaned original in Handlers.FileDelete below.
 const thumbStorageSuffix = ".thumb.v2.jpg"
 
+// bannerStorageSuffix is the same idea for the larger hero/banner
+// variant (thumbnail.BannerDimension). A separate key rather than a
+// bigger thumbnail, because the two are wanted in different places at
+// once: a picker grid shows dozens of 640px previews on one page, and
+// making those 1600px each to save a second variant would be the
+// original problem in a new place.
+//
+// Derived and generated on first request, exactly like the thumbnail
+// above, which is what makes this need no migration and no backfill:
+// every hero already set points at a file whose banner simply doesn't
+// exist yet, and the first view of that page creates it.
+const bannerStorageSuffix = ".banner.v1.jpg"
+
 // FileThumbnail serves a small, resized JPEG preview of an image file —
 // generated once on first request and cached back into storage under a
 // derived key so replaying the same photo (a homepage carousel cycling
@@ -510,6 +523,23 @@ const thumbStorageSuffix = ".thumb.v2.jpg"
 // Same access check as FileDownload (public flag / login) since this is
 // the same underlying file's content, just resized.
 func (h *Handlers) FileThumbnail(w http.ResponseWriter, r *http.Request) {
+	h.serveImageVariant(w, r, thumbStorageSuffix, thumbnail.MaxDimension)
+}
+
+// FileBanner serves the hero-sized variant, and is FileThumbnail with a
+// different size and cache key — see bannerStorageSuffix. The heroes on
+// the homepage, on a page banner and on a den/patrol page point here
+// rather than at the original file (see bannerURL).
+func (h *Handlers) FileBanner(w http.ResponseWriter, r *http.Request) {
+	h.serveImageVariant(w, r, bannerStorageSuffix, thumbnail.BannerDimension)
+}
+
+// serveImageVariant is the shared body of both: same access check, same
+// cache-then-generate, same fall back to the original bytes for anything
+// that will not decode. Only the cached key and the target size differ,
+// so they stay one implementation — a second copy is how the access
+// check on one of them ends up out of step with the other.
+func (h *Handlers) serveImageVariant(w http.ResponseWriter, r *http.Request, suffix string, maxDimension int) {
 	unit, _ := units.UnitFromContext(r.Context())
 	if h.Storage == nil {
 		http.Error(w, storageUnavailableMsg, http.StatusServiceUnavailable)
@@ -531,8 +561,8 @@ func (h *Handlers) FileThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	thumbKey := f.StorageKey + thumbStorageSuffix
-	if cached, err := h.Storage.Get(r.Context(), thumbKey); err == nil {
+	variantKey := f.StorageKey + suffix
+	if cached, err := h.Storage.Get(r.Context(), variantKey); err == nil {
 		defer cached.Close()
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Header().Set("Cache-Control", "private, max-age=604800")
@@ -547,7 +577,7 @@ func (h *Handlers) FileThumbnail(w http.ResponseWriter, r *http.Request) {
 	// this feature existed at all. Falls back to serving the original
 	// bytes for anything thumbnail.Generate can't decode, so the request
 	// still returns something usable instead of a broken image.
-	thumb, src, err := fetchAndCacheThumbnail(r.Context(), h.Storage, f.StorageKey)
+	thumb, src, err := fetchAndCacheVariant(r.Context(), h.Storage, f.StorageKey, suffix, maxDimension)
 	if err != nil {
 		// ErrTooLarge joins ErrNotAnImage here: both mean "no thumbnail
 		// for this one", and serving the original bytes is the right
@@ -586,6 +616,12 @@ func (h *Handlers) FileThumbnail(w http.ResponseWriter, r *http.Request) {
 // can fall back to serving them without a second fetch; on any other
 // error src is nil, since fetching or caching failed outright.
 func fetchAndCacheThumbnail(ctx context.Context, store *storage.Store, storageKey string) (thumb, src []byte, err error) {
+	return fetchAndCacheVariant(ctx, store, storageKey, thumbStorageSuffix, thumbnail.MaxDimension)
+}
+
+// fetchAndCacheVariant is fetchAndCacheThumbnail for either size — see
+// bannerStorageSuffix for why there are two.
+func fetchAndCacheVariant(ctx context.Context, store *storage.Store, storageKey, suffix string, maxDimension int) (thumb, src []byte, err error) {
 	orig, err := store.Get(ctx, storageKey)
 	if err != nil {
 		return nil, nil, err
@@ -596,12 +632,12 @@ func fetchAndCacheThumbnail(ctx context.Context, store *storage.Store, storageKe
 		return nil, nil, err
 	}
 
-	thumb, err = thumbnail.Generate(src)
+	thumb, err = thumbnail.GenerateAt(src, maxDimension)
 	if err != nil {
 		return nil, src, err
 	}
 
-	if err := store.Put(ctx, storageKey+thumbStorageSuffix, bytes.NewReader(thumb), int64(len(thumb)), "image/jpeg"); err != nil {
+	if err := store.Put(ctx, storageKey+suffix, bytes.NewReader(thumb), int64(len(thumb)), "image/jpeg"); err != nil {
 		return nil, src, err
 	}
 	return thumb, src, nil

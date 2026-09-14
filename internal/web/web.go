@@ -210,6 +210,7 @@ var templateFuncs = template.FuncMap{
 	"heroSizeClass":      heroSizeClass,
 	"homeHeroSizeClass":  homeHeroSizeClass,
 	"thumbURL":           thumbURL,
+	"bannerURL":          bannerURL,
 	"photoFocusClass":    photoFocusClass,
 	"initial":            initial,
 	"eventsForFile":      eventsForFile,
@@ -226,6 +227,28 @@ var templateFuncs = template.FuncMap{
 // "Image picker: allow web URL or own store everywhere") passes through
 // unchanged, since there's nothing here to resize.
 func thumbURL(url string) string {
+	return resizedURL(url, "thumb")
+}
+
+// bannerURL is thumbURL's larger sibling, for the three heroes — the
+// homepage's, a page banner, a den/patrol page's. Those used to point
+// straight at the original file, so every visitor to the front page
+// downloaded a full camera photo to fill a band a few hundred pixels
+// tall; see Handlers.FileBanner and thumbnail.BannerDimension.
+//
+// Not the same size as a thumbnail, because a hero is the full width of
+// the window while a thumbnail is a few hundred pixels in a grid.
+func bannerURL(url string) string {
+	return resizedURL(url, "banner")
+}
+
+// resizedURL rewrites one of this app's own /files/{id}/download URLs to
+// a named resized variant of it. Anything not shaped like our own
+// download link passes through untouched — an external URL a leader
+// pasted in directly (see "Image picker: allow web URL or own store
+// everywhere") is somebody else's file, and there is nothing here to
+// resize.
+func resizedURL(url, variant string) string {
 	const prefix, suffix = "/files/", "/download"
 	if !strings.HasPrefix(url, prefix) || !strings.HasSuffix(url, suffix) {
 		return url
@@ -234,7 +257,7 @@ func thumbURL(url string) string {
 	if id == "" || strings.ContainsRune(id, '/') {
 		return url
 	}
-	return prefix + id + "/thumb"
+	return prefix + id + "/" + variant
 }
 
 // heroSizeClass maps a content.HeroSize preset to the Tailwind height
@@ -834,6 +857,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /files/bulk", h.FileBulkUpdate)
 	mux.HandleFunc("GET /files/{id}/download", h.FileDownload)
 	mux.HandleFunc("GET /files/{id}/thumb", h.FileThumbnail)
+	mux.HandleFunc("GET /files/{id}/banner", h.FileBanner)
 	mux.HandleFunc("POST /files/{id}/delete", h.FileDelete)
 	mux.HandleFunc("POST /files/{id}/link", h.FileSetEventLinks)
 	mux.HandleFunc("POST /files/{id}/public", h.FileSetPublic)

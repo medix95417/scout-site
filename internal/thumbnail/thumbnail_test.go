@@ -204,3 +204,99 @@ func bombPNG(t *testing.T, w, h int) []byte {
 	png.Write(chunk("IEND", nil))
 	return png.Bytes()
 }
+
+// GenerateAt is the same resize at a caller-chosen size — the hero
+// variant (BannerDimension) alongside the preview one (MaxDimension).
+
+func TestGenerateAtResizesToTheGivenLongestSide(t *testing.T) {
+	// A wide source, larger than both sizes.
+	src := encodeJPEG(t, 3000, 2000)
+
+	for _, maxDim := range []int{MaxDimension, BannerDimension, 200} {
+		out, err := GenerateAt(src, maxDim)
+		if err != nil {
+			t.Fatalf("GenerateAt(%d): %v", maxDim, err)
+		}
+		cfg, _, err := image.DecodeConfig(bytes.NewReader(out))
+		if err != nil {
+			t.Fatalf("decoding result at %d: %v", maxDim, err)
+		}
+		if cfg.Width != maxDim {
+			t.Errorf("at maxDimension %d the longest side is %d, want %d", maxDim, cfg.Width, maxDim)
+		}
+		// Aspect ratio is kept: 3000x2000 is 3:2.
+		if want := maxDim * 2 / 3; cfg.Height < want-1 || cfg.Height > want+1 {
+			t.Errorf("at maxDimension %d height is %d, want about %d (3:2 kept)", maxDim, cfg.Height, want)
+		}
+	}
+}
+
+// A hero variant has to be bigger than a preview, or pointing the heroes
+// at it would have achieved nothing.
+func TestBannerIsLargerThanAThumbnail(t *testing.T) {
+	if BannerDimension <= MaxDimension {
+		t.Fatalf("BannerDimension %d is not larger than MaxDimension %d", BannerDimension, MaxDimension)
+	}
+
+	src := encodeJPEG(t, 3000, 2000)
+	thumb, err := Generate(src)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	banner, err := GenerateAt(src, BannerDimension)
+	if err != nil {
+		t.Fatalf("GenerateAt: %v", err)
+	}
+	if len(banner) <= len(thumb) {
+		t.Errorf("banner is %d bytes and thumbnail %d — the banner should carry more detail", len(banner), len(thumb))
+	}
+	// And still much smaller than the original it replaces, which is the
+	// whole point of the change.
+	if len(banner) >= len(src) {
+		t.Errorf("banner is %d bytes against an original of %d — no saving at all", len(banner), len(src))
+	}
+}
+
+// Only ever shrinks. An image already smaller than the target keeps its
+// pixels rather than being blown up into a blurry one.
+func TestGenerateAtNeverEnlarges(t *testing.T) {
+	src := encodeJPEG(t, 400, 300)
+	out, err := GenerateAt(src, BannerDimension)
+	if err != nil {
+		t.Fatalf("GenerateAt: %v", err)
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(out))
+	if err != nil {
+		t.Fatalf("decoding result: %v", err)
+	}
+	if cfg.Width != 400 || cfg.Height != 300 {
+		t.Errorf("a 400x300 source came back %dx%d, want it left at its own size", cfg.Width, cfg.Height)
+	}
+}
+
+// A caller's uninitialised size must not produce a one-pixel image.
+func TestGenerateAtZeroFallsBackToThePreviewSize(t *testing.T) {
+	src := encodeJPEG(t, 2000, 1000)
+	for _, bad := range []int{0, -1, -999} {
+		out, err := GenerateAt(src, bad)
+		if err != nil {
+			t.Fatalf("GenerateAt(%d): %v", bad, err)
+		}
+		cfg, _, err := image.DecodeConfig(bytes.NewReader(out))
+		if err != nil {
+			t.Fatalf("decoding result: %v", err)
+		}
+		if cfg.Width != MaxDimension {
+			t.Errorf("GenerateAt(%d) produced width %d, want the MaxDimension fallback %d", bad, cfg.Width, MaxDimension)
+		}
+	}
+}
+
+// The size guard is on the source, so it applies whatever size is asked
+// for — a decompression bomb is refused at the banner size too.
+func TestGenerateAtStillRefusesABomb(t *testing.T) {
+	bomb := bombPNG(t, 30000, 30000)
+	if _, err := GenerateAt(bomb, BannerDimension); !errors.Is(err, ErrTooLarge) {
+		t.Errorf("GenerateAt on a 30000x30000 source returned %v, want ErrTooLarge", err)
+	}
+}

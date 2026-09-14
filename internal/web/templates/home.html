@@ -25,7 +25,7 @@
   <!-- 1. Hero -->
   <section
     class="relative left-1/2 right-1/2 -mx-[50vw] w-screen -mt-8 mb-12 bg-cover bg-center text-white"
-    style="{{if .HeroImageURL}}background-image: linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.5)), url('{{.HeroImageURL}}');{{else}}background-color: var(--unit-color);{{end}}"
+    style="{{if .HeroImageURL}}background-image: linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.5)), url('{{bannerURL .HeroImageURL}}');{{else}}background-color: var(--unit-color);{{end}}"
   >
     <div class="relative max-w-3xl mx-auto px-4 {{homeHeroSizeClass .HeroSize}} text-center">
       {{if .SocialURL}}

@@ -66,7 +66,7 @@ const (
 // straight from recent Photo Album posts instead, "by activity" per the
 // request that replaced the old single hand-picked strip.
 func HomepageSections(unitType string) []SectionDef {
-	imageHelp := "Paste a link to an image hosted elsewhere (e.g. a photo you've uploaded to Google Photos/Drive and shared publicly). Defaults to a stock Scouting photo until you swap it for your own."
+	imageHelp := "Paste a link to an image hosted elsewhere (e.g. a photo you've uploaded to Google Photos/Drive and shared publicly), or pick one from your own library below. A wide landscape photo works best \u2014 around 1920 pixels across is plenty, and anything bigger is resized down for you before visitors download it. Defaults to a stock Scouting photo until you swap it for your own."
 
 	if unitType == "troop" {
 		return []SectionDef{

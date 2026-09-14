@@ -27,6 +27,17 @@ import (
 // size.
 const MaxDimension = 640
 
+// BannerDimension is the longest side for a hero/banner variant.
+//
+// Heroes run the full width of the viewport, so 640 is far too small for
+// one — but the original is far too big. A 1600px-wide JPEG covers a
+// desktop window at ordinary pixel density and still looks right on a
+// phone at 2x or 3x, because a phone's hero is only ~400 CSS pixels
+// wide. Serving the original instead, which is what these used to do,
+// meant every visitor to the front page downloading a multi-megabyte
+// camera photo to fill a band a few hundred pixels tall.
+const BannerDimension = 1600
+
 // Quality is the JPEG encoding quality used for generated thumbnails —
 // chosen for a good size/quality tradeoff for photos that are only ever
 // shown small.
@@ -72,7 +83,23 @@ var ErrNotAnImage = errors.New("thumbnail: source is not a decodable image")
 // screenshot) still gets a bandwidth-appropriate thumbnail; only the
 // original file's own full-size download ever serves the source bytes
 // unchanged.
+// Generate resizes src to fit MaxDimension — the small preview size.
 func Generate(src []byte) ([]byte, error) {
+	return GenerateAt(src, MaxDimension)
+}
+
+// GenerateAt is Generate at a caller-chosen longest side, for the two
+// sizes this site serves: MaxDimension for previews, BannerDimension for
+// heroes. Only ever shrinks: an image already smaller than maxDimension
+// keeps its pixels, though it is still re-encoded as JPEG so that what
+// comes back is always the same format whatever went in.
+//
+// A maxDimension of zero or less falls back to MaxDimension rather than
+// producing a 1-pixel image from a caller's uninitialised variable.
+func GenerateAt(src []byte, maxDimension int) ([]byte, error) {
+	if maxDimension <= 0 {
+		maxDimension = MaxDimension
+	}
 	// Check the header before decoding — see MaxPixels for why.
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(src))
 	if err != nil {
@@ -108,8 +135,8 @@ func Generate(src []byte) ([]byte, error) {
 		longest = h
 	}
 	scale := 1.0
-	if longest > MaxDimension {
-		scale = float64(MaxDimension) / float64(longest)
+	if longest > maxDimension {
+		scale = float64(maxDimension) / float64(longest)
 	}
 	dstW := max(1, int(float64(w)*scale+0.5))
 	dstH := max(1, int(float64(h)*scale+0.5))

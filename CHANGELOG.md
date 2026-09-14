@@ -27,6 +27,24 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hero photos are served resized instead of full size.** The three
+  heroes — the homepage's, a page banner, a den/patrol page's — pointed
+  straight at the original uploaded file, so every visitor downloaded a
+  whole camera photo to fill a band a few hundred pixels tall. They now
+  use a 1600-pixel variant, generated on first view and cached in storage
+  beside the existing thumbnail. A 4-megabyte phone photo as a homepage
+  hero was 4 megabytes on every visit; it is now a couple of hundred
+  kilobytes.
+
+  Nothing to run and no migration: the variant is derived from the file's
+  own storage key and created the first time a page wants it, so heroes
+  already set start serving the smaller version by themselves. Picker
+  previews keep using the existing small thumbnail — a grid of dozens of
+  them would be the original problem in a new place. An externally hosted
+  hero photo is somebody else's file and is still used as given.
+
 ## [2.13.3] — 2026-09-14
 
 ### Documentation
