@@ -71,6 +71,15 @@
        a pack's accent is gold, which would be unreadable on white.
        Kept in the heading face rather than the display one: it reads as a
        patch, which is a different object from the word beside it. */
+    /* The same numeral, drawn with the real BSA numeral images when this
+       build carries a complete set (static/numerals). Sized off the
+       heading's own font-size so it tracks the responsive type scale
+       instead of needing its own breakpoints, and aligned on the text
+       baseline rather than the image box, which would otherwise hang the
+       digits below the word beside them. */
+    .unit-numeral-images { display: inline-flex; gap: 0.06em; vertical-align: baseline; }
+    .unit-numeral-images img { height: 0.95em; width: auto; display: block; }
+
     .unit-numeral {
       font-family: 'Roboto Slab', Georgia, serif;
       font-weight: 700;

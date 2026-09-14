@@ -1,6 +1,7 @@
 package web
 
 import (
+	"io/fs"
 	"strings"
 	"unicode"
 )
@@ -46,4 +47,50 @@ func splitUnitName(name string) unitNameParts {
 		Label:   strings.Join(fields[:len(fields)-1], " "),
 		Numeral: last,
 	}
+}
+
+// numeralImageExts are the file types a numeral image may be supplied
+// as, tried in this order for each digit.
+var numeralImageExts = []string{".jpg", ".png", ".jpeg", ".gif", ".svg"}
+
+// numeralImagesFor returns the static paths for each digit of a unit
+// numeral — BSA numeral clipart, committed under static/numerals — or
+// nil when this build doesn't carry a complete set for it.
+//
+// All or nothing on purpose. A unit whose number is 47 with an image for
+// 4 and none for 7 would otherwise get one digit as a picture and the
+// other as text, at different sizes and weights, which looks broken in a
+// way that "no images at all" does not. Missing one digit falls the
+// whole numeral back to the CSS one.
+//
+// Self-hosted rather than linked from the clipart site they come from:
+// those URLs are http://, and a browser refuses mixed content on an
+// https:// page, so hotlinking them means numerals that never appear at
+// all. img-src in the Content-Security-Policy refuses them a second
+// time. See static/numerals/README.md.
+func numeralImagesFor(numeral string, assets fs.FS) []string {
+	if numeral == "" || assets == nil {
+		return nil
+	}
+
+	paths := make([]string, 0, len(numeral))
+	for _, digit := range numeral {
+		if !unicode.IsDigit(digit) {
+			return nil
+		}
+		found := ""
+		for _, ext := range numeralImageExts {
+			name := "numerals/bsa-" + string(digit) + ext
+			if f, err := assets.Open(name); err == nil {
+				f.Close()
+				found = "/static/" + name
+				break
+			}
+		}
+		if found == "" {
+			return nil
+		}
+		paths = append(paths, found)
+	}
+	return paths
 }

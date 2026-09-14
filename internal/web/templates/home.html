@@ -44,7 +44,20 @@
       <h1 class="text-4xl sm:text-6xl font-bold mb-4 drop-shadow-lg">
         {{if and (eq .Unit.UnitType "pack") $name.Numeral}}
           <span class="unit-wordmark">{{$name.Label}}</span>
-          <span class="unit-numeral">{{$name.Numeral}}</span>
+          {{/* The real BSA numeral patches when this build carries an
+               image for every digit (see numeralImagesFor); the CSS
+               numeral otherwise, so the heading is never half pictures
+               and half text. The digits are inside one span labelled
+               with the number, so the heading still reads "Pack 47"
+               aloud rather than as two unnamed images. */}}
+          {{$numeralImages := numeralImages $name.Numeral}}
+          {{if $numeralImages}}
+            <span class="unit-numeral-images" role="img" aria-label="{{$name.Numeral}}">
+              {{range $numeralImages}}<img src="{{.}}" alt="">{{end}}
+            </span>
+          {{else}}
+            <span class="unit-numeral">{{$name.Numeral}}</span>
+          {{end}}
         {{else}}
           {{.Unit.Name}}
         {{end}}

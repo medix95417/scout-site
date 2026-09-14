@@ -41,6 +41,13 @@ tagged commit with an accurate date.
   gets the plain heading too, since there is no numeral to set apart. The
   heading still reads as one name to a screen reader either way.
 
+  The numeral can also be drawn with the real BSA numeral images instead
+  of the CSS one: commit a file per digit under
+  `internal/web/static/numerals/` (see the README there) and a pack's
+  heading uses them. Only a complete set counts, so a number is never
+  half pictures and half text, and with none committed the CSS numeral is
+  what renders.
+
 ## [2.13.5] — 2026-09-14
 
 ### Fixed
