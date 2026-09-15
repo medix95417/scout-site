@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.13.7] — 2026-09-15
+
 ### Changed
 
 - **A troop's number in the homepage hero is drawn with the Scouts BSA
