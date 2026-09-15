@@ -54,22 +54,33 @@ func splitUnitName(name string) unitNameParts {
 var numeralImageExts = []string{".jpg", ".png", ".jpeg", ".gif", ".svg"}
 
 // numeralImagesFor returns the static paths for each digit of a unit
-// numeral — BSA numeral clipart, committed under static/numerals — or
-// nil when this build doesn't carry a complete set for it.
+// numeral — the real numeral patches, committed under static/numerals —
+// or nil when this build doesn't carry a complete set for this kind of
+// unit.
+//
+// Kept per unit type, because the two programs' numerals are different
+// objects: Scouts BSA numerals are green on tan, Cub Scout ones red on
+// white. One shared set would put one program's patch on the other's
+// homepage.
 //
 // All or nothing on purpose. A unit whose number is 47 with an image for
 // 4 and none for 7 would otherwise get one digit as a picture and the
 // other as text, at different sizes and weights, which looks broken in a
 // way that "no images at all" does not. Missing one digit falls the
-// whole numeral back to the CSS one.
+// whole numeral back.
 //
-// Self-hosted rather than linked from the clipart site they come from:
-// those URLs are http://, and a browser refuses mixed content on an
-// https:// page, so hotlinking them means numerals that never appear at
-// all. img-src in the Content-Security-Policy refuses them a second
-// time. See static/numerals/README.md.
-func numeralImagesFor(numeral string, assets fs.FS) []string {
-	if numeral == "" || assets == nil {
+// Self-hosted rather than linked from wherever the artwork came from:
+// clipart sites tend to serve http://, and a browser refuses mixed
+// content on an https:// page, so hotlinking means numerals that never
+// appear at all. img-src in the Content-Security-Policy refuses them a
+// second time. See static/numerals/README.md.
+func numeralImagesFor(numeral, unitType string, assets fs.FS) []string {
+	if numeral == "" || unitType == "" || assets == nil {
+		return nil
+	}
+	// The unit type names a directory, so it may only ever be one of the
+	// two known values — never whatever happened to be in the database.
+	if unitType != "troop" && unitType != "pack" {
 		return nil
 	}
 
@@ -80,7 +91,7 @@ func numeralImagesFor(numeral string, assets fs.FS) []string {
 		}
 		found := ""
 		for _, ext := range numeralImageExts {
-			name := "numerals/bsa-" + string(digit) + ext
+			name := "numerals/" + unitType + "/" + string(digit) + ext
 			if f, err := assets.Open(name); err == nil {
 				f.Close()
 				found = "/static/" + name

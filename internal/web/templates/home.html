@@ -34,29 +34,37 @@
           Follow us &#8599;
         </a>
       {{end}}
-      {{/* A pack's name is set as its word plus its unit numeral — see
-           .unit-wordmark and .unit-numeral in base.html. Only when the
-           name actually ends in a number: "Lakeside Pack" has no numeral
-           to set apart, and gets the plain heading like a troop does.
-           The text content is the same either way, so this reads as
-           "Pack 47" to a screen reader exactly as it did before. */}}
+      {{/* The unit's name as two things rather than one run of text: the
+           word, and the unit numeral.
+
+           The numeral is the real patch when this build carries the
+           artwork for this kind of unit (static/numerals/troop,
+           .../pack) — the two programs' numerals are different objects,
+           so they are different files. Falling back: a pack gets the CSS
+           numeral, a troop gets plain text exactly as before, so neither
+           is ever half pictures and half letterforms.
+
+           Only a pack's word gets the display face; a troop's stays in
+           the heading font. And only when the name actually ends in a
+           number — "Lakeside Pack" has no numeral to set apart, and gets
+           the plain heading.
+
+           The text is the same in every branch, so this reads as "Pack
+           47" to a screen reader exactly as it did before. */}}
       {{$name := splitUnitName .Unit.Name}}
+      {{$isPack := eq .Unit.UnitType "pack"}}
+      {{$numeralImages := numeralImages $name.Numeral .Unit.UnitType}}
       <h1 class="text-4xl sm:text-6xl font-bold mb-4 drop-shadow-lg">
-        {{if and (eq .Unit.UnitType "pack") $name.Numeral}}
-          <span class="unit-wordmark">{{$name.Label}}</span>
-          {{/* The real BSA numeral patches when this build carries an
-               image for every digit (see numeralImagesFor); the CSS
-               numeral otherwise, so the heading is never half pictures
-               and half text. The digits are inside one span labelled
-               with the number, so the heading still reads "Pack 47"
-               aloud rather than as two unnamed images. */}}
-          {{$numeralImages := numeralImages $name.Numeral}}
+        {{if $name.Numeral}}
+          {{if $isPack}}<span class="unit-wordmark">{{$name.Label}}</span>{{else}}{{$name.Label}}{{end}}
           {{if $numeralImages}}
             <span class="unit-numeral-images" role="img" aria-label="{{$name.Numeral}}">
               {{range $numeralImages}}<img src="{{.}}" alt="">{{end}}
             </span>
-          {{else}}
+          {{else if $isPack}}
             <span class="unit-numeral">{{$name.Numeral}}</span>
+          {{else}}
+            {{$name.Numeral}}
           {{end}}
         {{else}}
           {{.Unit.Name}}
