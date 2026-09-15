@@ -1,6 +1,7 @@
 package web
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -64,16 +65,62 @@ func TestPackHeroSplitsTheNameForStyling(t *testing.T) {
 	if !strings.Contains(out, `<span class="unit-wordmark">Pack</span>`) {
 		t.Error("the word isn't marked up for the display font")
 	}
-	if !strings.Contains(out, `<span class="unit-numeral">47</span>`) {
-		t.Error("the number isn't marked up as a unit numeral")
+	// The number is set apart from the word one way or the other — as the
+	// numeral patches when this build carries them, as the CSS numeral
+	// when it doesn't. Which one is the next test's business.
+	heading := htmlBetween(t, out, "<h1", "</h1>")
+	if !strings.Contains(heading, `<span class="unit-numeral">47</span>`) &&
+		!strings.Contains(heading, `class="unit-numeral-images"`) {
+		t.Error("the number isn't set apart from the word at all")
 	}
 	// Still one heading reading "Pack 47" to anyone not looking at CSS.
-	heading := htmlBetween(t, out, "<h1", "</h1>")
-	text := strings.Join(strings.Fields(stripTags(heading)), " ")
-	if text != "Pack 47" {
-		t.Errorf("the heading reads %q, want %q", text, "Pack 47")
+	if got := headingName(heading); got != "Pack 47" {
+		t.Errorf("the heading reads %q, want %q", got, "Pack 47")
 	}
 }
+
+// The pack's numerals are committed, so its hero should be drawing them
+// rather than the CSS numeral it falls back to.
+func TestPackHeroUsesTheCommittedNumerals(t *testing.T) {
+	paths := templateNumeralImages("47", "pack")
+	if paths == nil {
+		t.Fatal("this build carries no pack numerals for 47; they were supposed to be committed")
+	}
+
+	data := homePage()
+	data.Unit.UnitType = "pack"
+	data.Unit.Name = "Pack 47"
+	out := renderPage(t, "home.html", data)
+
+	for _, p := range paths {
+		if !strings.Contains(out, p) {
+			t.Errorf("the pack hero doesn't render %s", p)
+		}
+	}
+	// A pack draws its own artwork, never the troop's.
+	if strings.Contains(out, "/static/numerals/troop/") {
+		t.Error("the pack hero rendered the troop's numerals")
+	}
+	// With the patches in place there is no CSS numeral beside them.
+	if strings.Contains(out, `<span class="unit-numeral">`) {
+		t.Error("the heading has both the patches and the CSS numeral")
+	}
+	// The word still gets the display face — the artwork doesn't replace
+	// the wordmark, it sits beside it.
+	if !strings.Contains(out, `<span class="unit-wordmark">Pack</span>`) {
+		t.Error("the pack's word lost its display font")
+	}
+}
+
+// headingName is what the heading reads as, patches included: the
+// numeral images stand in for the number they are labelled with, so a
+// heading drawn as artwork can be compared with one set in type.
+func headingName(heading string) string {
+	heading = numeralImageSpan.ReplaceAllString(heading, "$1")
+	return strings.Join(strings.Fields(stripTags(heading)), " ")
+}
+
+var numeralImageSpan = regexp.MustCompile(`(?s)<span class="unit-numeral-images"[^>]*aria-label="([^"]*)".*?</span>`)
 
 // The troop's hero keeps its own look: the display font and the boxed
 // numeral belong to the pack, and a troop takes neither even now that it
@@ -91,14 +138,10 @@ func TestTroopHeroKeepsThePlainHeading(t *testing.T) {
 		t.Error("a troop's hero picked up the pack's styling")
 	}
 	// The name still reads as "Troop 47", whether the number is set in
-	// type or rendered as patches carrying that label.
+	// type or drawn as patches carrying that label.
 	heading := htmlBetween(t, out, "<h1", "</h1>")
-	if !strings.Contains(stripTags(heading), "Troop") {
-		t.Error("the troop's name went missing from the hero")
-	}
-	number := strings.Contains(stripTags(heading), "47") || strings.Contains(heading, `aria-label="47"`)
-	if !number {
-		t.Errorf("the unit number is neither written nor labelled in the hero: %s", heading)
+	if got := headingName(heading); got != "Troop 47" {
+		t.Errorf("the heading reads %q, want %q", got, "Troop 47")
 	}
 }
 
@@ -185,7 +228,7 @@ func TestNumeralImagesFor(t *testing.T) {
 	})
 
 	// The two programs' numerals look nothing alike — green on tan
-	// against red on white — so one must never be served for the other.
+	// against white on red — so one must never be served for the other.
 	t.Run("a pack gets the pack's numerals", func(t *testing.T) {
 		got := numeralImagesFor("47", "pack", assets)
 		want := []string{"/static/numerals/pack/4.png", "/static/numerals/pack/7.png"}
@@ -284,19 +327,30 @@ func TestTroopHeroUsesTheCommittedNumerals(t *testing.T) {
 // Until a complete set of images is committed, the heading has to look
 // exactly as it does today — this ships dark, it doesn't ship broken.
 func TestHeroFallsBackToTheCSSNumeralWithoutImages(t *testing.T) {
-	if got := templateNumeralImages("47", "pack"); got != nil {
-		t.Skip("this build carries numeral images; the fallback path is not what renders")
+	// A number this build has no complete set for — not a number this
+	// unit has, but the path a unit with an unstocked digit takes. Picked
+	// by asking rather than assumed, so committing more artwork later
+	// turns this into a skip rather than a mystery failure.
+	number := ""
+	for _, candidate := range []string{"8", "5", "3", "9", "6", "2", "1", "0"} {
+		if templateNumeralImages(candidate, "pack") == nil {
+			number = candidate
+			break
+		}
+	}
+	if number == "" {
+		t.Skip("every digit has pack artwork now; there is no fallback left to exercise here")
 	}
 
 	data := homePage()
 	data.Unit.UnitType = "pack"
-	data.Unit.Name = "Pack 47"
+	data.Unit.Name = "Pack " + number
 	out := renderPage(t, "home.html", data)
 
-	if !strings.Contains(out, `<span class="unit-numeral">47</span>`) {
+	if !strings.Contains(out, `<span class="unit-numeral">`+number+`</span>`) {
 		t.Error("without images the heading lost its CSS numeral")
 	}
-	if strings.Contains(out, "unit-numeral-images\"") {
+	if strings.Contains(out, `class="unit-numeral-images"`) {
 		t.Error("the image markup rendered with no images to put in it")
 	}
 }

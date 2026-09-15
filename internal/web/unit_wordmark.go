@@ -59,8 +59,8 @@ var numeralImageExts = []string{".jpg", ".png", ".jpeg", ".gif", ".svg"}
 // unit.
 //
 // Kept per unit type, because the two programs' numerals are different
-// objects: Scouts BSA numerals are green on tan, Cub Scout ones red on
-// white. One shared set would put one program's patch on the other's
+// objects: Scouts BSA numerals are green on tan, Cub Scout ones white
+// on red. One shared set would put one program's patch on the other's
 // homepage.
 //
 // All or nothing on purpose. A unit whose number is 47 with an image for
