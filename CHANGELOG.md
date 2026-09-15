@@ -27,6 +27,18 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Changed
+
+- **The pack's number in the homepage hero is drawn with the Cub Scout
+  numeral patches.** "Pack 47" now sets the word in its display face
+  beside the real white-on-red numerals, where the number was the CSS
+  numeral — red digits on a white box — standing in for artwork the build
+  didn't carry. That CSS numeral is still the fallback for any pack whose
+  digits have no image committed.
+
+  With this, both programs' numerals ship: the troop's green-on-tan and
+  the pack's white-on-red.
+
 ## [2.13.7] — 2026-09-15
 
 ### Changed

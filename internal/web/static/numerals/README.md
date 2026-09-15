@@ -10,7 +10,7 @@ One directory per program, one image per digit inside it:
 
 ```
 numerals/troop/0.jpg … 9.jpg   Scouts BSA numerals (green on tan)
-numerals/pack/0.jpg  … 9.jpg   Cub Scout numerals (red on white)
+numerals/pack/0.jpg  … 9.jpg   Cub Scout numerals (white on red)
 ```
 
 `.jpg`, `.png`, `.jpeg`, `.gif` and `.svg` are all accepted, so
