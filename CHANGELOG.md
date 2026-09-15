@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.13.8] — 2026-09-15
+
 ### Changed
 
 - **The pack's number in the homepage hero is drawn with the Cub Scout
