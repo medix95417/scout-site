@@ -223,12 +223,12 @@ var templateFuncs = template.FuncMap{
 // embedded assets, for the homepage hero. Separate from the function it
 // calls so that one stays testable against an arbitrary file system
 // rather than only against whatever happens to be committed.
-func templateNumeralImages(numeral string) []string {
+func templateNumeralImages(numeral, unitType string) []string {
 	sub, err := fs.Sub(staticFS, "static")
 	if err != nil {
 		return nil
 	}
-	return numeralImagesFor(numeral, sub)
+	return numeralImagesFor(numeral, unitType, sub)
 }
 
 // thumbURL rewrites one of this app's own /files/{id}/download URLs to

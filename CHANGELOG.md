@@ -27,6 +27,22 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Changed
+
+- **A troop's number in the homepage hero is drawn with the Scouts BSA
+  numeral patches.** The word "Troop" stays as it was, in the heading's
+  own face — the display font belongs to the pack — and the number beside
+  it is now the green-on-tan numerals rather than plain text.
+
+  Numeral images are kept per program, under `numerals/troop/` and
+  `numerals/pack/`, because the two look nothing alike and one is simply
+  the wrong insignia for the other's unit; neither is ever substituted
+  for the other. Only a complete set is used, so a number is never half
+  patches and half text, and a unit with no set for its program falls
+  back to what it rendered before — the pack's boxed red numeral, a
+  troop's plain digits. The troop's 4 and 7 ship with this release; see
+  `internal/web/static/numerals/README.md` to add more.
+
 ## [2.13.6] — 2026-09-14
 
 ### Changed

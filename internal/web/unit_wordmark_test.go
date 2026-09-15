@@ -75,7 +75,10 @@ func TestPackHeroSplitsTheNameForStyling(t *testing.T) {
 	}
 }
 
-func TestTroopHeroIsUnchanged(t *testing.T) {
+// The troop's hero keeps its own look: the display font and the boxed
+// numeral belong to the pack, and a troop takes neither even now that it
+// has numeral artwork of its own.
+func TestTroopHeroKeepsThePlainHeading(t *testing.T) {
 	data := homePage()
 	data.Unit.UnitType = "troop"
 	data.Unit.Name = "Troop 47"
@@ -87,8 +90,15 @@ func TestTroopHeroIsUnchanged(t *testing.T) {
 	if strings.Contains(out, `<span class="unit-wordmark">`) || strings.Contains(out, `<span class="unit-numeral">`) {
 		t.Error("a troop's hero picked up the pack's styling")
 	}
-	if !strings.Contains(out, "Troop 47") {
-		t.Error("the troop's name went missing")
+	// The name still reads as "Troop 47", whether the number is set in
+	// type or rendered as patches carrying that label.
+	heading := htmlBetween(t, out, "<h1", "</h1>")
+	if !strings.Contains(stripTags(heading), "Troop") {
+		t.Error("the troop's name went missing from the hero")
+	}
+	number := strings.Contains(stripTags(heading), "47") || strings.Contains(heading, `aria-label="47"`)
+	if !number {
+		t.Errorf("the unit number is neither written nor labelled in the hero: %s", heading)
 	}
 }
 
@@ -155,13 +165,15 @@ func numeralFS(names ...string) fstest.MapFS {
 }
 
 func TestNumeralImagesFor(t *testing.T) {
-	full := numeralFS(
-		"numerals/bsa-4.jpg", "numerals/bsa-7.jpg", "numerals/bsa-0.png",
+	// Both programs' artwork, in their own directories.
+	assets := numeralFS(
+		"numerals/troop/4.jpg", "numerals/troop/7.jpg",
+		"numerals/pack/4.png", "numerals/pack/7.png", "numerals/pack/0.png",
 	)
 
-	t.Run("a complete set is used", func(t *testing.T) {
-		got := numeralImagesFor("47", full)
-		want := []string{"/static/numerals/bsa-4.jpg", "/static/numerals/bsa-7.jpg"}
+	t.Run("a troop gets the troop's numerals", func(t *testing.T) {
+		got := numeralImagesFor("47", "troop", assets)
+		want := []string{"/static/numerals/troop/4.jpg", "/static/numerals/troop/7.jpg"}
 		if len(got) != len(want) {
 			t.Fatalf("got %v, want %v", got, want)
 		}
@@ -172,14 +184,30 @@ func TestNumeralImagesFor(t *testing.T) {
 		}
 	})
 
-	t.Run("png is accepted too", func(t *testing.T) {
-		if got := numeralImagesFor("0", full); len(got) != 1 || got[0] != "/static/numerals/bsa-0.png" {
-			t.Errorf("got %v, want the .png", got)
+	// The two programs' numerals look nothing alike — green on tan
+	// against red on white — so one must never be served for the other.
+	t.Run("a pack gets the pack's numerals", func(t *testing.T) {
+		got := numeralImagesFor("47", "pack", assets)
+		want := []string{"/static/numerals/pack/4.png", "/static/numerals/pack/7.png"}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("digit %d: got %q, want %q", i, got[i], want[i])
+			}
+		}
+	})
+
+	t.Run("one program's set doesn't stand in for the other's", func(t *testing.T) {
+		troopOnly := numeralFS("numerals/troop/4.jpg", "numerals/troop/7.jpg")
+		if got := numeralImagesFor("47", "pack", troopOnly); got != nil {
+			t.Errorf("a pack was served the troop's patches: %v", got)
+		}
+		if got := numeralImagesFor("47", "troop", troopOnly); got == nil {
+			t.Error("the troop's own patches weren't found")
 		}
 	})
 
 	t.Run("a repeated digit is used twice", func(t *testing.T) {
-		if got := numeralImagesFor("44", full); len(got) != 2 {
+		if got := numeralImagesFor("44", "troop", assets); len(got) != 2 {
 			t.Errorf("got %v, want two paths", got)
 		}
 	})
@@ -188,38 +216,75 @@ func TestNumeralImagesFor(t *testing.T) {
 	// back, rather than mixing a picture and a letterform at different
 	// sizes in the same heading.
 	t.Run("one missing digit falls the whole numeral back", func(t *testing.T) {
-		if got := numeralImagesFor("48", full); got != nil {
+		if got := numeralImagesFor("48", "troop", assets); got != nil {
 			t.Errorf("got %v, want nil — there is no image for 8", got)
 		}
 	})
 
 	t.Run("no images at all", func(t *testing.T) {
-		if got := numeralImagesFor("47", numeralFS()); got != nil {
+		if got := numeralImagesFor("47", "troop", numeralFS()); got != nil {
 			t.Errorf("got %v, want nil", got)
 		}
 	})
 
 	t.Run("edge cases", func(t *testing.T) {
-		if got := numeralImagesFor("", full); got != nil {
+		if got := numeralImagesFor("", "troop", assets); got != nil {
 			t.Errorf("an empty numeral gave %v", got)
 		}
-		if got := numeralImagesFor("47", nil); got != nil {
+		if got := numeralImagesFor("47", "troop", nil); got != nil {
 			t.Errorf("a nil file system gave %v", got)
 		}
-		// Anything that isn't a digit can't name a numeral image, and
-		// must not be allowed to build a path out of.
+		if got := numeralImagesFor("47", "", assets); got != nil {
+			t.Errorf("an empty unit type gave %v", got)
+		}
+		// The unit type names a directory, so only the two known values
+		// may reach the file system.
+		for _, bad := range []string{"..", "../pack", "troop/../pack", "TROOP", "crew"} {
+			if got := numeralImagesFor("47", bad, assets); got != nil {
+				t.Errorf("unit type %q gave %v, want nil", bad, got)
+			}
+		}
+		// Anything that isn't a digit can't name a numeral image either.
 		for _, bad := range []string{"4a", "../etc/passwd", "4/7", "4.7", "-4"} {
-			if got := numeralImagesFor(bad, full); got != nil {
+			if got := numeralImagesFor(bad, "troop", assets); got != nil {
 				t.Errorf("numeralImagesFor(%q) gave %v, want nil", bad, got)
 			}
 		}
 	})
 }
 
+// The troop's numerals are committed, so its hero should be drawing
+// them — this is the half of the change that ships doing something.
+func TestTroopHeroUsesTheCommittedNumerals(t *testing.T) {
+	paths := templateNumeralImages("47", "troop")
+	if paths == nil {
+		t.Fatal("this build carries no troop numerals for 47; they were supposed to be committed")
+	}
+
+	data := homePage()
+	data.Unit.UnitType = "troop"
+	data.Unit.Name = "Troop 47"
+	out := renderPage(t, "home.html", data)
+
+	for _, p := range paths {
+		if !strings.Contains(out, p) {
+			t.Errorf("the troop hero doesn't render %s", p)
+		}
+	}
+	// The word stays in the heading font — only a pack's gets the
+	// display face.
+	if strings.Contains(out, `<span class="unit-wordmark">`) {
+		t.Error("the troop's word picked up the pack's display font")
+	}
+	if !strings.Contains(out, `aria-label="47"`) {
+		t.Error("the numeral images aren't labelled, so the heading no longer reads as a number")
+	}
+}
+
 // Until a complete set of images is committed, the heading has to look
 // exactly as it does today — this ships dark, it doesn't ship broken.
 func TestHeroFallsBackToTheCSSNumeralWithoutImages(t *testing.T) {
-	if got := templateNumeralImages("47"); got != nil {
+	if got := templateNumeralImages("47", "pack"); got != nil {
 		t.Skip("this build carries numeral images; the fallback path is not what renders")
 	}
 
