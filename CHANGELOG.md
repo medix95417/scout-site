@@ -27,6 +27,17 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The clean-slate instructions now warn that wiping the database
+  clears the mail settings.** The mail server's host, port, username and
+  From address can be set under Admin → Settings, which stores them in
+  the database, so `DROP SCHEMA` takes them — and since the password is
+  environment-only by design, what's left is a credential with no
+  address to use it on, and a site that quietly reports email as not
+  configured. DEPLOY.md now says so, with the two commands to see which
+  half is missing. Documentation only; no behaviour change.
+
 ## [2.13.8] — 2026-09-15
 
 ### Changed

@@ -589,6 +589,41 @@ not show those files, because nothing points at them any more.
 - **The homepage text goes too.** Everything set under Edit Homepage —
   hero, "why us", meeting address and map, leader profiles — is
   `content_pages` and `leaders` rows, and comes back empty.
+- **Email stops working, if you configured it in the web UI.** The mail
+  server's host, port, username and From address can be set two ways —
+  in `.env`, or under Admin → Settings. The second stores them in
+  `system_settings`, which the schema drop takes with everything else.
+  The site then falls back to the environment, and if that is where you
+  never put them, it has nothing: no error, just "email is not
+  configured" wherever mail would have been sent.
+
+  `SMTP_PASSWORD` and `FASTMAIL_API_TOKEN` are environment-only by
+  design and survive — which is the confusing part, since you are left
+  holding the credential and not the address it belongs to.
+
+  Check both halves:
+
+  ```bash
+  docker compose exec db psql -U scoutsite -d scoutsite \
+    -c "select key, value from system_settings where key like 'smtp%';"
+  docker compose exec app printenv SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_FROM MAIL_PROVIDER
+  ```
+
+  (`printenv` with the names spelled out rather than `env | grep SMTP`,
+  which would print the password.) Re-entering them under Admin →
+  Settings works immediately and needs no restart; putting them in
+  `.env` instead means the next wipe leaves them alone.
+
+  On Fastmail JMAP this bites in a smaller way: the provider and token
+  come from the environment, but the From address can come from the
+  database, and JMAP needs both. A token with no From is disabled just
+  the same.
+- **Every Admin → Settings switch goes back to its default.** The
+  feature toggles live in the same `system_settings` table. Unlike the
+  mail server they have sensible defaults to fall back on, so nothing
+  breaks — but anything you had deliberately turned on or off is on
+  whatever the default is again, and it is worth a look down that page
+  after a wipe rather than discovering it later.
 
 ## Ongoing operations, continued
 
