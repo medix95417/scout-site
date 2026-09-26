@@ -194,12 +194,19 @@ Set these for production:
   API instead of SMTP, so nothing needs an SMTP port to be reachable at
   all. Needs `FASTMAIL_API_TOKEN` (Fastmail → Settings → Privacy &
   Security → Integrations → API tokens — grant it "Mail" access) and
-  `SMTP_FROM` still set to one of that Fastmail account's own
-  addresses/aliases (an address JMAP doesn't recognize as belonging to
-  the token is rejected with a clear error, listing what it does
-  recognize). `SMTP_HOST`/`PORT`/`USERNAME`/`TLS_MODE` are ignored when
-  this is set. `FASTMAIL_API_TOKEN`, like `SMTP_PASSWORD`, is
-  environment-only — never settable from `/admin/settings`.
+  `SMTP_FROM` still set to an address that Fastmail account can send as:
+  one of its own identities, or any address on a domain it holds a
+  `*@domain` catch-all for. Anything else is rejected with an error
+  listing the addresses that would have worked.
+  `SMTP_HOST`/`PORT`/`USERNAME`/`TLS_MODE` are ignored when this is set.
+  `FASTMAIL_API_TOKEN`, like `SMTP_PASSWORD`, is environment-only —
+  never settable from `/admin/settings`.
+
+  Note which half of that is settable from the web UI: the provider and
+  the token are environment-only, but **the From address is not**, and
+  it is required. A token with no From is a disabled mailer, which is
+  the shape this takes after a database wipe — see "Starting over"
+  below.
 - `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` — the file
   library and event photos (see README.md "Files") need an S3-compatible
   bucket you already run or manage — a self-hosted MinIO, AWS S3,
@@ -613,6 +620,11 @@ not show those files, because nothing points at them any more.
   which would print the password.) Re-entering them under Admin →
   Settings works immediately and needs no restart; putting them in
   `.env` instead means the next wipe leaves them alone.
+
+  Quicker than either: **Admin → Settings → "Send a test email to
+  myself"** sends one message to your own login address and reports what
+  happened on the page, error and all. Use it after a wipe rather than
+  waiting to find out from a password reset that didn't arrive.
 
   On Fastmail JMAP this bites in a smaller way: the provider and token
   come from the environment, but the From address can come from the

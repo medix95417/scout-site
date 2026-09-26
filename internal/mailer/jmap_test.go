@@ -84,7 +84,13 @@ func TestCheckSetNotCreated(t *testing.T) {
 // name since that's what differs between fetchIdentityAndDrafts' batch
 // and submitEmail's. Returns the server (caller must Close it) and a
 // pointer to the last JMAP request body posted to /api, for assertions.
-func jmapTestServer(t *testing.T, identityEmail string) (*httptest.Server, *[]byte) {
+//
+// Takes as many identities as the test needs, in the order the account
+// would list them — a real account usually has several, and which one
+// gets picked out of the list is its own question (see
+// TestSendViaFastmailJMAP_PrefersTheExactIdentity). Each is given an id
+// of "ident1", "ident2" and so on, so a test can say which was used.
+func jmapTestServer(t *testing.T, identityEmails ...string) (*httptest.Server, *[]byte) {
 	t.Helper()
 	var lastAPIBody []byte
 
@@ -143,10 +149,14 @@ func jmapTestServer(t *testing.T, identityEmail string) (*httptest.Server, *[]by
 		w.Header().Set("Content-Type", "application/json")
 		switch firstMethod {
 		case "Identity/get":
+			var list []string
+			for i, email := range identityEmails {
+				list = append(list, fmt.Sprintf(`{"id":"ident%d","email":%q}`, i+1, email))
+			}
 			fmt.Fprintf(w, `{"methodResponses":[
-				["Identity/get", {"list":[{"id":"ident1","email":%q}]}, "id"],
+				["Identity/get", {"list":[%s]}, "id"],
 				["Mailbox/query", {"ids":["drafts1"]}, "mb"]
-			]}`, identityEmail)
+			]}`, strings.Join(list, ","))
 		case "Email/set":
 			fmt.Fprint(w, `{"methodResponses":[
 				["Email/set", {"created":{"draft":{"id":"email1"}}}, "e0"],

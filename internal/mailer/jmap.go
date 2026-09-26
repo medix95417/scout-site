@@ -374,13 +374,25 @@ func fetchIdentityAndDrafts(ctx context.Context, apiURL, token, accountID, fromA
 	if err := json.Unmarshal(idResult, &identities); err != nil {
 		return "", "", fmt.Errorf("mailer: parsing Identity/get result: %w", err)
 	}
+	// An exact identity wins; a wildcard one ("*@example.com", which is
+	// how a catch-all domain alias is listed) stands in only if no exact
+	// match exists. Both passes run over the whole list before either
+	// decides, so the order Fastmail happens to return them in doesn't
+	// change which identity is picked.
 	var available []string
+	var wildcardID string
 	for _, ident := range identities.List {
 		available = append(available, ident.Email)
 		if strings.EqualFold(ident.Email, fromAddr) {
 			identityID = ident.ID
 			break
 		}
+		if wildcardID == "" && wildcardIdentityCovers(ident.Email, fromAddr) {
+			wildcardID = ident.ID
+		}
+	}
+	if identityID == "" {
+		identityID = wildcardID
 	}
 	if identityID == "" {
 		return "", "", fmt.Errorf("mailer: no Fastmail identity matches SMTP_FROM address %q (this account's identities: %s) — SMTP_FROM must be one of this token's own addresses/aliases", fromAddr, strings.Join(available, ", "))
@@ -409,6 +421,30 @@ func fetchIdentityAndDrafts(ctx context.Context, apiURL, token, accountID, fromA
 // back-references (RFC 8620 §3.6.1): resolved server-side to the ids
 // the earlier Email/set and EmailSubmission/set creations are assigned,
 // without a round trip in between.
+// wildcardIdentityCovers reports whether a wildcard identity — the
+// "*@example.com" shape Fastmail lists a catch-all domain alias under —
+// can send as fromAddr.
+//
+// Worth handling rather than requiring an exact identity per address: an
+// account that owns a domain catch-all really can send as any address on
+// it, and refusing that means a unit whose mail comes from its own
+// domain has to go and create a named identity for an address the
+// account already covers — with nothing but "no identity matches" to
+// explain why. The domain must match in full; "*@example.com" is not a
+// licence to send as anything at a subdomain of it, which is Fastmail's
+// own rule for these.
+func wildcardIdentityCovers(identity, fromAddr string) bool {
+	rest, ok := strings.CutPrefix(identity, "*@")
+	if !ok || rest == "" {
+		return false
+	}
+	_, domain, ok := strings.Cut(fromAddr, "@")
+	if !ok {
+		return false
+	}
+	return strings.EqualFold(rest, domain)
+}
+
 func submitEmail(ctx context.Context, apiURL, token, accountID, identityID, draftsMailboxID, from, to, subject, body, contentType string) error {
 	fromName, fromAddr := "", from
 	if addr, err := mail.ParseAddress(from); err == nil {

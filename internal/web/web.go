@@ -812,6 +812,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/settings", h.SystemSettingsView)
 	mux.HandleFunc("POST /admin/settings/{key}/toggle", h.SystemSettingsToggle)
 	mux.HandleFunc("POST /admin/settings/text", h.SystemSettingsUpdateText)
+	mux.HandleFunc("POST /admin/settings/test-email", h.SystemSettingsSendTestEmail)
 	mux.HandleFunc("POST /admin/settings/unit/{key}/toggle", h.UnitSettingsToggle)
 	mux.HandleFunc("POST /admin/settings/unit/text", h.UnitSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/social", h.SocialSettingsUpdateText)
