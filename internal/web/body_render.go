@@ -19,6 +19,18 @@ package web
 // forum software:
 //
 //   - Any http(s) URL in the text becomes a link, opening in a new tab.
+//   - A link to this site's own file library — /files/<id>/download, as
+//     the picker on the news editor writes it — becomes a link too. It
+//     is a path rather than a URL, so the pattern above never matched
+//     one and a leader who pasted a permission slip's address got inert
+//     text. This site's own paths only: see filePathPattern for why the
+//     shape is pinned rather than "any path".
+//   - [Words](target) becomes a link reading "Words". Enough markdown to
+//     let a file read as "Permission slip" rather than as
+//     /files/9f3a…/download, which is what the picker inserts and what
+//     nobody wants in the middle of a sentence. The target must be one
+//     of the two forms above; anything else is left as the literal text
+//     the leader typed, rather than guessed at.
 //   - A YouTube URL that is a line of its own becomes an embedded
 //     player, with a "Watch on YouTube" link under it. The same URL in
 //     the middle of a sentence is just a link — a leader who writes
@@ -36,6 +48,7 @@ import (
 	"html/template"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -45,6 +58,24 @@ import (
 // whitespace; the characters excluded here are ones no real link
 // contains unescaped and every one of which would matter inside href="".
 var urlPattern = regexp.MustCompile("(?i)https?://[^\\s<>\"'`]+")
+
+// filePathPattern matches a link into this site's own file library, the
+// only site-relative target that becomes a link.
+//
+// Pinned to /files/<uuid>/<one word> rather than accepting any path,
+// because "looks like a path" is a much larger set than it appears:
+// "//evil.example.org" is a protocol-relative URL that a browser sends
+// off-site, and a bare "/anything" would turn every slash-separated
+// aside in a leader's prose into a broken link. The two leading slashes
+// are excluded explicitly, since that is the one that goes somewhere
+// else while reading like a path.
+var filePathPattern = regexp.MustCompile(`/files/[A-Za-z0-9-]{1,64}/(?:download|thumb|banner)\b`)
+
+// labelledLinkPattern matches [Words](target) — the one piece of
+// markdown this renderer understands. The label may not contain a
+// bracket and the target may not contain a space or a paren, so the
+// match cannot run away across a line of ordinary prose.
+var labelledLinkPattern = regexp.MustCompile(`\[([^\]\n]{1,200})\]\(([^)\s]{1,500})\)`)
 
 // youtubeIDPattern is the exact shape of a YouTube video id. Being
 // strict about it is what makes it safe to place in an iframe src
@@ -71,19 +102,88 @@ func renderPostBody(body string) template.HTML {
 	return template.HTML(strings.Join(out, "\n")) //nolint:gosec // every byte is escaped or constructed here — see the file comment
 }
 
-// linkify escapes a line of text and wraps each URL in it as a link.
+// linkify escapes a line of text and wraps each link in it.
+//
+// Labelled links are taken first, and their whole span is consumed, so
+// the bare-link pass below never sees the target inside one and cannot
+// link it a second time.
 func linkify(line string) string {
 	var sb strings.Builder
 	last := 0
-	for _, loc := range urlPattern.FindAllStringIndex(line, -1) {
-		rawURL, trailing := trimTrailingPunctuation(line[loc[0]:loc[1]])
-		sb.WriteString(html.EscapeString(line[last:loc[0]]))
+	for _, loc := range labelledLinkPattern.FindAllStringSubmatchIndex(line, -1) {
+		label := line[loc[2]:loc[3]]
+		target := line[loc[4]:loc[5]]
+		if !isLinkTarget(target) {
+			// Not something this renderer will point at, so it is left
+			// exactly as typed rather than half-rendered. A leader who
+			// wrote brackets for their own reasons gets their brackets.
+			continue
+		}
+		sb.WriteString(linkifyBare(line[last:loc[0]]))
+		sb.WriteString(anchor(target, label))
+		last = loc[1]
+	}
+	sb.WriteString(linkifyBare(line[last:]))
+	return sb.String()
+}
+
+// linkifyBare escapes a stretch of text and wraps each unlabelled link
+// in it — an http(s) URL, or a path into this site's file library.
+func linkifyBare(text string) string {
+	var sb strings.Builder
+	last := 0
+	for _, loc := range bareLinkSpans(text) {
+		rawURL, trailing := trimTrailingPunctuation(text[loc[0]:loc[1]])
+		sb.WriteString(html.EscapeString(text[last:loc[0]]))
 		sb.WriteString(anchor(rawURL, rawURL))
 		sb.WriteString(html.EscapeString(trailing))
 		last = loc[1]
 	}
-	sb.WriteString(html.EscapeString(line[last:]))
+	sb.WriteString(html.EscapeString(text[last:]))
 	return sb.String()
+}
+
+// bareLinkSpans finds every unlabelled link in a stretch of text, in
+// order and without overlaps.
+//
+// Two patterns rather than one alternation, because a file path can sit
+// inside an absolute URL to this same site — "https://pack.47-yonkers.org
+// /files/x/download" — and matching the path half of that separately
+// would link the middle of a URL the first pattern already claimed.
+// The URL matches win, and a path match overlapping one is dropped.
+func bareLinkSpans(text string) [][]int {
+	spans := urlPattern.FindAllStringIndex(text, -1)
+	for _, path := range filePathPattern.FindAllStringIndex(text, -1) {
+		overlapped := false
+		for _, u := range spans {
+			if path[0] < u[1] && u[0] < path[1] {
+				overlapped = true
+				break
+			}
+		}
+		if !overlapped {
+			spans = append(spans, path)
+		}
+	}
+	sort.Slice(spans, func(i, j int) bool { return spans[i][0] < spans[j][0] })
+	return spans
+}
+
+// isLinkTarget reports whether a labelled link's target is one this
+// renderer will put in an href.
+//
+// An allowlist of the two shapes, checked against the whole string, and
+// nothing else — this is the one place where a leader supplies an href
+// directly rather than having it recognised out of prose, so
+// "javascript:", "data:", a protocol-relative "//elsewhere" and every
+// other scheme land here and are refused. html/template is not a
+// backstop for this: the body is handed over as template.HTML, so
+// whatever this function permits is what reaches the page.
+func isLinkTarget(target string) bool {
+	if m := urlPattern.FindString(target); m == target {
+		return true
+	}
+	return filePathPattern.FindString(target) == target
 }
 
 // anchor builds the one <a> this file emits. rel="noopener" is what
@@ -207,4 +307,23 @@ func youtubeEmbed(id string, start int, original string) string {
 		`allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" ` +
 		`sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"></iframe></div>` +
 		`<p class="mt-1 text-xs">` + anchor(cleaned, "Watch on YouTube") + `</p></div>`
+}
+
+// fileLinkMarkdown builds what the news editor's file picker writes
+// into the body for one library file: a labelled link reading as the
+// file's name.
+//
+// The label is sanitised because it is a leader-set display name or an
+// uploaded filename, and either can contain the brackets this syntax is
+// made of. A "]" left in the middle would end the label early and leave
+// the rest of the name as loose text beside a link — not dangerous,
+// just broken-looking, and confusing to debug from the textarea. They
+// are replaced rather than escaped, so what a leader sees in the box is
+// what they get.
+func fileLinkMarkdown(label, id string) string {
+	label = strings.Join(strings.Fields(strings.NewReplacer("[", "(", "]", ")").Replace(label)), " ")
+	if label == "" {
+		label = "Attachment"
+	}
+	return "[" + label + "](/files/" + id + "/download)"
 }

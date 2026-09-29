@@ -217,6 +217,7 @@ var templateFuncs = template.FuncMap{
 	"numeralImages":      templateNumeralImages,
 	"photoFocusClass":    photoFocusClass,
 	"initial":            initial,
+	"fileLink":           fileLinkMarkdown,
 	"eventsForFile":      eventsForFile,
 	"otherEventsForFile": otherEventsForFile,
 }
@@ -420,7 +421,7 @@ func redirectTo(path string) http.HandlerFunc {
 // assembled, so that TestEveryTemplateParses exercises the same path New
 // does rather than a copy of it that could drift.
 func parsePageTemplate(page string) (*template.Template, error) {
-	return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/_image-picker.html", "templates/_webauthn.html", "templates/"+page)
+	return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/_image-picker.html", "templates/_file-link-picker.html", "templates/_webauthn.html", "templates/"+page)
 }
 
 func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *mailer.Mailer, store *storage.Store) (*Handlers, error) {

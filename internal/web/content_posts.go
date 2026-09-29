@@ -89,6 +89,27 @@ func keepViewableGalleryPhotos(photos []content.GalleryPhoto, publicIDs map[stri
 	return visible
 }
 
+// contentFormData is what admin-content-form.html renders.
+//
+// A named type rather than a struct literal inside the handler, for the
+// reason prospectsPageData gives: a render test can only build an
+// anonymous struct by declaring a copy of it, and the copy is what
+// drifts — as it did the moment the news editor grew a file picker.
+type contentFormData struct {
+	baseData
+	Kind                 contentKind
+	IsEdit               bool
+	Post                 content.Post
+	PhotoDateInput       string
+	PublicMediaGroups    []files.EventFileGroup
+	PublicMediaUngrouped []files.File
+	EventPhotoGroups     []files.EventFileGroup
+	// The file library, for the news editor's "attach something"
+	// chooser — documents only, see adminContentForm.
+	DocumentGroups     []files.EventFileGroup
+	DocumentsUngrouped []files.File
+}
+
 // contentKind describes the fixed differences between "post" (news) and
 // "gallery" handling — everything else is shared by the parameterized
 // handlers below. Keeping this table-driven, rather than writing near-
@@ -104,6 +125,7 @@ type contentKind struct {
 	BodyLabel       string
 	BodyHelp        string
 	BodyPlaceholder string
+	HasFilePicker   bool // true for newsKind — offers the file-library chooser that inserts a labelled link into the body (see _file-link-picker.html)
 	HasImagePicker  bool // true for galleryKind — offers the "choose from library" thumbnail strip alongside the body textarea (see admin-content-form.html)
 	HasDate         bool // true for galleryKind — offers the editable "date these photos were taken" field, which display and ordering then use in place of the creation time (see content.Post.DisplayDate)
 }
@@ -112,9 +134,12 @@ var (
 	newsKind = contentKind{
 		PageType: "post", Label: "News Post", LabelPlural: "News",
 		BasePath: "/admin/news", PublicPath: "/news",
-		BodyLabel:       "Announcement",
-		BodyHelp:        "Plain text — line breaks are preserved, but no HTML. A web address becomes a link on its own. Put a YouTube link on a line by itself and it shows as a video; in the middle of a sentence it stays a link.",
+		BodyLabel: "Announcement",
+		BodyHelp: "Plain text — line breaks are preserved, but no HTML. A web address becomes a link on its own. " +
+			"Put a YouTube link on a line by itself and it shows as a video; in the middle of a sentence it stays a link. " +
+			"To give a link a name of your own, write [Permission slip](https://example.org/slip.pdf).",
 		BodyPlaceholder: "What's the news?",
+		HasFilePicker:   true,
 	}
 	// Label/LabelPlural are "Photo Album"/"Photos" rather than the
 	// PageType/BasePath's own "gallery" — the public-facing name is
@@ -444,6 +469,20 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 		post.Visibility = "members" // same default as calendar events — see events table's DEFAULT 'members'
 	}
 
+	var documentGroups []files.EventFileGroup
+	var documentsUngrouped []files.File
+	if kind.HasFilePicker {
+		var err error
+		// Documents only. A news post linking a permission slip or a
+		// flyer is what this is for; offering the photo library too
+		// would put hundreds of campout pictures in a list whose job is
+		// to find one form, and a photo belongs in an album.
+		documentGroups, documentsUngrouped, err = files.ListDocumentFilesGroupedByEvent(r.Context(), h.Pool, unit.ID)
+		if err != nil {
+			log.Printf("web: loading documents for the news file picker: %v", err)
+		}
+	}
+
 	var publicMediaGroups []files.EventFileGroup
 	var publicMediaUngrouped []files.File
 	var eventPhotoGroups []files.EventFileGroup
@@ -468,16 +507,11 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 		photoDateInput = post.PhotoDate.Format("2006-01-02")
 	}
 
-	data := struct {
-		baseData
-		Kind                 contentKind
-		IsEdit               bool
-		Post                 content.Post
-		PhotoDateInput       string
-		PublicMediaGroups    []files.EventFileGroup
-		PublicMediaUngrouped []files.File
-		EventPhotoGroups     []files.EventFileGroup
-	}{baseData: h.base(r, kind.Label), Kind: kind, IsEdit: isEdit, Post: post, PhotoDateInput: photoDateInput, PublicMediaGroups: publicMediaGroups, PublicMediaUngrouped: publicMediaUngrouped, EventPhotoGroups: eventPhotoGroups}
+	data := contentFormData{
+		baseData: h.base(r, kind.Label), Kind: kind, IsEdit: isEdit, Post: post, PhotoDateInput: photoDateInput,
+		PublicMediaGroups: publicMediaGroups, PublicMediaUngrouped: publicMediaUngrouped, EventPhotoGroups: eventPhotoGroups,
+		DocumentGroups: documentGroups, DocumentsUngrouped: documentsUngrouped,
+	}
 	h.render(w, h.adminContentFormTmpl, data)
 }
 

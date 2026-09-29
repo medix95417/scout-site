@@ -30,6 +30,20 @@
         placeholder="{{.Kind.BodyPlaceholder}}"
         class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
       >{{.Post.Body}}</textarea>
+      {{if .Kind.HasFilePicker}}
+        {{if or .DocumentGroups .DocumentsUngrouped}}
+          <details class="mt-3">
+            <summary class="cursor-pointer select-none text-xs" style="color: var(--unit-color);">Attach something from the file library</summary>
+            <p class="text-xs text-gray-500 mt-1 mb-2">
+              Click a document to drop a link to it where your cursor is. It shows as the file's name rather than
+              its address. Anything on <a href="/files" class="underline" style="color: var(--unit-color);">Files</a>
+              is here; a members-only file stays members-only, so a signed-out visitor sees the link but is asked to
+              sign in when they open it.
+            </p>
+            {{template "fileLinkPicker" (dict "Groups" .DocumentGroups "Ungrouped" .DocumentsUngrouped "Target" "body")}}
+          </details>
+        {{end}}
+      {{end}}
       {{if .Kind.HasImagePicker}}
         <p class="text-xs text-gray-500 mt-2 mb-1">Or click a photo/video from your library to add it to the list above (grouped by event — click one to expand it):</p>
         {{template "eventAccordionPicker" (dict "Slug" "gallery-photos" "Groups" .PublicMediaGroups "Ungrouped" .PublicMediaUngrouped "Mode" "append" "AppendTarget" "body")}}
@@ -104,4 +118,5 @@
   {{end}}
 
   {{if .Kind.HasImagePicker}}{{template "imagePickerScript" .}}{{end}}
+  {{if .Kind.HasFilePicker}}{{template "fileLinkPickerScript" .}}{{end}}
 {{end}}

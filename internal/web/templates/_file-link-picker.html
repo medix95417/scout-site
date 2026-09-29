@@ -1,0 +1,104 @@
+{{/* fileLinkPicker is the news editor's "attach something from the file
+     library" chooser.
+
+     Same per-event accordion as the photo and document pickers, and
+     closed for the same reason: a unit with years of paperwork should
+     render a short list of event names, not four hundred filenames.
+
+     What it inserts is a labelled link — [Permission slip](/files/…) —
+     rather than the bare path, because the path is a uuid and nobody
+     wants one in the middle of a sentence. See fileLinkMarkdown for how
+     the label is made safe, and body_render.go for the syntax.
+
+     Insertion is at the cursor rather than at the end: a leader writing
+     "the form is due Friday" wants the link where they were typing. The
+     whole thing degrades to an ordinary list of buttons with no
+     JavaScript, which do nothing — so the help text below the box also
+     says the syntax, and typing it by hand works exactly as well.
+
+     Takes a dict with:
+       Groups    []files.EventFileGroup
+       Ungrouped []files.File — documents linked to no event
+       Target    id of the <textarea> to insert into */}}
+{{define "fileLinkPicker"}}
+  {{if or .Groups .Ungrouped}}
+    <div class="space-y-2" data-file-link-picker data-file-link-target="{{.Target}}">
+      {{range .Groups}}
+        <details class="rounded-md border border-gray-200">
+          <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-gray-50">
+            {{.EventTitle}} <span class="text-gray-400 font-normal">({{len .Files}})</span>
+          </summary>
+          <div class="p-2">{{template "fileLinkPickerRows" .Files}}</div>
+        </details>
+      {{end}}
+      {{if .Ungrouped}}
+        <details class="rounded-md border border-gray-200">
+          <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-gray-50">
+            Not linked to an event <span class="text-gray-400 font-normal">({{len .Ungrouped}})</span>
+          </summary>
+          <div class="p-2">{{template "fileLinkPickerRows" .Ungrouped}}</div>
+        </details>
+      {{end}}
+    </div>
+  {{end}}
+{{end}}
+
+{{define "fileLinkPickerRows"}}
+  <div class="space-y-1">
+    {{range .}}
+      <button type="button"
+              data-file-link="{{fileLink .DisplayLabel .ID}}"
+              class="flex w-full items-start gap-2 rounded px-2 py-1 text-left text-sm hover:bg-gray-50">
+        <span class="min-w-0">
+          <span class="block truncate">{{.DisplayLabel}}</span>
+          {{if .DisplayName}}<span class="block text-xs text-gray-400 truncate">{{.Filename}}</span>{{end}}
+        </span>
+        {{if not .Public}}
+          <span class="ml-auto flex-shrink-0 rounded bg-gray-200 px-1.5 py-0.5 text-[11px] text-gray-700"
+                title="Only signed-in families can open this one. A public news post linking it will show the link to everyone, but opening it still asks them to sign in.">Members only</span>
+        {{end}}
+      </button>
+    {{end}}
+  </div>
+{{end}}
+
+{{/* fileLinkPickerScript wires every [data-file-link-picker] on the
+     page. Included alongside the picker. */}}
+{{define "fileLinkPickerScript"}}
+  <script nonce="{{.CSPNonce}}">
+    (function () {
+      document.querySelectorAll('[data-file-link-picker]').forEach(function (picker) {
+        var target = document.getElementById(picker.getAttribute('data-file-link-target'));
+        if (!target) { return; }
+
+        picker.addEventListener('click', function (e) {
+          var btn = e.target.closest('[data-file-link]');
+          if (!btn) { return; }
+          var link = btn.getAttribute('data-file-link');
+
+          // At the cursor, which is where the leader was writing. When
+          // the box has never been focused both offsets are 0, and the
+          // link lands at the start — so an untouched box gets the link
+          // on its own line rather than jammed against the first word.
+          var start = target.selectionStart;
+          var end = target.selectionEnd;
+          var before = target.value.slice(0, start);
+          var after = target.value.slice(end);
+          var lead = before && !/\s$/.test(before) ? ' ' : '';
+          var trail = after && !/^\s/.test(after) ? ' ' : '';
+          var insert = lead + link + trail;
+
+          target.value = before + insert + after;
+          var caret = start + insert.length;
+          target.setSelectionRange(caret, caret);
+          target.focus();
+
+          // Setting .value directly doesn't fire a native input event —
+          // dispatch one so anything watching the field reacts the same
+          // way it would to typing.
+          target.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+      });
+    })();
+  </script>
+{{end}}
