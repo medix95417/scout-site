@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.17.0] — 2026-09-29
+
 ### Added
 
 - **An enquiry can be corrected after it is entered.** "Correct these
