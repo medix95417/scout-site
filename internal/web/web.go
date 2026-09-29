@@ -999,17 +999,14 @@ type baseData struct {
 	Version            string // this build's release version — see internal/version, shown in base.html's footer
 }
 
-// rolesFor answers membership as well as role identity. Shared logins receive
-// only a membership marker; leadership always belongs to an individual login.
+// rolesFor gives shared logins the union of their active household members'
+// roles in this unit. Individual logins receive only their own member's roles;
+// a child's individual login must not inherit a parent's leadership access.
 func (h *Handlers) rolesFor(ctx context.Context, user auth.User, unitID string) ([]string, error) {
 	if user.MemberID != nil {
 		return units.RolesForMemberInUnit(ctx, h.Pool, *user.MemberID, unitID)
 	}
-	roles, err := units.RolesForFamilyInUnit(ctx, h.Pool, user.FamilyID, unitID)
-	if err != nil || len(roles) == 0 {
-		return nil, err
-	}
-	return []string{"parent"}, nil
+	return units.RolesForFamilyInUnit(ctx, h.Pool, user.FamilyID, unitID)
 }
 
 // capabilitiesFor resolves the current login's roles in a unit straight
@@ -1019,11 +1016,6 @@ func (h *Handlers) rolesFor(ctx context.Context, user auth.User, unitID string) 
 // count exactly the same as an equivalent fixed role's everywhere in the
 // app.
 func (h *Handlers) capabilitiesFor(ctx context.Context, user auth.User, unitID string) (units.Capabilities, error) {
-	// Do not resolve even "parent" through configurable role overrides: an
-	// override must never turn a shared password into leadership authority.
-	if user.MemberID == nil {
-		return units.Capabilities{}, nil
-	}
 	roles, err := h.rolesFor(ctx, user, unitID)
 	if err != nil {
 		return nil, err
@@ -1051,12 +1043,12 @@ func (h *Handlers) actingMember(ctx context.Context, user auth.User, unitID stri
 	return family.ActingMemberForFamilyInUnit(ctx, h.Pool, user.FamilyID, unitID)
 }
 
-// rosterScope grants management scope only to individual logins.
+// rosterScope follows the same shared-family versus individual split as rolesFor.
 func (h *Handlers) rosterScope(ctx context.Context, user auth.User, unitID string) (roster.Scope, error) {
 	if user.MemberID != nil {
 		return roster.ScopeForMember(ctx, h.Pool, *user.MemberID, unitID)
 	}
-	return roster.Scope{}, nil
+	return roster.ScopeForFamily(ctx, h.Pool, user.FamilyID, unitID)
 }
 
 // isAccountOwner reports whether the current login "owns" a ledger
