@@ -87,8 +87,8 @@ func CreateAdmin(ctx context.Context, pool *pgxpool.Pool, in AdminInput) (family
 	}
 
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO users (family_id, member_id, email, password_hash) VALUES ($1, $2, $3, $4)`,
-		familyID, memberID, email, passwordHash,
+		`INSERT INTO users (family_id, email, password_hash) VALUES ($1, $2, $3)`,
+		familyID, email, passwordHash,
 	); err != nil {
 		return "", fmt.Errorf("bootstrap: creating user: %w", err)
 	}
@@ -130,7 +130,7 @@ func CreateAdmin(ctx context.Context, pool *pgxpool.Pool, in AdminInput) (family
 	return familyID, nil
 }
 
-// GrantRole gives an individual login's member a leadership (or other) role in
+// GrantRole gives an existing user's family a leadership (or other) role in
 // a unit, unit-wide (no den/patrol). This exists for the case
 // -bootstrap-admin doesn't cover: an account already has a role in one
 // unit (e.g. the Troop) but needs one in another (e.g. the Pack) too —
@@ -164,20 +164,9 @@ func GrantRole(ctx context.Context, pool *pgxpool.Pool, email, unitSlug, role st
 		return fmt.Errorf("bootstrap: no unit with slug %q — check the slug column in the units table (e.g. \"troop-47\", \"pack-47\")", unitSlug)
 	}
 
-	if user.MemberID == nil {
-		return fmt.Errorf("bootstrap: grant-role requires an individual login; create one for the intended member first")
-	}
-	member, found, err := family.GetMember(ctx, pool, *user.MemberID)
-	if err != nil || !found || member.FamilyID != user.FamilyID {
-		return fmt.Errorf("bootstrap: individual login must belong to an active member of its own family")
-	}
-
-	var active bool
-	if err := pool.QueryRow(ctx, `SELECT active FROM members WHERE id=$1`, member.ID).Scan(&active); err != nil {
-		return err
-	}
-	if !active {
-		return fmt.Errorf("bootstrap: member must be active")
+	member, err := family.ActingMemberForFamilyInUnit(ctx, pool, user.FamilyID, unit.ID)
+	if err != nil {
+		return fmt.Errorf("bootstrap: finding a member of %s's family to grant the role to: %w", email, err)
 	}
 
 	if _, err := pool.Exec(ctx,

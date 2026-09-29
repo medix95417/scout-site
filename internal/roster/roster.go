@@ -404,7 +404,7 @@ func ScopeForFamily(ctx context.Context, pool *pgxpool.Pool, familyID, unitID st
 		SELECT role_assignments.role::text, COALESCE(role_assignments.sub_group_id::text, '')
 		FROM role_assignments
 		JOIN members ON members.id = role_assignments.member_id
-		WHERE members.family_id = $1 AND role_assignments.unit_id = $2
+		WHERE members.family_id = $1 AND role_assignments.unit_id = $2 AND members.active = true
 	`, familyID, unitID)
 	if err != nil {
 		return Scope{}, err

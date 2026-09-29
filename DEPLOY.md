@@ -761,32 +761,29 @@ docker compose down
 - [ ] If email is configured, `-send-event-reminders` is on a cron job (see "Ongoing operations" above).
 - [ ] If any unit imports an external calendar, `-refresh-calendar-feeds` is on a cron job too.
 
-## Security hardening rollout: personal leader logins
+## Security rollout: shared and optional individual logins
 
-Before deploying the shared-login permission change, use the **existing version's**
-Manage Roster → adult member → Individual Login to create a separate login for
-at least one super admin in each unit. Create individual logins for treasurers and
-other leaders too. Use a private email address that is not already used by a
-shared login; deliver each fresh temporary password privately, change it at first
-sign-in, and enroll a second factor. Verify each personal login reaches the
-correct unit's administration pages before upgrading. Do not convert a shared
-login by merely attaching it to an adult: its password and existing sessions may
-already be known to other household members.
+The individual-leadership-login requirement from PR #133 has been reverted.
+Shared family logins again inherit the union of active household members' roles
+and roster-management scope in each unit, including custom role capabilities.
+Existing shared sessions regain those permissions on their next request after
+deployment. Individual logins still receive only their own member's roles and
+scope; a child's personal login does not inherit a parent's leadership access.
+Pack/Troop single sign-on and household self-service are unchanged.
 
-The update preserves shared household membership, calendar/RSVP, family contact
-management and existing household account self-service. It removes **all role
-capabilities and roster-management scope from shared logins**, including custom
-roles and overrides to the parent role. Leadership roles remain on the roster;
-the corresponding individual's login uses them in that unit. Personal logins
-retain their existing member-specific account visibility; the shared household
-login remains available for family-wide Scout account self-service. Pack/Troop
-single sign-on is unchanged. No existing password, MFA enrollment or feed token
-is copied to the new login. Old shared sessions lose leadership authority on
-their next request without waiting for expiry.
+No account conversion or database rollback is required. Keep migration 0050 and
+the authenticated-login audit records. Existing individual logins continue to
+work. Do not clear their member IDs, copy credentials, or delete accounts.
 
-If no individual administrator was prepared, an operator with server access can
-create an individual login for an existing member using the new image. Confirm
-the member ID on the roster first, or list active leadership assignments:
+**Accepted risk:** anyone who knows a shared family password can use its
+leadership permissions. Audit records identify that shared login and the member
+acted for, but cannot establish which household person used the password.
+Separate individual logins are recommended where that distinction matters.
+
+Individual logins can optionally be created through Manage Roster → adult member
+→ Individual Login. Alternatively, an operator with server access can create one
+for an explicitly selected existing member. Confirm the member ID on the roster,
+or list active leadership assignments:
 
 ```sh
 docker compose exec db psql -U scoutsite -d scoutsite -c "SELECT m.id, m.first_name, m.last_name, u.slug, r.role FROM members m JOIN role_assignments r ON r.member_id=m.id JOIN units u ON u.id=r.unit_id WHERE m.active ORDER BY m.last_name,m.first_name,u.slug;"
@@ -804,9 +801,9 @@ This prints a new temporary password once to the operator's terminal. Do not
 capture it in shared logs. The command refuses an existing email or individual
 login, does not change anyone's roles, and records the operator action in the
 audit log. Deliver it privately and complete the password change and MFA setup.
-`-bootstrap-admin` now creates an individual admin for a fresh installation;
-`-grant-role` requires an individual login and grants the role to that exact
-member, never a guessed member of their household.
+`-bootstrap-admin` creates a shared family admin for a fresh installation;
+`-grant-role` again accepts a family login and uses its acting household member.
+Creating individual leader logins is no longer a deployment prerequisite.
 
 ### Logging, caching, assets and HTTPS
 

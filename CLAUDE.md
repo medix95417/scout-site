@@ -69,13 +69,13 @@ reads inside-out — the last `handler = X(handler)` line runs first — and
 CSRF genuinely depends on running after `auth.WithUser`, since it sizes
 the request-body limit by whether the caller is signed in.
 
-**Shared logins never carry leadership authority.** Individual logins resolve
-only their own roles. Shared logins preserve household unit membership but get
-no capabilities and no roster-management scope, even with role overrides.
-Bootstrap creates individual admins. Follow DEPLOY.md's personal-login transition
-before upgrading an existing deployment; never attach a shared credential to a
-privileged member. Audit records the authenticated user ID separately from the
-acting member.
+**Shared logins carry household roles.** A shared login resolves the union of
+active household members' roles and roster scope in the current unit, including
+configured capabilities. Individual logins resolve only their own roles and
+scope; never leak a parent's permissions into a child's individual login.
+Bootstrap creates shared family admins. Individual logins remain optional.
+Audit records the authenticated user ID separately from the acting member; a
+shared credential cannot identify which household person actually signed in.
 
 **Multi-tenancy + roles.** One family/login can exist across both units;
 roles (Cubmaster, Scoutmaster, Den Leader, Treasurer, super_admin, etc.)

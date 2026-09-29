@@ -1050,7 +1050,7 @@ of either.
 
 ## 2026-09-29 — shared login authority, log secrets, caching and browser assets
 
-Shared family logins retain membership but no longer resolve role capabilities
+**Historical implementation (PR #133):** shared family logins retain membership but no longer resolve role capabilities
 or roster management scope. Individual logins retain their own per-unit roles;
 custom roles and parent overrides cannot elevate a shared credential. New
 bootstrap admins are individual logins. The operator-only personal-login command
@@ -1090,3 +1090,23 @@ sessions for shared versus individual authority, role revocation, cross-unit
 membership, custom parent overrides, the personal-login transition and distinct
 authenticated-user/acting-member audit identities. CI runs the database test
 and checks asset reproducibility and Caddy configuration.
+
+### Follow-up — restore shared family leadership access
+
+At the owner's request, finding #1's mandatory individual-login policy is
+reverted. Shared logins again resolve active household members' per-unit roles,
+configured capabilities and roster scope. Individual logins remain restricted
+to their own roles; cross-unit checks and live role revocation remain in place.
+Bootstrap and demo accounts again support shared family leadership. Existing
+individual accounts are not converted or deleted, and personal-login creation
+remains available as an optional operator tool.
+
+This accepts the original risk: anyone with the household password can exercise
+its leadership permissions, and audit records cannot distinguish household people
+using one credential. Authenticated-user audit IDs and migration 0050 remain.
+No pre-deployment personal-login transition is required for this follow-up.
+
+Fixes #3–#6 (log redaction, no-store caching, local browser assets/CSP and HSTS)
+are unchanged. MFA behavior (#2) is also unchanged. Regression coverage now
+expects shared leadership access, preserves individual-child isolation, checks
+inactive/revoked household roles and cross-unit denial, and retains audit tests.
