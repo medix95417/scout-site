@@ -121,6 +121,24 @@ func BySlug(ctx context.Context, pool *pgxpool.Pool, slug string) (Unit, bool, e
 	return u, true, nil
 }
 
+// List returns the public unit identities used by the shared site switcher.
+func List(ctx context.Context, pool *pgxpool.Pool) ([]Unit, error) {
+	rows, err := pool.Query(ctx, `SELECT id, name, unit_type::text, hostname FROM units ORDER BY unit_type, name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Unit
+	for rows.Next() {
+		var u Unit
+		if err := rows.Scan(&u.ID, &u.Name, &u.UnitType, &u.Hostname); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 type contextKey string
 
 const unitContextKey contextKey = "current_unit"
