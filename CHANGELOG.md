@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.14.0] — 2026-09-29
+
 ### Added
 
 - **A unit's prospect statuses are its own now, and there is a second
