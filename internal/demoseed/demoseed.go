@@ -115,9 +115,6 @@ func Run(ctx context.Context, pool *pgxpool.Pool) (Summary, error) {
 	if err != nil {
 		return Summary{}, fmt.Errorf("demoseed: creating super admin: %w", err)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE users SET member_id = $1 WHERE id = $2`, alex.MemberID, alex.UserID); err != nil {
-		return Summary{}, err
-	}
 	for _, unitID := range []string{troop.ID, pack.ID} {
 		if _, err := pool.Exec(ctx,
 			`INSERT INTO role_assignments (member_id, unit_id, role) VALUES ($1, $2, 'super_admin')`,
@@ -608,11 +605,6 @@ func addPersona(ctx context.Context, pool *pgxpool.Pool, passwordHash, actor, fa
 	p, err := createLogin(ctx, pool, familyName, email, passwordHash, firstName, lastName, memberType)
 	if err != nil {
 		return person{}, fmt.Errorf("demoseed: creating %s %s (%s): %w", firstName, lastName, role, err)
-	}
-	if role != "parent" && role != "scout" {
-		if _, err := pool.Exec(ctx, `UPDATE users SET member_id = $1 WHERE id = $2`, p.MemberID, p.UserID); err != nil {
-			return person{}, err
-		}
 	}
 	if err := roster.AssignRole(ctx, pool, p.MemberID, unitID, subGroupID, role, actor); err != nil {
 		return person{}, fmt.Errorf("demoseed: assigning %s to %s %s: %w", role, firstName, lastName, err)
