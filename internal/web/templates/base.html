@@ -160,11 +160,6 @@
     #site-menu > summary { min-height: 44px; }
     .site-menu-panel { max-height: min(70vh, 36rem); overflow-y: auto; }
     .site-menu-panel a, .site-menu-panel button, .site-menu-panel summary { min-height: 44px; }
-    .family-shortcuts { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: .75rem; }
-    .family-shortcuts a { display: flex; flex-direction: column; justify-content: center; padding: 1rem; border: 1px solid #d1d5db; border-radius: .75rem; background: #fff; min-height: 88px; }
-    .family-shortcuts a:hover { border-color: var(--unit-color); box-shadow: 0 3px 12px rgba(0,0,0,.06); }
-    .family-shortcuts strong { color: var(--unit-color); }
-    .family-shortcuts span { color: #4b5563; font-size: .875rem; margin-top: .25rem; }
     @media (max-width: 600px) {
       .unit-bar-note, .menu-label { display: none; }
       .header-main { gap: .6rem; }
@@ -346,6 +341,9 @@
     <nav aria-label="Main navigation" class="header-width public-navigation">
       {{range .PublicNavigation}}
         <a href="{{.URL}}" {{if .Current}}aria-current="page"{{end}}>{{.Label}}</a>
+      {{end}}
+      {{if and .LoggedIn .IsUnitMember}}
+        <a href="/groups">{{if eq .Unit.UnitType "troop"}}Patrols{{else}}Dens{{end}}</a>
       {{end}}
     </nav>
   </header>
