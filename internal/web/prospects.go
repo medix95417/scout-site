@@ -293,6 +293,28 @@ func (d prospectsPageData) FilterURL(category string) string {
 	if category != "" {
 		q.Set("category", category)
 	}
+	if d.Sort == string(prospect.OrderStatus) {
+		q.Set("sort", d.Sort)
+	}
+	if len(q) == 0 {
+		return "/admin/prospects"
+	}
+	return "/admin/prospects?" + q.Encode()
+}
+
+// SortURL is this page ordered a different way, keeping whatever else
+// the leader had switched on.
+func (d prospectsPageData) SortURL(sort string) string {
+	q := url.Values{}
+	if d.ShowAll {
+		q.Set("all", "1")
+	}
+	if d.Filter != "" {
+		q.Set("category", d.Filter)
+	}
+	if sort == string(prospect.OrderStatus) {
+		q.Set("sort", sort)
+	}
 	if len(q) == 0 {
 		return "/admin/prospects"
 	}
@@ -374,6 +396,8 @@ type prospectsPageData struct {
 	CategoryText map[string]string
 	// Filter is the category currently filtered to, "" for all.
 	Filter string
+	// Sort is how the list is ordered — see prospect.Order.
+	Sort string
 	// AddError is what went wrong adding a family by hand, shown above
 	// the list — see prospect_add.go.
 	AddError       string
@@ -436,7 +460,11 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 	showAll := r.URL.Query().Get("all") == "1"
 	showAllCampaigns := r.URL.Query().Get("campaigns") == "all"
 	filter := r.URL.Query().Get("category")
-	list, err := prospect.ListForUnit(r.Context(), h.Pool, unit.ID, !showAll)
+	order := prospect.OrderNewest
+	if r.URL.Query().Get("sort") == string(prospect.OrderStatus) {
+		order = prospect.OrderStatus
+	}
+	list, err := prospect.ListForUnit(r.Context(), h.Pool, unit.ID, !showAll, order)
 	if err != nil {
 		log.Printf("web: listing prospects: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -521,6 +549,7 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 		StatusText:     statusText,
 		CategoryText:   categoryText,
 		Filter:         filter,
+		Sort:           string(order),
 		AddError:       r.URL.Query().Get("add_error"),
 		ShowAll:        showAll,
 		OpenCount:      openCount,
@@ -615,6 +644,52 @@ func (h *Handlers) ProspectUpdate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, prospectReturnTo(r), http.StatusSeeOther)
 }
 
+// ProspectUpdateDetails saves a correction to an enquiry's contact
+// details — a misheard email, a child's name spelled from a sign-up
+// sheet, an age nobody asked for at the time.
+//
+// Separate from ProspectUpdate, which owns status and notes, so that
+// moving a family along from the list doesn't re-submit eight contact
+// fields and doesn't offer eight chances to blank one.
+func (h *Handlers) ProspectUpdateDetails(w http.ResponseWriter, r *http.Request) {
+	unit, actor, ok := h.requireContentEditor(w, r, "/admin/prospects")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	in := prospect.New{
+		ParentName:  r.FormValue("parent_name"),
+		ParentEmail: r.FormValue("parent_email"),
+		ParentPhone: r.FormValue("parent_phone"),
+		ChildName:   r.FormValue("child_name"),
+		ChildGrade:  r.FormValue("child_grade"),
+		ChildSchool: r.FormValue("child_school"),
+		Message:     r.FormValue("message"),
+	}
+	if raw := strings.TrimSpace(r.FormValue("child_age")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			h.backToProspects(w, r, "Enter the child's age as a number, or leave it blank.")
+			return
+		}
+		in.ChildAge = &n
+	}
+
+	if _, err := prospect.UpdateDetails(r.Context(), h.Pool, unit.ID, r.PathValue("id"), in, actor.ID); err != nil {
+		if errors.Is(err, prospect.ErrInvalid) {
+			h.backToProspects(w, r, sentence(strings.TrimPrefix(err.Error(), "prospect: invalid submission: ")))
+			return
+		}
+		writeProspectError(w, err)
+		return
+	}
+	http.Redirect(w, r, prospectReturnTo(r), http.StatusSeeOther)
+}
+
 // ProspectDelete removes an enquiry — for the spam a public form
 // eventually attracts.
 func (h *Handlers) ProspectDelete(w http.ResponseWriter, r *http.Request) {
@@ -640,6 +715,9 @@ func prospectReturnTo(r *http.Request) string {
 	// working through — they are usually going down a list.
 	if c := r.FormValue("category_filter"); c != "" {
 		q.Set("category", c)
+	}
+	if s := r.FormValue("sort"); s == string(prospect.OrderStatus) {
+		q.Set("sort", s)
 	}
 	if len(q) == 0 {
 		return "/admin/prospects"

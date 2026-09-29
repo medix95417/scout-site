@@ -107,11 +107,18 @@ const (
 	MaxMessage = 2000
 	MaxNotes   = 4000
 
-	// MinAge/MaxAge bound a plausible Scouting age. Deliberately wide:
-	// the point is to reject a typo or a bot filling every field with the
-	// same number, not to enforce a program's real age range, which
-	// differs between a Pack and a Troop and isn't this form's business.
-	MinAge = 3
+	// MinAge/MaxAge bound a plausible age. Deliberately wide: the point
+	// is to reject a typo or a bot filling every field with the same
+	// number, not to enforce a program's real age range, which differs
+	// between a Pack and a Troop and isn't this form's business.
+	//
+	// The floor is 0 rather than the youngest a child could join,
+	// because a unit meets a family with a one-year-old sibling at a
+	// recruiting night and wants to remember them for the year they are
+	// old enough. Keeping that is what a prospect list is for; refusing
+	// the age only pushed it into the notes, where nothing can sort on
+	// it. See migration 0051.
+	MinAge = 0
 	MaxAge = 21
 )
 
@@ -288,12 +295,44 @@ func Get(ctx context.Context, pool *pgxpool.Pool, unitID, id string) (Prospect, 
 const closedStatusesSQL = `SELECT value FROM prospect_labels
 	WHERE unit_id = $1 AND kind = 'status' AND closed`
 
-func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string, openOnly bool) ([]Prospect, error) {
+// Order is how ListForUnit sorts its result.
+type Order string
+
+const (
+	// OrderNewest is newest enquiry first — the default, and what
+	// "who has come in since I last looked" wants.
+	OrderNewest Order = "newest"
+	// OrderStatus groups by where each family has got to, in the unit's
+	// own workflow order rather than alphabetically by label: a leader
+	// working through "everyone still at New enquiry" wants them
+	// together and wants New before Contacted, which is what the list
+	// on the statuses page already means.
+	OrderStatus Order = "status"
+)
+
+// orderBySQL is the ORDER BY for one Order.
+//
+// The status ordering reads each row's position out of prospect_labels
+// by correlated subquery rather than joining, because a status whose
+// label has gone missing must still sort somewhere rather than dropping
+// the row: COALESCE puts those last, where an unrecognised status is
+// most likely to get looked at.
+func orderBySQL(order Order) string {
+	if order != OrderStatus {
+		return ` ORDER BY created_at DESC`
+	}
+	return ` ORDER BY COALESCE((
+			SELECT l.sort_order FROM prospect_labels l
+			WHERE l.unit_id = prospects.unit_id AND l.kind = 'status' AND l.value = prospects.status
+		), 2147483647), created_at DESC`
+}
+
+func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string, openOnly bool, order Order) ([]Prospect, error) {
 	sql := `SELECT ` + columns + ` FROM prospects WHERE unit_id = $1`
 	if openOnly {
 		sql += ` AND status NOT IN (` + closedStatusesSQL + `)`
 	}
-	sql += ` ORDER BY created_at DESC`
+	sql += orderBySQL(order)
 
 	rows, err := pool.Query(ctx, sql, unitID)
 	if err != nil {
@@ -360,6 +399,57 @@ func UpdateStatus(ctx context.Context, pool *pgxpool.Pool, unitID, id, status, c
 		UPDATE prospects SET status = $1, category = $2, notes = $3, updated_at = now()
 		WHERE id = $4 AND unit_id = $5
 		RETURNING `+columns, status, category, strings.TrimSpace(notes), id, unitID))
+	if err != nil {
+		return Prospect{}, err
+	}
+
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "prospect",
+		EntityID:   after.ID,
+		ActorID:    &actorID,
+		Action:     "update",
+		Before:     before,
+		After:      after,
+	})
+	return after, nil
+}
+
+// UpdateDetails changes the contact details a leader typed or a family
+// submitted — everything except where the enquiry has got to, which
+// UpdateStatus owns.
+//
+// Split from UpdateStatus rather than folded into it because the two
+// are different acts done at different moments: moving a family along
+// happens constantly and from the list, while fixing a misheard email
+// happens once. One form doing both would mean every status change
+// re-submitting eight contact fields, and so every status change being
+// a chance to blank one by accident.
+//
+// Audited with the before and after, because this is the one operation
+// that can quietly change what a record says about a real person.
+func UpdateDetails(ctx context.Context, pool *pgxpool.Pool, unitID, id string, in New, actorID string) (Prospect, error) {
+	before, err := Get(ctx, pool, unitID, id)
+	if err != nil {
+		return Prospect{}, err
+	}
+
+	// Validated by the same function Create uses, so a record cannot be
+	// edited into a state the form would have refused.
+	in.UnitID = before.UnitID
+	in, err = Validate(in)
+	if err != nil {
+		return Prospect{}, err
+	}
+
+	after, err := scan(pool.QueryRow(ctx, `
+		UPDATE prospects SET parent_name = $1, parent_email = $2, parent_phone = $3,
+			child_name = $4, child_age = $5, child_grade = $6, child_school = $7,
+			message = $8, updated_at = now()
+		WHERE id = $9 AND unit_id = $10
+		RETURNING `+columns,
+		in.ParentName, in.ParentEmail, in.ParentPhone,
+		in.ChildName, in.ChildAge, in.ChildGrade, in.ChildSchool,
+		in.Message, id, unitID))
 	if err != nil {
 		return Prospect{}, err
 	}

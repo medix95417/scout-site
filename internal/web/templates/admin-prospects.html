@@ -11,6 +11,14 @@
       </a>
     </div>
   </div>
+  <div class="flex flex-wrap items-center gap-2 mb-3 text-sm">
+    <span class="text-gray-500">Sort:</span>
+    <a href="{{.SortURL "newest"}}"
+       class="rounded-full px-3 py-1 {{if ne .Sort "status"}}bg-gray-800 text-white{{else}}bg-gray-100 text-gray-700 hover:bg-gray-200{{end}}">Newest first</a>
+    <a href="{{.SortURL "status"}}"
+       class="rounded-full px-3 py-1 {{if eq .Sort "status"}}bg-gray-800 text-white{{else}}bg-gray-100 text-gray-700 hover:bg-gray-200{{end}}">By status</a>
+  </div>
+
   {{if .Categories}}
     {{/* Only shown once a unit has made some categories — an empty
          filter row would be a control that does nothing. */}}
@@ -354,6 +362,7 @@
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             {{if $.ShowAll}}<input type="hidden" name="all" value="1">{{end}}
             {{if $.Filter}}<input type="hidden" name="category_filter" value="{{$.Filter}}">{{end}}
+            {{if eq $.Sort "status"}}<input type="hidden" name="sort" value="status">{{end}}
             <div class="flex flex-wrap items-end gap-2">
               <div>
                 <label class="block text-xs text-gray-500 mb-1" for="status-{{.ID}}">Status</label>
@@ -395,6 +404,67 @@
               <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Save</button>
             </div>
           </form>
+
+          {{/* Correcting the details is its own form, collapsed. A
+               misheard email gets fixed once, where the status above
+               moves constantly — and keeping them apart means a status
+               change never re-submits these eight fields, so it can
+               never blank one by accident. */}}
+          <details class="mt-3">
+            <summary class="cursor-pointer select-none text-xs" style="color: var(--unit-color);">Correct these details</summary>
+            <form method="post" action="/admin/prospects/{{.ID}}/details" class="mt-2">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              {{if $.ShowAll}}<input type="hidden" name="all" value="1">{{end}}
+              {{if $.Filter}}<input type="hidden" name="category_filter" value="{{$.Filter}}">{{end}}
+              {{if eq $.Sort "status"}}<input type="hidden" name="sort" value="status">{{end}}
+              <div class="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1" for="pn-{{.ID}}">Parent's name</label>
+                  <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                         id="pn-{{.ID}}" name="parent_name" maxlength="120" value="{{.ParentName}}" required>
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1" for="pe-{{.ID}}">Parent's email</label>
+                  <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="email"
+                         id="pe-{{.ID}}" name="parent_email" maxlength="200" value="{{.ParentEmail}}" required>
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1" for="pp-{{.ID}}">Phone</label>
+                  <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                         id="pp-{{.ID}}" name="parent_phone" maxlength="40" value="{{.ParentPhone}}">
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1" for="cn-{{.ID}}">Child's name</label>
+                  <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                         id="cn-{{.ID}}" name="child_name" maxlength="120" value="{{.ChildName}}" required>
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1" for="ca-{{.ID}}">Age</label>
+                  <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                         inputmode="numeric" id="ca-{{.ID}}" name="child_age" maxlength="2"
+                         value="{{if .ChildAge}}{{.ChildAge}}{{end}}">
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1" for="cg-{{.ID}}">Grade</label>
+                  <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                         id="cg-{{.ID}}" name="child_grade" maxlength="40" value="{{.ChildGrade}}">
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="block text-xs text-gray-500 mb-1" for="cs-{{.ID}}">School</label>
+                  <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                         id="cs-{{.ID}}" name="child_school" maxlength="120" value="{{.ChildSchool}}">
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="block text-xs text-gray-500 mb-1" for="cm-{{.ID}}">What they told us</label>
+                  <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" rows="2"
+                            id="cm-{{.ID}}" name="message" maxlength="2000">{{.Message}}</textarea>
+                </div>
+              </div>
+              <button type="submit" class="mt-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50">
+                Save these details
+              </button>
+            </form>
+          </details>
 
           <div class="flex flex-wrap items-baseline justify-between gap-3 mt-3 pt-3 border-t border-black/10">
             <p class="text-xs text-gray-500">
