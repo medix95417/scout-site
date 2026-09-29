@@ -1,33 +1,14 @@
 {{define "content"}}
-  {{/* Homepage flow, in the order a reader actually needs it:
-
-         1. Hero — who this unit is, and the one action that matters
-            (log in, or find out how to join), then the unit's own
-            answer to "why us" when it has written one.
-         2. What's happening — news and upcoming events, side by side.
-            The freshest, most-changing content, and the reason a family
-            comes back to the site at all.
-         3. Recent photos — proof of the program, and the thing
-            prospective families actually scroll for.
-         4. Our Program — what we do, for someone still deciding.
-         5. Meeting info & contact — how to reach us, the #join anchor.
-         6. A closing invitation, for logged-out visitors only.
-
-       Signed-in families get (2) first and never see the recruitment
-       framing: they already joined, so "How to Join" CTAs and the
-       closing invitation are wasted rows between them and the calendar.
-
-       Sections use the "break out of the centered <main> column" trick
-       (relative left-1/2 -mx-[50vw] w-screen) to go edge-to-edge; see
-       base.html for the overflow-x-hidden that keeps that from causing a
-       stray horizontal scrollbar. */}}
+  {{/* Members get a compact hero and permission-aware shortcuts. Visitors
+       get the unit's existing recruitment content and an early meeting card.
+       Public event/news/photo listings and empty states stay unchanged. */}}
 
   <!-- 1. Hero -->
   <section
     class="relative left-1/2 right-1/2 -mx-[50vw] w-screen -mt-8 mb-12 bg-cover bg-center text-white"
     style="{{if .HeroImageURL}}background-image: linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.5)), url('{{bannerURL .HeroImageURL}}');{{else}}background-color: var(--unit-color);{{end}}"
   >
-    <div class="relative max-w-3xl mx-auto px-4 {{homeHeroSizeClass .HeroSize}} text-center">
+    <div class="relative max-w-3xl mx-auto px-4 {{if .IsUnitMember}}py-8 sm:py-10{{else}}{{homeHeroSizeClass .HeroSize}}{{end}} text-center">
       {{if .SocialURL}}
         <a href="{{.SocialURL}}" target="_blank" rel="noopener"
            class="absolute top-4 right-4 sm:top-6 sm:right-6 rounded-full bg-black/30 px-3 py-1 text-xs hover:bg-black/50">
@@ -71,14 +52,44 @@
         {{end}}
       </h1>
       <p class="text-lg sm:text-2xl max-w-2xl mx-auto opacity-95 drop-shadow whitespace-pre-line">{{.Hero}}</p>
-      {{if not .LoggedIn}}
+      {{if not .IsUnitMember}}
         <div class="mt-8 flex flex-wrap justify-center gap-3">
-          <a href="/login" class="rounded-md bg-white px-6 py-2.5 font-medium shadow" style="color: var(--unit-color);">Family Log In</a>
-          <a href="#join" class="rounded-md border-2 border-white px-6 py-2.5 font-medium hover:bg-white/10">How to Join</a>
+          {{if not .LoggedIn}}<a href="/login" class="rounded-md bg-white px-6 py-2.5 font-medium shadow" style="color: var(--unit-color);">Family Log In</a>
+          {{else}}<a href="/calendar" class="rounded-md bg-white px-6 py-2.5 font-medium shadow" style="color: var(--unit-color);">Public calendar</a>{{end}}
+          <a href="#join" class="rounded-md border-2 border-white px-6 py-2.5 font-medium hover:bg-white/10">Visit a meeting</a>
         </div>
       {{end}}
     </div>
   </section>
+
+  {{if .IsUnitMember}}
+    <section aria-labelledby="family-home-heading" class="mb-10">
+      <div class="mb-4">
+        <p class="text-sm font-medium text-gray-600">Your {{.Unit.Name}} home</p>
+        <h2 id="family-home-heading" class="text-2xl font-bold mt-1">Ready for your next adventure?</h2>
+        <p class="text-sm text-gray-600 mt-2">Find your next event, reply to invitations, and get ready for the meeting.</p>
+      </div>
+      <div class="family-shortcuts">
+        <a href="/calendar"><strong>Calendar &amp; RSVPs</strong><span>See your events and reply</span></a>
+        <a href="/resources"><strong>Forms &amp; resources</strong><span>Find what you need to bring</span></a>
+        <a href="/groups"><strong>{{if eq .Unit.UnitType "pack"}}Dens{{else}}Patrols{{end}}</strong><span>Visit your Scout's group</span></a>
+        {{if .ManagesFamilyContacts}}<a href="/my-family"><strong>My Family</strong><span>Keep your details up to date</span></a>{{end}}
+        {{if and .TreasuryEnabled (or .ScoutAccountsSelfService .CanManageLedger)}}<a href="/accounts"><strong>My Accounts</strong><span>Review balances and activity</span></a>{{end}}
+      </div>
+    </section>
+  {{else}}
+    <section aria-labelledby="visit-heading" class="mb-10 rounded-xl border border-gray-200 bg-white p-5 sm:p-6 flex flex-col sm:flex-row gap-5 sm:items-center sm:justify-between">
+      <div class="min-w-0">
+        <h2 id="visit-heading" class="text-xl font-semibold">Come see what Scouting is all about</h2>
+        <p class="text-sm text-gray-700 mt-2 whitespace-pre-line">{{.Meeting}}</p>
+        {{if .MeetingAddress}}<p class="text-sm font-medium text-gray-800 mt-1">{{.MeetingAddress}}</p>{{end}}
+      </div>
+      <div class="flex flex-wrap gap-3 shrink-0">
+        {{if .JoinFormOpen}}<a href="/join" class="inline-flex items-center min-h-[44px] rounded-lg px-4 py-2.5 font-medium btn-accent">Ask about a visit</a>{{end}}
+        <a href="#join" class="inline-flex items-center min-h-[44px] rounded-lg border border-gray-300 px-4 py-2.5 font-medium">Meeting details</a>
+      </div>
+    </section>
+  {{end}}
 
   {{/* "Why us" — the first thing a family wants to know, in the first
        place they look. Deliberately has no default copy and renders
@@ -86,7 +97,7 @@
        sentence about Scouting in general is worse than the page not
        asking the question, and this is the one section of the homepage
        nobody but the unit itself can write. */}}
-  {{if .Why}}
+  {{if and .Why (not .IsUnitMember)}}
     <section class="mb-12 max-w-3xl mx-auto text-center">
       <h2 class="text-xl font-semibold mb-3">Why {{.Unit.Name}}</h2>
       <p class="text-gray-700 leading-relaxed whitespace-pre-line">{{.Why}}</p>
@@ -117,7 +128,7 @@
             <li>
               <a href="{{.URL}}" class="block rounded-xl border border-gray-200 bg-white p-4 hover:border-gray-300">
                 <div class="flex items-baseline justify-between gap-2">
-                  <span class="text-xs text-gray-400">{{.DateDisplay}}</span>
+                  <span class="text-xs text-gray-600">{{.DateDisplay}}</span>
                   {{if .MembersOnly}}
                     <span class="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium whitespace-nowrap">Members only</span>
                   {{end}}
@@ -147,7 +158,7 @@
             <li>
               <a href="/calendar#event-{{.ID}}"
                  class="block rounded-xl border border-gray-200 bg-white p-4 transition hover:border-gray-300 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
-                <div class="text-xs text-gray-400">{{.DateRangeDisplay}}</div>
+                <div class="text-xs text-gray-600">{{.DateRangeDisplay}}</div>
                 <div class="font-medium mt-0.5">{{.Title}}</div>
                 {{if .Location}}<div class="text-sm text-gray-500">{{.Location}}</div>{{end}}
                 {{if .Description}}<p class="text-sm mt-1 text-gray-600">{{.Description}}</p>{{end}}

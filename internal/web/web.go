@@ -947,6 +947,9 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 
 // baseData is embedded in every page's template data.
 type baseData struct {
+	PublicNavigation         []navigationLink
+	UnitNavigation           []navigationLink
+	JoinFormEnabled          bool
 	Unit                     units.Unit
 	LoggedIn                 bool
 	CanEditContent           bool // leader roles only — drives the "Edit Homepage" nav link and homepage edit affordances
@@ -1179,6 +1182,11 @@ func (h *Handlers) base(r *http.Request, pageTitle string) baseData {
 		data.FooterTikTokURL = tiktok
 	}
 
+	data.PublicNavigation = publicNavigation(r.URL.Path)
+	data.UnitNavigation = h.unitNavigation(r, unit)
+	if enabled, err := settings.GetForUnit(r.Context(), h.Pool, unit.ID, settings.ProspectFormEnabled); err == nil {
+		data.JoinFormEnabled = enabled
+	}
 	data.NavOpenGroup = navGroupForPath(r.URL.Path)
 
 	if heroKey := heroKeyForPath(r.URL.Path); heroKey != "" {

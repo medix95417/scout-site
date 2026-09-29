@@ -48,7 +48,7 @@
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="text" name="title" placeholder="Event title" required>
         <textarea class="w-full rounded-md border border-gray-300 px-3 py-2" name="description" placeholder="Description (optional)"></textarea>
-        <div class="flex gap-3">
+        <div class="flex flex-col sm:flex-row gap-3">
           <div class="flex-1">
             <label class="block text-xs text-gray-500 mb-1" for="starts_at">Starts</label>
             <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="datetime-local" id="starts_at" name="starts_at" required>
@@ -130,15 +130,20 @@
   </details>
 
   <section class="mb-8">
-    <div class="flex items-center justify-between mb-3">
+    <div class="flex flex-wrap gap-3 items-center justify-between mb-3">
       <h2 class="text-lg font-semibold">{{.Month.Label}}</h2>
-      <div class="flex items-center gap-3 text-sm">
-        <a href="/calendar?month={{.Month.PrevParam}}" class="rounded-md border border-gray-300 px-2 py-1 hover:bg-gray-50" aria-label="Previous month">&larr;</a>
-        <a href="/calendar?month={{.Month.TodayParam}}" class="rounded-md border border-gray-300 px-2 py-1 hover:bg-gray-50">Today</a>
-        <a href="/calendar?month={{.Month.NextParam}}" class="rounded-md border border-gray-300 px-2 py-1 hover:bg-gray-50" aria-label="Next month">&rarr;</a>
+      <div class="flex items-center gap-2 text-sm">
+        <a href="/calendar?month={{.Month.PrevParam}}" class="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-md border border-gray-300 px-3 py-2 hover:bg-gray-50" aria-label="Previous month">&larr;</a>
+        <a href="/calendar?month={{.Month.TodayParam}}" class="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-md border border-gray-300 px-3 py-2 hover:bg-gray-50">Today</a>
+        <a href="/calendar?month={{.Month.NextParam}}" class="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-md border border-gray-300 px-3 py-2 hover:bg-gray-50" aria-label="Next month">&rarr;</a>
       </div>
     </div>
-    <div class="grid grid-cols-7 gap-px rounded-lg border border-gray-200 bg-gray-200 overflow-hidden text-xs">
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+      <a href="#upcoming-events" class="underline font-medium" style="color: var(--unit-color);">Jump to event list &amp; RSVPs</a>
+      <span class="sm:hidden text-gray-600">Swipe the month view to see all days.</span>
+    </div>
+    <div class="overflow-x-auto rounded-lg" role="region" aria-label="Month calendar — scroll to see all days" tabindex="0">
+    <div class="min-w-[560px] grid grid-cols-7 gap-px rounded-lg border border-gray-200 bg-gray-200 overflow-hidden text-xs">
       <div class="bg-gray-50 px-2 py-1 text-center font-medium text-gray-500">Sun</div>
       <div class="bg-gray-50 px-2 py-1 text-center font-medium text-gray-500">Mon</div>
       <div class="bg-gray-50 px-2 py-1 text-center font-medium text-gray-500">Tue</div>
@@ -163,9 +168,10 @@
         {{end}}
       {{end}}
     </div>
+    </div>
   </section>
 
-  <h2 class="text-lg font-semibold mb-3">Upcoming events</h2>
+  <h2 id="upcoming-events" class="text-lg font-semibold mb-3 scroll-mt-4">Upcoming events</h2>
   {{if .Events}}
     <ul class="space-y-3">
       {{range .Events}}
@@ -178,14 +184,20 @@
           </div>
           <div class="text-sm text-gray-500">{{.DateRangeDisplay}}{{if .Location}} · {{.Location}}{{end}}</div>
           {{if .Description}}<p class="text-sm mt-1">{{.Description}}</p>{{end}}
+          {{if $.IsUnitMember}}
           <form method="post" action="/calendar/{{.ID}}/rsvp" class="mt-2 flex gap-2 items-center flex-wrap">
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-            <button name="response" value="yes" class="text-xs rounded-full border px-2 py-1">I'm going</button>
-            <button name="response" value="maybe" class="text-xs rounded-full border px-2 py-1">Maybe</button>
-            <button name="response" value="no" class="text-xs rounded-full border px-2 py-1">Can't make it</button>
+            <button name="response" value="yes" class="text-sm rounded-full border px-3 py-2 min-h-[44px]">I'm going</button>
+            <button name="response" value="maybe" class="text-sm rounded-full border px-3 py-2 min-h-[44px]">Maybe</button>
+            <button name="response" value="no" class="text-sm rounded-full border px-3 py-2 min-h-[44px]">Can't make it</button>
             {{if $.CanManageFiles}}<a href="/files" class="text-xs underline ml-1" style="color: var(--unit-color);">Attach a file</a>{{end}}
             {{if $.CanManageFiles}}<a href="/calendar/{{.ID}}/attendees.pdf" class="text-xs underline ml-1" style="color: var(--unit-color);">Print attendee roster</a>{{end}}
           </form>
+          {{else if not $.LoggedIn}}
+            <p class="mt-3 text-sm"><a href="/login?next=/calendar" class="underline font-medium" style="color: var(--unit-color);">Family Log In to RSVP</a></p>
+          {{else}}
+            <p class="mt-3 text-sm text-gray-600">RSVPs are available to {{$.Unit.Name}} members.</p>
+          {{end}}
 
           {{if $.CanEditContent}}
             <div class="mt-2 flex gap-3 items-center">
