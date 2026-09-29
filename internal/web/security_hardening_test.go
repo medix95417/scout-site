@@ -173,6 +173,11 @@ func TestSharedLeadershipAndIndividualIsolation(t *testing.T) {
 	if got := request("shared", "/admin-check", host); got != 403 {
 		t.Errorf("inactive household leader still authorized = %d", got)
 	}
+	inactiveScope, err := f.h.rosterScope(ctx, auth.User{FamilyID: familyID}, f.unitID)
+	must(err)
+	if inactiveScope.UnitWide || len(inactiveScope.SubGroupIDs) != 0 {
+		t.Errorf("inactive household leader still grants roster scope = %+v", inactiveScope)
+	}
 	_, err = p.Exec(ctx, `UPDATE members SET active=true WHERE id=$1`, adultID)
 	must(err)
 	_, err = p.Exec(ctx, `DELETE FROM role_assignments WHERE member_id=$1`, adultID)
