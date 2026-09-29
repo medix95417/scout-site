@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/47-yonkers/scout-site/internal/content"
-	"github.com/47-yonkers/scout-site/internal/files"
 )
 
 // A news card that shows the first 220 characters of a longer post, with
@@ -135,19 +134,10 @@ func TestOnlyAnAdminIsOfferedDeleteInTheNewsList(t *testing.T) {
 	}
 }
 
-func adminNewsForm(superAdmin bool) any {
+func adminNewsForm(superAdmin bool) contentFormData {
 	base := testBase("Edit News Post")
 	base.IsSuperAdmin = superAdmin
-	return struct {
-		baseData
-		Kind                 contentKind
-		IsEdit               bool
-		Post                 content.Post
-		PhotoDateInput       string
-		PublicMediaGroups    []files.EventFileGroup
-		PublicMediaUngrouped []files.File
-		EventPhotoGroups     []files.EventFileGroup
-	}{baseData: base, Kind: newsKind, IsEdit: true, Post: content.Post{
+	return contentFormData{baseData: base, Kind: newsKind, IsEdit: true, Post: content.Post{
 		ID: "p1", Title: "Pack meeting", Body: "Tuesday at 7.", Status: "published", Visibility: "public",
 	}}
 }

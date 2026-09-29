@@ -27,6 +27,30 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **A news post can link to a file in your library, and any link can be
+  given a name.** "Attach something from the file library" under the
+  body opens the same per-event list of documents the Resources page
+  uses; clicking one drops a link where your cursor is. It reads as the
+  file's name rather than its address, which is the point — a uuid in
+  the middle of a sentence helps nobody.
+
+  Two additions to what a post body understands, both usable by hand:
+  a path into this site's own file library (`/files/…/download`) now
+  becomes a link, where before it was inert text; and
+  `[Permission slip](https://example.org/slip.pdf)` renders as a link
+  reading "Permission slip". Ordinary web addresses already became
+  links and are unchanged.
+
+  Only those two targets are accepted. Anything else — another scheme,
+  or a protocol-relative `//elsewhere` that reads like a path and isn't
+  — is left as the literal text that was typed, rather than half
+  rendered.
+
+  A members-only file stays members-only: everyone sees the link, and
+  opening it asks them to sign in.
+
 ## [2.15.0] — 2026-09-29
 
 ### Added
