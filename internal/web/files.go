@@ -565,7 +565,7 @@ func (h *Handlers) serveImageVariant(w http.ResponseWriter, r *http.Request, suf
 	if cached, err := h.Storage.Get(r.Context(), variantKey); err == nil {
 		defer cached.Close()
 		w.Header().Set("Content-Type", "image/jpeg")
-		w.Header().Set("Cache-Control", "private, max-age=604800")
+		w.Header().Set("Cache-Control", "private, no-store")
 		if _, err := io.Copy(w, cached); err != nil {
 			log.Printf("web: streaming cached thumbnail: %v", err)
 		}
@@ -598,7 +598,7 @@ func (h *Handlers) serveImageVariant(w http.ResponseWriter, r *http.Request, suf
 	}
 
 	w.Header().Set("Content-Type", "image/jpeg")
-	w.Header().Set("Cache-Control", "private, max-age=604800")
+	w.Header().Set("Cache-Control", "private, no-store")
 	w.Write(thumb)
 }
 
