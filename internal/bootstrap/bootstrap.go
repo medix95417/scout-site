@@ -8,9 +8,12 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"net/mail"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/47-yonkers/scout-site/internal/audit"
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/family"
 	"github.com/47-yonkers/scout-site/internal/units"
@@ -75,19 +78,19 @@ func CreateAdmin(ctx context.Context, pool *pgxpool.Pool, in AdminInput) (family
 		return "", fmt.Errorf("bootstrap: creating family: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO users (family_id, email, password_hash) VALUES ($1, $2, $3)`,
-		familyID, email, passwordHash,
-	); err != nil {
-		return "", fmt.Errorf("bootstrap: creating user: %w", err)
-	}
-
 	var memberID string
 	if err := tx.QueryRow(ctx,
 		`INSERT INTO members (family_id, first_name, last_name, member_type) VALUES ($1, $2, $3, 'adult') RETURNING id`,
 		familyID, in.FirstName, in.LastName,
 	).Scan(&memberID); err != nil {
 		return "", fmt.Errorf("bootstrap: creating member: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO users (family_id, member_id, email, password_hash) VALUES ($1, $2, $3, $4)`,
+		familyID, memberID, email, passwordHash,
+	); err != nil {
+		return "", fmt.Errorf("bootstrap: creating user: %w", err)
 	}
 
 	rows, err := tx.Query(ctx, `SELECT id FROM units`)
@@ -127,7 +130,7 @@ func CreateAdmin(ctx context.Context, pool *pgxpool.Pool, in AdminInput) (family
 	return familyID, nil
 }
 
-// GrantRole gives an existing user's family a leadership (or other) role in
+// GrantRole gives an individual login's member a leadership (or other) role in
 // a unit, unit-wide (no den/patrol). This exists for the case
 // -bootstrap-admin doesn't cover: an account already has a role in one
 // unit (e.g. the Troop) but needs one in another (e.g. the Pack) too —
@@ -161,9 +164,20 @@ func GrantRole(ctx context.Context, pool *pgxpool.Pool, email, unitSlug, role st
 		return fmt.Errorf("bootstrap: no unit with slug %q — check the slug column in the units table (e.g. \"troop-47\", \"pack-47\")", unitSlug)
 	}
 
-	member, err := family.ActingMemberForFamilyInUnit(ctx, pool, user.FamilyID, unit.ID)
-	if err != nil {
-		return fmt.Errorf("bootstrap: finding a member of %s's family to grant the role to: %w", email, err)
+	if user.MemberID == nil {
+		return fmt.Errorf("bootstrap: grant-role requires an individual login; create one for the intended member first")
+	}
+	member, found, err := family.GetMember(ctx, pool, *user.MemberID)
+	if err != nil || !found || member.FamilyID != user.FamilyID {
+		return fmt.Errorf("bootstrap: individual login must belong to an active member of its own family")
+	}
+
+	var active bool
+	if err := pool.QueryRow(ctx, `SELECT active FROM members WHERE id=$1`, member.ID).Scan(&active); err != nil {
+		return err
+	}
+	if !active {
+		return fmt.Errorf("bootstrap: member must be active")
 	}
 
 	if _, err := pool.Exec(ctx,
@@ -174,4 +188,47 @@ func GrantRole(ctx context.Context, pool *pgxpool.Pool, email, unitSlug, role st
 	}
 
 	return nil
+}
+
+// CreatePersonalLogin is an operator-only transition/recovery tool. It never
+// converts a shared credential into a privileged credential or changes roles.
+// The operator must identify the intended member explicitly and deliver the
+// fresh password privately. Existing individual logins are never overwritten.
+func CreatePersonalLogin(ctx context.Context, pool *pgxpool.Pool, memberID, email string) (string, error) {
+	email = auth.NormalizeEmail(email)
+	address, err := mail.ParseAddress(email)
+	if strings.TrimSpace(memberID) == "" || err != nil || address.Address != email {
+		return "", fmt.Errorf("PERSONAL_MEMBER_ID and a plain PERSONAL_EMAIL address are required")
+	}
+	member, found, err := family.GetMember(ctx, pool, memberID)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", fmt.Errorf("member must exist and be active")
+	}
+	var active bool
+	if err := pool.QueryRow(ctx, `SELECT active FROM members WHERE id = $1`, memberID).Scan(&active); err != nil {
+		return "", err
+	}
+	if !active {
+		return "", fmt.Errorf("member must be active")
+	}
+	password, err := auth.GenerateTemporaryPassword()
+	if err != nil {
+		return "", err
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return "", err
+	}
+	var userID string
+	err = pool.QueryRow(ctx, `INSERT INTO users (family_id, member_id, email, password_hash, must_change_password)
+		VALUES ($1, $2, $3, $4, true) RETURNING id`, member.FamilyID, member.ID, email, hash).Scan(&userID)
+	if err != nil {
+		return "", fmt.Errorf("creating personal login (email and member must not already have a login): %w", err)
+	}
+	audit.Log(ctx, pool, audit.Entry{EntityType: "member", EntityID: member.ID,
+		Action: "operator_create_individual_login", After: map[string]string{"user_id": userID, "email": email}})
+	return password, nil
 }
