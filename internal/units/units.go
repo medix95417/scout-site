@@ -497,8 +497,9 @@ func anyUnitHasCapability(ctx context.Context, pool *pgxpool.Pool, rolesByUnit m
 	return false, nil
 }
 
-// RolesForFamilyInUnit lists active household members' roles for membership
-// and administrative inspection. These are NOT permissions for a shared login.
+// RolesForFamilyInUnit returns the union of active household members' roles
+// within a unit. Shared family logins use these roles for their permissions;
+// individual logins use RolesForMemberInUnit instead.
 func RolesForFamilyInUnit(ctx context.Context, pool *pgxpool.Pool, familyID, unitID string) ([]string, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT DISTINCT role_assignments.role::text
