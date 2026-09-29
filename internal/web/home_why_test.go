@@ -86,6 +86,26 @@ func TestHomeShowsTheWhySectionOnlyWhenWritten(t *testing.T) {
 	}
 }
 
+func TestWhyStatementRemainsVisibleToLoggedInMembers(t *testing.T) {
+	for _, unitType := range []string{"pack", "troop"} {
+		for _, member := range []bool{false, true} {
+			data := homePage()
+			data.Unit.UnitType = unitType
+			data.LoggedIn = true
+			data.IsUnitMember = member
+			data.Why = "Our families learn and explore together."
+			out := renderPage(t, "home.html", data)
+			if !strings.Contains(out, data.Why) || !strings.Contains(out, "Why "+data.Unit.Name) {
+				t.Errorf("%s member=%v: signed-in visitor lost Why statement", unitType, member)
+			}
+			data.Why = ""
+			if strings.Contains(renderPage(t, "home.html", data), "Why "+data.Unit.Name) {
+				t.Errorf("%s member=%v: empty Why heading rendered", unitType, member)
+			}
+		}
+	}
+}
+
 // Whitespace is not content: a field holding only spaces or newlines
 // must count as empty, or a stray keystroke leaves a heading over
 // nothing on the public homepage.

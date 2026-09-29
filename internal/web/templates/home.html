@@ -1,5 +1,5 @@
 {{define "content"}}
-  {{/* Members get a compact hero and permission-aware shortcuts. Visitors
+  {{/* Members get a compact hero. Visitors
        get the unit's existing recruitment content and an early meeting card.
        Public event/news/photo listings and empty states stay unchanged. */}}
 
@@ -62,22 +62,7 @@
     </div>
   </section>
 
-  {{if .IsUnitMember}}
-    <section aria-labelledby="family-home-heading" class="mb-10">
-      <div class="mb-4">
-        <p class="text-sm font-medium text-gray-600">Your {{.Unit.Name}} home</p>
-        <h2 id="family-home-heading" class="text-2xl font-bold mt-1">Ready for your next adventure?</h2>
-        <p class="text-sm text-gray-600 mt-2">Find your next event, reply to invitations, and get ready for the meeting.</p>
-      </div>
-      <div class="family-shortcuts">
-        <a href="/calendar"><strong>Calendar &amp; RSVPs</strong><span>See your events and reply</span></a>
-        <a href="/resources"><strong>Forms &amp; resources</strong><span>Find what you need to bring</span></a>
-        <a href="/groups"><strong>{{if eq .Unit.UnitType "pack"}}Dens{{else}}Patrols{{end}}</strong><span>Visit your Scout's group</span></a>
-        {{if .ManagesFamilyContacts}}<a href="/my-family"><strong>My Family</strong><span>Keep your details up to date</span></a>{{end}}
-        {{if and .TreasuryEnabled (or .ScoutAccountsSelfService .CanManageLedger)}}<a href="/accounts"><strong>My Accounts</strong><span>Review balances and activity</span></a>{{end}}
-      </div>
-    </section>
-  {{else}}
+  {{if not .IsUnitMember}}
     <section aria-labelledby="visit-heading" class="mb-10 rounded-xl border border-gray-200 bg-white p-5 sm:p-6 flex flex-col sm:flex-row gap-5 sm:items-center sm:justify-between">
       <div class="min-w-0">
         <h2 id="visit-heading" class="text-xl font-semibold">Come see what Scouting is all about</h2>
@@ -97,7 +82,7 @@
        sentence about Scouting in general is worse than the page not
        asking the question, and this is the one section of the homepage
        nobody but the unit itself can write. */}}
-  {{if and .Why (not .IsUnitMember)}}
+  {{if .Why}}
     <section class="mb-12 max-w-3xl mx-auto text-center">
       <h2 class="text-xl font-semibold mb-3">Why {{.Unit.Name}}</h2>
       <p class="text-gray-700 leading-relaxed whitespace-pre-line">{{.Why}}</p>
