@@ -27,8 +27,6 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
-## [2.14.0] — 2026-09-29
-
 ### Added
 
 - **Prospects can be added by hand, one at a time or as a pasted
@@ -49,6 +47,8 @@ tagged commit with an accurate date.
   yourself, or include them in a campaign later — those carry an
   unsubscribe link. Enquiries added by hand are marked as such on the
   list, and are recorded against whoever added them.
+
+## [2.14.0] — 2026-09-29
 
 ### Added
 
