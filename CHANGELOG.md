@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.15.0] — 2026-09-29
+
 ### Added
 
 - **Prospects can be added by hand, one at a time or as a pasted
