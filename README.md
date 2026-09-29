@@ -464,3 +464,15 @@ Added since Phase 2, backing the features described above:
   respectively.
 - `internal/version` — this build's release version, shown in the
   site footer and set by the release tooling.
+
+## Frontend assets and security upgrade
+
+JavaScript is served locally and Tailwind CSS is built ahead of time. Docker
+handles the pinned npm build; direct Go builds use committed embedded assets.
+After changing UI classes, run `npm ci --ignore-scripts && npm run build:assets`
+and commit the generated assets. See `frontend/README.md`.
+
+Shared household logins provide family access only. Leaders use individual
+logins for administrative permissions, while retaining cross-unit single sign-on.
+Before upgrading, follow **Security hardening rollout: personal leader logins**
+in `DEPLOY.md` to avoid losing administrator access.

@@ -5,6 +5,15 @@
 # machine, CI, or the VPS itself), not inside any restricted/offline
 # environment.
 
+FROM node:22-bookworm-slim AS assets
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY frontend ./frontend
+COPY scripts/vendor-assets.cjs ./scripts/vendor-assets.cjs
+COPY internal/web ./internal/web
+RUN npm run build:assets
+
 FROM golang:1.25-bookworm AS build
 WORKDIR /src
 
@@ -16,6 +25,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+COPY --from=assets /src/internal/web/static/vendor ./internal/web/static/vendor
 # GOMAXPROCS=1 and -p=1 (fewer packages/functions compiled concurrently)
 # trade build speed for peak memory: one of this app's dependencies
 # (minio-go, for the file library — see internal/storage) pulls in

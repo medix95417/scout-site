@@ -1,12 +1,36 @@
+# Apply to error logs as well as access logs: a proxy failure can otherwise
+# print a private feed URL even when access logging is disabled.
+{
+	log {
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers>Referer delete
+			}
+		}
+	}
+}
+
 # Reverse proxy + automatic HTTPS for both subdomains. Only does anything
 # useful once real DNS for these hostnames points at this machine — for
 # local development, bypass this entirely and hit the app service directly
 # (see README "Local development").
 
 {$TROOP_HOST} {
+	# One-day initial rollout, these hosts only (no includeSubDomains/preload).
+	header Strict-Transport-Security "max-age=86400"
+	# If access logging is enabled later, credentials must still stay out.
+	@credentialPaths path /feed/* /reset-password* /unsubscribe*
+	log_skip @credentialPaths
 	reverse_proxy app:8080
 }
 
 {$PACK_HOST} {
+	# One-day initial rollout, these hosts only (no includeSubDomains/preload).
+	header Strict-Transport-Security "max-age=86400"
+	# If access logging is enabled later, credentials must still stay out.
+	@credentialPaths path /feed/* /reset-password* /unsubscribe*
+	log_skip @credentialPaths
 	reverse_proxy app:8080
 }

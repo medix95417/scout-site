@@ -760,3 +760,84 @@ docker compose down
 - [ ] The admin password from step 7 is a real, unique password.
 - [ ] If email is configured, `-send-event-reminders` is on a cron job (see "Ongoing operations" above).
 - [ ] If any unit imports an external calendar, `-refresh-calendar-feeds` is on a cron job too.
+
+## Security hardening rollout: personal leader logins
+
+Before deploying the shared-login permission change, use the **existing version's**
+Manage Roster → adult member → Individual Login to create a separate login for
+at least one super admin in each unit. Create individual logins for treasurers and
+other leaders too. Use a private email address that is not already used by a
+shared login; deliver each fresh temporary password privately, change it at first
+sign-in, and enroll a second factor. Verify each personal login reaches the
+correct unit's administration pages before upgrading. Do not convert a shared
+login by merely attaching it to an adult: its password and existing sessions may
+already be known to other household members.
+
+The update preserves shared household membership, calendar/RSVP, family contact
+management and existing household account self-service. It removes **all role
+capabilities and roster-management scope from shared logins**, including custom
+roles and overrides to the parent role. Leadership roles remain on the roster;
+the corresponding individual's login uses them in that unit. Personal logins
+retain their existing member-specific account visibility; the shared household
+login remains available for family-wide Scout account self-service. Pack/Troop
+single sign-on is unchanged. No existing password, MFA enrollment or feed token
+is copied to the new login. Old shared sessions lose leadership authority on
+their next request without waiting for expiry.
+
+If no individual administrator was prepared, an operator with server access can
+create an individual login for an existing member using the new image. Confirm
+the member ID on the roster first, or list active leadership assignments:
+
+```sh
+docker compose exec db psql -U scoutsite -d scoutsite -c "SELECT m.id, m.first_name, m.last_name, u.slug, r.role FROM members m JOIN role_assignments r ON r.member_id=m.id JOIN units u ON u.id=r.unit_id WHERE m.active ORDER BY m.last_name,m.first_name,u.slug;"
+```
+
+Use your deployment's database user/name if different. After selecting the exact
+person, run:
+
+```sh
+docker compose run --rm -e PERSONAL_MEMBER_ID=MEMBER_UUID \
+  -e PERSONAL_EMAIL=leader@example.org app -create-personal-login
+```
+
+This prints a new temporary password once to the operator's terminal. Do not
+capture it in shared logs. The command refuses an existing email or individual
+login, does not change anyone's roles, and records the operator action in the
+audit log. Deliver it privately and complete the password change and MFA setup.
+`-bootstrap-admin` now creates an individual admin for a fresh installation;
+`-grant-role` requires an individual login and grants the role to that exact
+member, never a guessed member of their household.
+
+### Logging, caching, assets and HTTPS
+
+- Application request logs now record route patterns (e.g. `GET /feed/{token}`),
+  not raw paths or queries. Caddy omits request URIs and referrers from its
+  default structured logs, and skips access logs for credential-bearing routes.
+  Apply equivalent redaction to any separately configured proxy/CDN/error
+  monitoring. Review access to old logs and their retention; rotate calendar
+  subscriptions if old tokens were disclosed. Rotation requires families to
+  replace subscription URLs and is not performed automatically by this update.
+- Dynamic responses, exports and uploaded files use `private, no-store`.
+  Embedded static assets alone allow public caching. This is deliberately
+  conservative even for currently public uploads, because a leader can later
+  mark them private. Previously cached photos cannot be recalled; the prior
+  seven-day cache lifetime may still apply to copies already stored.
+- CSS and JavaScript are embedded locally. Docker builds assets using the npm
+  lockfile; no Node runtime is shipped. For direct Go development after changing
+  templates or class names: `npm ci --ignore-scripts && npm run build:assets`.
+  Commit regenerated `internal/web/static/vendor` files; CI checks reproducibility.
+  Fonts and optional user-selected external images retain their existing URLs.
+- Reload Caddy as well as rebuilding the app. Validate first:
+  `docker compose exec caddy caddy validate --config /etc/caddy/Caddyfile`.
+  Then `docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`.
+  Verify HTTPS responses on **both** hosts contain
+  `Strict-Transport-Security: max-age=86400`. This initial one-day HSTS policy
+  does not use `includeSubDomains` or preload. Raise the lifetime deliberately
+  after monitoring; local HTTP development receives no HSTS from the Go server.
+- Migration 0050 adds the authenticated login ID to new audit entries, separate
+  from the member acted for. Historical entries remain unknown; no identity is
+  guessed or backfilled.
+
+MFA policy is unchanged in this release: existing enrolled factors are checked,
+but the setting labelled “Require two-factor authentication” remains an enrollment
+reminder, not an enrollment gate. These changes do not claim to fix that gap.
