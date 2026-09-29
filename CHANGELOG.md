@@ -29,6 +29,12 @@ tagged commit with an accurate date.
 
 ### Added
 
+- **The homepage's upcoming events are links now.** Each one opens the
+  calendar page at that event. The whole card is the link rather than
+  just the title, so it is a thumb-sized target on a phone, and it
+  lands on the event's own entry in the calendar's upcoming list —
+  which is drawn from the same query the homepage uses, so every event
+  shown has somewhere to go.
 - **"Send a test email to myself", on Admin → Settings.** Until now
   there was no way to find out whether outgoing mail worked short of
   triggering a real send and reading the server's logs — and the
