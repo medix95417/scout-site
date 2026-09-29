@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.17.1] — 2026-09-29
+
 ### Added
 
 - **The prospects list groups into collapsible sections by status.**
