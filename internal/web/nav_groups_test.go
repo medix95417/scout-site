@@ -58,6 +58,7 @@ func navMenu(t *testing.T, b baseData) string {
 	page := homePage()
 	unit := page.Unit // keep the fixture's unit; the caller is setting permissions
 	b.Unit = unit
+	b.PublicNavigation = publicNavigation("/")
 	page.baseData = b
 	return renderPage(t, "home.html", page)
 }

@@ -34,7 +34,7 @@ func TestNavigationMatchesWholeSections(t *testing.T) {
 	}
 }
 
-func TestFamilyShortcutsRespectMembershipAndCapabilities(t *testing.T) {
+func TestHomeHasNoDuplicateShortcutPanel(t *testing.T) {
 	data := homePage()
 	data.LoggedIn = true
 	data.IsUnitMember = false
@@ -44,8 +44,8 @@ func TestFamilyShortcutsRespectMembershipAndCapabilities(t *testing.T) {
 	}
 	data.IsUnitMember = true
 	out = renderPage(t, "home.html", data)
-	if !strings.Contains(out, `id="family-home-heading"`) {
-		t.Fatal("member has no family home")
+	if strings.Contains(out, `id="family-home-heading"`) || strings.Contains(out, `class="family-shortcuts"`) {
+		t.Fatal("member sees duplicate homepage shortcut panel")
 	}
 	if strings.Contains(out, `href="/my-family"`) || strings.Contains(out, `href="/accounts"`) {
 		t.Fatal("individual Scout sees unavailable account/family actions")
@@ -56,5 +56,41 @@ func TestFamilyShortcutsRespectMembershipAndCapabilities(t *testing.T) {
 	out = renderPage(t, "home.html", data)
 	if !strings.Contains(out, `href="/my-family"`) || !strings.Contains(out, `href="/accounts"`) {
 		t.Fatal("enabled parent actions are missing")
+	}
+}
+
+func TestMainNavigationGroupsRequireLoggedInUnitMembership(t *testing.T) {
+	for _, unitType := range []string{"pack", "troop"} {
+		for _, tc := range []struct {
+			name             string
+			loggedIn, member bool
+		}{
+			{"visitor", false, false},
+			{"other-unit login", true, false},
+			{"member", true, true},
+			{"no session", false, true},
+		} {
+			t.Run(unitType+"/"+tc.name, func(t *testing.T) {
+				data := homePage()
+				data.Unit.UnitType = unitType
+				data.LoggedIn, data.IsUnitMember = tc.loggedIn, tc.member
+				data.PublicNavigation = publicNavigation("/")
+				out := renderPage(t, "home.html", data)
+				nav := htmlBetween(t, out, `<nav aria-label="Main navigation"`, "</nav>")
+				want := tc.loggedIn && tc.member
+				if strings.Contains(nav, `href="/groups"`) != want {
+					t.Fatalf("group navigation visibility wrong: %s", nav)
+				}
+				if want {
+					label := "Dens"
+					if unitType == "troop" {
+						label = "Patrols"
+					}
+					if !strings.Contains(nav, ">"+label+"</a>") {
+						t.Errorf("missing %s label", label)
+					}
+				}
+			})
+		}
 	}
 }
