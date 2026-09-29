@@ -321,6 +321,62 @@ func (d prospectsPageData) SortURL(sort string) string {
 	return "/admin/prospects?" + q.Encode()
 }
 
+// prospectStatusGroup is one status's worth of the list, for the
+// grouped view.
+type prospectStatusGroup struct {
+	Value     string
+	Label     string
+	Prospects []prospectRow
+	// Open marks the accordion that starts expanded — the first with
+	// anything in it, so the page opens on work to do rather than on a
+	// row of closed headings.
+	Open bool
+}
+
+// groupByStatus splits the list into one group per status, in the
+// unit's own workflow order.
+//
+// Driven by the label list rather than by what the rows happen to
+// contain, so the groups come out in workflow order and an empty
+// status still shows its heading — "nobody is at Contacted" is worth
+// seeing, and a group that vanishes when it empties makes the page
+// jump around as a leader works through it.
+//
+// A row whose status matches no label is collected at the end rather
+// than dropped: it is the one that most needs looking at.
+func groupByStatus(rows []prospectRow, statuses []prospect.Label, text map[string]string) []prospectStatusGroup {
+	byValue := make(map[string][]prospectRow, len(statuses))
+	for _, row := range rows {
+		byValue[row.Status] = append(byValue[row.Status], row)
+	}
+
+	groups := make([]prospectStatusGroup, 0, len(statuses)+1)
+	seen := make(map[string]bool, len(statuses))
+	for _, l := range statuses {
+		seen[l.Value] = true
+		groups = append(groups, prospectStatusGroup{Value: l.Value, Label: l.Label, Prospects: byValue[l.Value]})
+	}
+	// Anything on a status the live list doesn't cover — retired, or
+	// gone entirely — keeps its own group, named as it reads.
+	for _, row := range rows {
+		if seen[row.Status] {
+			continue
+		}
+		seen[row.Status] = true
+		groups = append(groups, prospectStatusGroup{
+			Value: row.Status, Label: prospect.LabelIn(text, row.Status), Prospects: byValue[row.Status],
+		})
+	}
+
+	for i := range groups {
+		if len(groups[i].Prospects) > 0 {
+			groups[i].Open = true
+			break
+		}
+	}
+	return groups
+}
+
 // prospectsPageData is what admin-prospects.html renders. A named type
 // rather than a struct literal inside the handler so a render test can
 // build one — an anonymous struct can only be tested by declaring a copy
@@ -398,6 +454,9 @@ type prospectsPageData struct {
 	Filter string
 	// Sort is how the list is ordered — see prospect.Order.
 	Sort string
+	// Groups is the list split by status, one accordion each. Empty in
+	// the default newest-first view, where the list is flat.
+	Groups []prospectStatusGroup
 	// AddError is what went wrong adding a family by hand, shown above
 	// the list — see prospect_add.go.
 	AddError       string
@@ -540,6 +599,14 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Grouped only in the by-status view: newest-first is a single
+	// chronological list and splitting it by status would destroy the
+	// ordering it exists for.
+	var groups []prospectStatusGroup
+	if order == prospect.OrderStatus {
+		groups = groupByStatus(rows, statuses, statusText)
+	}
+
 	data := prospectsPageData{
 		baseData:       h.base(r, "Prospects"),
 		prospectsView:  newProspectsView(campaignRows, showAll, showAllCampaigns),
@@ -550,6 +617,7 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 		CategoryText:   categoryText,
 		Filter:         filter,
 		Sort:           string(order),
+		Groups:         groups,
 		AddError:       r.URL.Query().Get("add_error"),
 		ShowAll:        showAll,
 		OpenCount:      openCount,

@@ -315,8 +315,48 @@
   </section>
 
   {{if .Prospects}}
-    <div class="space-y-4">
-      {{range .Prospects}}
+    {{if .Groups}}
+      {{/* Grouped by status, one accordion each, in the unit's own
+           workflow order. The <details name> attribute makes them
+           mutually exclusive where the browser supports it, so opening
+           one closes the rest — which is the "show me only these"
+           this was asked for. Where it isn't supported they simply
+           toggle independently, which is no worse than before. */}}
+      <div class="space-y-2">
+        {{range .Groups}}
+          <details name="prospect-status" class="rounded-lg border border-gray-200 bg-white" {{if .Open}}open{{end}}>
+            <summary class="cursor-pointer select-none px-4 py-3 font-medium">
+              {{.Label}} <span class="text-gray-400 font-normal">({{len .Prospects}})</span>
+            </summary>
+            <div class="space-y-4 p-3 pt-0">
+              {{range .Prospects}}{{template "prospectRow" (dict "P" . "Page" $)}}{{end}}
+            </div>
+          </details>
+        {{end}}
+      </div>
+    {{else}}
+      <div class="space-y-4">
+        {{range .Prospects}}{{template "prospectRow" (dict "P" . "Page" $)}}{{end}}
+      </div>
+    {{end}}
+  {{else}}
+    <p class="text-sm text-gray-500">
+      {{if .ShowAll}}No enquiries yet.{{else}}Nothing open — every enquiry has been dealt with.
+      <a href="/admin/prospects?all=1" class="underline" style="color: var(--unit-color);">Show all</a>.{{end}}
+    </p>
+  {{end}}
+{{end}}
+
+
+{{/* prospectRow is one enquiry, rendered the same whether the list is
+     flat or grouped into status accordions.
+
+     Takes a dict rather than the row itself because the markup needs
+     both the enquiry (P) and the page (Page, for the CSRF token and
+     the filters that every form carries through). */}}
+{{define "prospectRow"}}
+  {{$ := .Page}}
+  {{with .P}}
         <section class="rounded-lg border {{if .Open}}border-amber-300 bg-amber-50{{else}}border-gray-200 bg-white{{end}} p-4">
           <div class="flex flex-wrap items-baseline justify-between gap-2 mb-2">
             <h2 class="font-semibold">
@@ -490,12 +530,5 @@
             </div>
           </div>
         </section>
-      {{end}}
-    </div>
-  {{else}}
-    <p class="text-sm text-gray-500">
-      {{if .ShowAll}}No enquiries yet.{{else}}Nothing open — every enquiry has been dealt with.
-      <a href="/admin/prospects?all=1" class="underline" style="color: var(--unit-color);">Show all</a>.{{end}}
-    </p>
   {{end}}
 {{end}}

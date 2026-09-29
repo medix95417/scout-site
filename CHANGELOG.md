@@ -27,6 +27,38 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **The prospects list groups into collapsible sections by status.**
+  "By status" now renders one accordion per status, in the unit's own
+  workflow order and with a count on each, so a leader working through
+  everyone at one stage can open that one and leave the rest shut.
+  Where the browser supports exclusive accordions, opening one closes
+  the others; where it doesn't they simply toggle independently. The
+  first section with anything in it starts open, so the page lands on
+  work to do rather than on a row of closed headings.
+
+  An empty status keeps its heading — "nobody is at Contacted" is
+  worth seeing, and a section that vanished when it emptied would make
+  the page jump about. An enquiry sitting on a status that has since
+  been retired keeps a section of its own at the end rather than
+  disappearing from the page.
+
+  "Newest first" is unchanged and stays the default: it is one
+  chronological list, and splitting it by status would destroy the
+  ordering it exists for.
+
+### Changed
+
+- **The campaign composer now says how to send different messages to
+  different families**, on the page and in the help: tick the statuses
+  one message suits, then write another for the rest. That was already
+  how it worked — a first invitation to people who have only enquired
+  and a "good to see you again" to people who have been along are two
+  messages, not one trying to be both — but nothing said so, and a
+  status of your own can be added for any distinction your workflow
+  needs.
+
 ## [2.17.0] — 2026-09-29
 
 ### Added
