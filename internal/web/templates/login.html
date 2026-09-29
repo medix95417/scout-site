@@ -1,25 +1,42 @@
 {{define "content"}}
-  <h1 class="text-2xl font-bold mb-6">Log in</h1>
+  <div class="max-w-md mx-auto rounded-2xl border border-gray-200 bg-white p-6 sm:p-8 shadow-sm">
+  <p class="text-sm font-medium mb-2" style="color: var(--unit-color);">Welcome back to {{.Unit.Name}}</p>
+  <h1 class="text-2xl font-bold mb-2">Family Log In</h1>
+  <p class="text-sm text-gray-600 mb-6">One login for your Pack and Troop. Your family's access follows you when you switch sites.</p>
   <form method="post" action="/login" class="max-w-sm space-y-4">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <div>
       <label class="block text-sm font-medium mb-1" for="email">Email</label>
-      <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="email" id="email" name="email" required autofocus>
+      <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="email" id="email" name="email" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
     </div>
     <div>
       <label class="block text-sm font-medium mb-1" for="password">Password</label>
-      <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="password" id="password" name="password" required>
+      <input class="w-full rounded-md border border-gray-300 px-3 py-2" type="password" id="password" name="password" autocomplete="current-password" required>
     </div>
-    <button type="submit" class="rounded-md px-4 py-2 btn-accent">
+    <button type="button" id="password-visibility" aria-controls="password" aria-pressed="false" class="hidden text-sm underline min-h-[44px]">Show password</button>
+    <button type="submit" class="block w-full rounded-lg px-4 py-3 font-semibold btn-accent">
       Log in
     </button>
     <p class="text-sm">
       <a href="/forgot-password" class="underline" style="color: var(--unit-color);">Forgot your password?</a>
     </p>
-    <p class="text-xs text-gray-500">
-      One family account works across both {{.Unit.Name}} and our sibling unit's site — you don't need a
-      separate login for each.
-    </p>
+
   </form>
+  <p class="mt-6 pt-5 border-t border-gray-200 text-sm text-gray-600">New to {{.Unit.Name}}? <a href="/#join" class="underline font-medium" style="color: var(--unit-color);">Plan a visit</a>.</p>
+  </div>
+  <script nonce="{{.CSPNonce}}">
+    (function () {
+      var input = document.getElementById('password');
+      var toggle = document.getElementById('password-visibility');
+      if (!input || !toggle) return;
+      toggle.classList.remove('hidden');
+      toggle.addEventListener('click', function () {
+        var show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        toggle.textContent = show ? 'Hide password' : 'Show password';
+        toggle.setAttribute('aria-pressed', String(show));
+      });
+    })();
+  </script>
 {{end}}

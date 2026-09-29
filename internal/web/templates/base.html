@@ -137,6 +137,48 @@
         scroll-behavior: auto !important;
       }
     }
+
+    .header-width { max-width: 72rem; margin: 0 auto; padding-left: 1rem; padding-right: 1rem; }
+    .unit-bar { background: rgba(0,0,0,.18); border-bottom: 1px solid rgba(255,255,255,.15); }
+    .unit-bar-inner, .header-main, .header-actions { display: flex; align-items: center; gap: .75rem; }
+    .unit-bar-inner, .header-main { justify-content: space-between; }
+    .unit-switcher { display: flex; flex-wrap: wrap; gap: .25rem; }
+    .unit-switcher a { display: inline-flex; align-items: center; min-height: 44px; padding: .5rem .8rem; font-size: .875rem; border-bottom: 3px solid transparent; }
+    .unit-switcher a[aria-current] { border-color: var(--accent-color); background: rgba(255,255,255,.12); font-weight: 700; }
+    .unit-switcher a:hover { background: rgba(255,255,255,.15); }
+    .unit-bar-note { font-size: .75rem; }
+    .header-main { min-height: 76px; padding-top: .75rem; padding-bottom: .75rem; flex-wrap: wrap; }
+    .header-actions { flex-wrap: wrap; }
+    .header-action { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .55rem .9rem; border: 1px solid rgba(255,255,255,.55); border-radius: .5rem; font-size: .875rem; font-weight: 600; }
+    .header-action:hover { background: rgba(255,255,255,.12); }
+    .header-action-accent, .header-action-accent:hover { background: var(--accent-color); color: var(--accent-text-color); border-color: transparent; }
+    .public-navigation { display: flex; gap: .25rem; overflow-x: auto; border-top: 1px solid rgba(255,255,255,.18); }
+    .public-navigation a { flex-shrink: 0; display: inline-flex; align-items: center; min-height: 46px; padding: .65rem .9rem; font-size: .875rem; border-bottom: 3px solid transparent; }
+    .public-navigation a:hover { background: rgba(255,255,255,.1); }
+    .public-navigation a[aria-current] { border-color: var(--accent-color); background: rgba(255,255,255,.08); font-weight: 700; }
+    .menu-label { margin-right: .4rem; font-size: .875rem; }
+    #site-menu > summary { min-height: 44px; }
+    .site-menu-panel { max-height: min(70vh, 36rem); overflow-y: auto; }
+    .site-menu-panel a, .site-menu-panel button, .site-menu-panel summary { min-height: 44px; }
+    .family-shortcuts { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: .75rem; }
+    .family-shortcuts a { display: flex; flex-direction: column; justify-content: center; padding: 1rem; border: 1px solid #d1d5db; border-radius: .75rem; background: #fff; min-height: 88px; }
+    .family-shortcuts a:hover { border-color: var(--unit-color); box-shadow: 0 3px 12px rgba(0,0,0,.06); }
+    .family-shortcuts strong { color: var(--unit-color); }
+    .family-shortcuts span { color: #4b5563; font-size: .875rem; margin-top: .25rem; }
+    @media (max-width: 600px) {
+      .unit-bar-note, .menu-label { display: none; }
+      .header-main { gap: .6rem; }
+      .header-actions { gap: .4rem; }
+      .header-action { padding: .5rem .65rem; }
+      .public-navigation a { padding-left: .65rem; padding-right: .65rem; }
+      input, select, textarea { font-size: 16px; }
+    }
+    @media (max-width: 420px) {
+      .header-main > a { width: 100%; }
+      .header-actions { width: 100%; }
+      .header-actions > a { flex: 1; }
+      #site-menu { margin-left: auto; }
+    }
   </style>
   {{block "extrahead" .}}{{end}}
 </head>
@@ -148,26 +190,33 @@
   <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded-md focus:bg-white focus:text-gray-900 focus:px-4 focus:py-2 focus:shadow-lg">
     Skip to main content
   </a>
-  <header class="text-white" style="background-color: var(--unit-color);">
-    <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+  <header class="text-white site-header" style="background-color: var(--unit-color);">
+    {{if .UnitNavigation}}
+    <div class="unit-bar">
+      <div class="header-width unit-bar-inner">
+        <nav aria-label="Choose a Scouting unit" class="unit-switcher">
+          {{range .UnitNavigation}}
+            <a href="{{.URL}}" {{if .Current}}aria-current="true"{{end}}>{{.Label}}</a>
+          {{end}}
+        </nav>
+        <span class="unit-bar-note">Two programs. One family login.</span>
+      </div>
+    </div>
+    {{end}}
+    <div class="header-width header-main">
       <a href="/" class="text-lg font-semibold flex items-center gap-2">
         {{if .Unit.LogoURL}}<img src="{{.Unit.LogoURL}}" alt="" class="h-9 w-auto">{{end}}
         {{.Unit.Name}}
       </a>
 
-      <!-- Quick links to the site's main public pages, visible without
-           opening the hamburger — hidden below sm since there isn't room
-           next to the logo/name on a phone-width screen; the hamburger
-           (which already lists these plus everything else) still covers
-           that case. Shown to every visitor, logged in or not — these are
-           all public pages either way. -->
-      <nav class="hidden sm:flex items-center gap-5 text-sm">
-        <a href="/news" class="hover:underline">News</a>
-        <a href="/gallery" class="hover:underline">Photos</a>
-        <a href="/leaders" class="hover:underline">Our Leaders</a>
-        <a href="/calendar" class="hover:underline">Calendar</a>
-        <a href="/resources" class="hover:underline">Resources</a>
-      </nav>
+      <div class="header-actions">
+        {{if .LoggedIn}}
+          {{if .IsUnitMember}}<a href="/" class="header-action">My unit</a>
+          {{else if .ManagesFamilyContacts}}<a href="/my-family" class="header-action">My Family</a>{{end}}
+        {{else}}
+          <a href="/login" class="header-action">Family Log In</a>
+          <a href="/#join" class="header-action header-action-accent">Visit a meeting</a>
+        {{end}}
 
       <!-- A <details>/<summary> disclosure needs no JS to open/close —
            see menu.js below for the small enhancement that auto-closes it
@@ -175,18 +224,17 @@
            doesn't do on its own. -->
       <details id="site-menu" class="relative">
         <summary class="list-none cursor-pointer select-none rounded-md p-2 hover:bg-black/10 flex items-center" aria-label="Menu">
+          <span class="menu-label">Menu</span>
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <line x1="3" y1="6" x2="21" y2="6"></line>
             <line x1="3" y1="12" x2="21" y2="12"></line>
             <line x1="3" y1="18" x2="21" y2="18"></line>
           </svg>
         </summary>
-        <nav class="absolute right-0 mt-2 w-64 max-w-[90vw] rounded-md bg-white text-gray-900 shadow-lg ring-1 ring-black/10 py-2 text-sm z-50">
-          <a href="/news" class="block px-4 py-2 hover:bg-gray-100">News</a>
-          <a href="/gallery" class="block px-4 py-2 hover:bg-gray-100">Photos</a>
+        <nav aria-label="More navigation" class="absolute right-0 mt-2 w-64 max-w-[90vw] rounded-md bg-white text-gray-900 shadow-lg ring-1 ring-black/10 py-2 text-sm z-50 site-menu-panel">
           <a href="/leaders" class="block px-4 py-2 hover:bg-gray-100">Our Leaders</a>
-          <a href="/calendar" class="block px-4 py-2 hover:bg-gray-100">Calendar</a>
-          <a href="/resources" class="block px-4 py-2 hover:bg-gray-100">Resources</a>
+          <a href="/#join" class="block px-4 py-2 hover:bg-gray-100">Meeting &amp; contact details</a>
+          {{if .JoinFormEnabled}}<a href="/join" class="block px-4 py-2 hover:bg-gray-100">Ask about joining</a>{{end}}
           {{if .IsUnitMember}}
             <div class="border-t border-gray-100 my-1"></div>
             {{template "navHeading" "Our unit"}}
@@ -293,7 +341,13 @@
           {{end}}
         </nav>
       </details>
+      </div>
     </div>
+    <nav aria-label="Main navigation" class="header-width public-navigation">
+      {{range .PublicNavigation}}
+        <a href="{{.URL}}" {{if .Current}}aria-current="page"{{end}}>{{.Label}}</a>
+      {{end}}
+    </nav>
   </header>
   <script nonce="{{.CSPNonce}}">
     // Closes the <details> menu on an outside click or after following a
@@ -305,6 +359,12 @@
       if (!menu) return;
       document.addEventListener('click', function (e) {
         if (menu.open && !menu.contains(e.target)) menu.open = false;
+      });
+      menu.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && menu.open) {
+          menu.open = false;
+          menu.querySelector('summary').focus();
+        }
       });
       menu.querySelectorAll('a, button').forEach(function (el) {
         el.addEventListener('click', function () { menu.open = false; });

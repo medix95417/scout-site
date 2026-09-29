@@ -6,6 +6,7 @@
   </p>
   <p class="mb-6"><a href="/roster/export.pdf" target="_blank" class="text-sm underline" style="color: var(--unit-color);">Download PDF</a></p>
   {{if .Roster}}
+    <div class="overflow-x-auto" role="region" aria-label="Unit roster — scroll to see all columns" tabindex="0">
     <table class="w-full text-sm bg-white rounded-lg border border-gray-200 overflow-hidden">
       <thead class="bg-gray-100 text-left">
         <tr>
@@ -35,6 +36,7 @@
         {{end}}
       </tbody>
     </table>
+    </div>
   {{else}}
     <p class="text-sm text-gray-500">No members recorded for this unit yet.</p>
   {{end}}
