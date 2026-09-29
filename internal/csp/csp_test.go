@@ -52,14 +52,10 @@ func TestPolicy_KeepsTheDirectivesThatWereAlreadyThere(t *testing.T) {
 	}
 }
 
-// TestPolicy_AllowsTheCDNsTheSiteActuallyUses — htmx, Tailwind, Quill and
-// QRious are loaded from these two origins. A policy that blocks them
-// breaks the site, which is worse than no policy at all.
-func TestPolicy_AllowsTheCDNsTheSiteActuallyUses(t *testing.T) {
-	p := Policy("n")
-	for _, want := range []string{"https://cdn.tailwindcss.com", "https://cdnjs.cloudflare.com"} {
-		if !strings.Contains(p, want) {
-			t.Errorf("policy blocks %s, which the templates load scripts from: %s", want, p)
+func TestPolicyScriptsRequireNonceWithoutCDNOrSelfAllowance(t *testing.T) {
+	for _, d := range strings.Split(Policy("n"), "; ") {
+		if strings.HasPrefix(d, "script-src ") && d != "script-src 'nonce-n'" {
+			t.Fatalf("unexpected script sources: %s", d)
 		}
 	}
 }
