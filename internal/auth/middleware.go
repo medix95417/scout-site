@@ -6,6 +6,8 @@ import (
 	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/47-yonkers/scout-site/internal/audit"
 )
 
 type contextKey string
@@ -30,7 +32,7 @@ func WithUser(pool *pgxpool.Pool) func(http.Handler) http.Handler {
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), userContextKey, user)
+			ctx := context.WithValue(audit.WithAuthenticatedUser(r.Context(), user.ID), userContextKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
