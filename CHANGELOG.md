@@ -27,6 +27,84 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **A unit's prospect statuses are its own now, and there is a second
+  list to sort by.** The five stages an enquiry moved through were the
+  same five for every unit forever — a Troop wanting "Left voicemail"
+  between "New enquiry" and "Contacted" needed a code change. Under
+  "Statuses & categories" on the Prospects page a leader can now add
+  their own, rename them, reorder them, and choose which ones count as
+  dealt with — the thing that decides whether a family still shows as
+  needing a reply, which used to be "joined or declined" for everybody.
+
+  Alongside it, prospects have an optional **category**: a second,
+  independent way to file them, for what doesn't change as a family
+  progresses — which programme they asked about, how they heard of the
+  unit. Nothing is categorised until a leader says so, the join form
+  never guesses one, and the Prospects page can show one category at a
+  time, or just the ones nobody has filed yet.
+
+  Neither list can be deleted from, on purpose. A stage a unit stops
+  using is still written on the families who were at it and in the
+  audience of every message already sent to it, so **retiring** is how
+  a label leaves: it keeps its name everywhere it was used and simply
+  stops being offered for anything new.
+
+- **The homepage's upcoming events are links now.** Each one opens the
+  calendar page at that event. The whole card is the link rather than
+  just the title, so it is a thumb-sized target on a phone, and it
+  lands on the event's own entry in the calendar's upcoming list —
+  which is drawn from the same query the homepage uses, so every event
+  shown has somewhere to go.
+- **"Send a test email to myself", on Admin → Settings.** Until now
+  there was no way to find out whether outgoing mail worked short of
+  triggering a real send and reading the server's logs — and the
+  failures that matter most are silent by design: an unconfigured
+  mailer skips quietly, and a wrong From address reports itself only in
+  a log line nobody is watching. The button sends one message to the
+  signed-in leader's own address and reports what happened on the page,
+  including the whole error when it fails. It takes no recipient from
+  the form: a "send a test to…" box would be a way to make the site
+  send chosen mail from the unit's own domain.
+
+### Changed
+
+- **A Fastmail catch-all identity can now be the From address.** An
+  account that owns a domain lists it as `*@domain` and really can send
+  as any address on it, but the From had to match an identity by name,
+  so a unit sending from its own domain was refused with "no identity
+  matches" for an address the account already covered. An exact
+  identity still wins where there is one; the wildcard is the fallback,
+  and only for that domain exactly, never a subdomain.
+
+### Fixed
+
+- **Starting up no longer depends on losing a race with Postgres.** The
+  two start together on every reboot, and a database still binding its
+  port made the first connection fail, which exited the process and
+  left the container's restart policy to try again. That works, but the
+  restart backoff doubles each round, so a Postgres taking its time
+  over WAL recovery kept the site down considerably longer than the
+  database did. The connection is now retried for up to 30 seconds
+  before giving up. Only connection failures are retried: a wrong
+  password or a missing database fails at once, since neither reads any
+  differently in thirty seconds.
+- **The Settings page no longer says the From address is irrelevant on
+  Fastmail JMAP.** It said those fields "don't apply" when JMAP is
+  configured, which is true of host, port and username and badly wrong
+  about From — the one field JMAP requires. It now says which is which,
+  and what makes an address acceptable.
+
+- **The clean-slate instructions now warn that wiping the database
+  clears the mail settings.** The mail server's host, port, username and
+  From address can be set under Admin → Settings, which stores them in
+  the database, so `DROP SCHEMA` takes them — and since the password is
+  environment-only by design, what's left is a credential with no
+  address to use it on, and a site that quietly reports email as not
+  configured. DEPLOY.md now says so, with the two commands to see which
+  half is missing. Documentation only; no behaviour change.
+
 ## [2.13.8] — 2026-09-15
 
 ### Changed

@@ -9,12 +9,16 @@ package db
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"regexp"
 	"sort"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -26,17 +30,86 @@ var migrationsFS embed.FS
 // purpose, not automatically at every startup.
 var migrationFilePattern = regexp.MustCompile(`^\d+_.*\.sql$`)
 
-// Connect opens a connection pool to Postgres and verifies it's reachable.
+// connectWait is how long Connect keeps retrying an unreachable
+// Postgres before giving up, and connectFirstBackoff the pause before
+// the first retry (each subsequent one waits twice as long, capped at a
+// second). Both are vars rather than consts so a test can shrink them.
+var (
+	connectWait         = 30 * time.Second
+	connectFirstBackoff = 100 * time.Millisecond
+	connectMaxBackoff   = 1 * time.Second
+)
+
+// Connect opens a connection pool to Postgres and verifies it's
+// reachable, retrying a refused or unresolvable server for up to
+// connectWait before giving up.
+//
+// The retry is for one situation, which happens on nearly every reboot:
+// this process and Postgres start together, and Postgres is not
+// accepting connections yet. Without the retry the first ping fails, the
+// caller exits, and the container's restart policy brings it back —
+// which does eventually work, but the restart backoff doubles each time,
+// so a Postgres that takes a while over WAL recovery leaves the site
+// down for considerably longer than the database itself took. Waiting a
+// few seconds in-process turns that into a clean single start.
+//
+// Only connection-level failures are retried. A wrong password or a
+// missing database is a configuration mistake that will read the same
+// way in thirty seconds, so those fail immediately rather than making
+// someone watch a doomed loop.
 func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("db: creating pool: %w", err)
-	}
-	if err := pool.Ping(ctx); err != nil {
+	deadline := time.Now().Add(connectWait)
+	backoff := connectFirstBackoff
+	for attempt := 1; ; attempt++ {
+		pool, err := pgxpool.New(ctx, databaseURL)
+		if err != nil {
+			// A malformed URL: retrying cannot help.
+			return nil, fmt.Errorf("db: creating pool: %w", err)
+		}
+		err = pool.Ping(ctx)
+		if err == nil {
+			return pool, nil
+		}
 		pool.Close()
-		return nil, fmt.Errorf("db: ping failed (is Postgres running and DATABASE_URL correct?): %w", err)
+
+		if !worthRetrying(err) || time.Now().After(deadline) || ctx.Err() != nil {
+			return nil, fmt.Errorf("db: ping failed (is Postgres running and DATABASE_URL correct?): %w", err)
+		}
+		if attempt == 1 {
+			log.Printf("db: Postgres not reachable yet (%v) — retrying for up to %s", err, connectWait)
+		}
+		select {
+		case <-time.After(backoff):
+		case <-ctx.Done():
+			return nil, fmt.Errorf("db: ping failed (is Postgres running and DATABASE_URL correct?): %w", err)
+		}
+		if backoff *= 2; backoff > connectMaxBackoff {
+			backoff = connectMaxBackoff
+		}
 	}
-	return pool, nil
+}
+
+// worthRetrying reports whether an error looks like "Postgres isn't up
+// yet" rather than "you configured this wrong".
+//
+// Matched on the error's shape where possible — a dial failure or a DNS
+// lookup failure is unambiguous — and otherwise on the one server-side
+// code that means the same thing: 57P03, the server is running but still
+// starting up and refusing connections. A pgconn.PgError of any other
+// code came from a server that answered, so it is an answer, not an
+// outage: the wrong password (28P01) and a missing database (3D000) both
+// land here and fail at once.
+func worthRetrying(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "57P03" // cannot_connect_now
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+	var opErr *net.OpError
+	return errors.As(err, &opErr)
 }
 
 // Migrate applies any migration files that haven't been recorded yet, in

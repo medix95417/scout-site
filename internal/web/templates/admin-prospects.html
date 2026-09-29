@@ -1,11 +1,32 @@
 {{define "content"}}
   <div class="flex flex-wrap items-baseline justify-between gap-3 mb-1">
     <h1 class="text-2xl font-bold">Prospects — {{.Unit.Name}}</h1>
-    <a href="{{.ToggleClosedURL}}"
-       class="text-sm underline" style="color: var(--unit-color);">
-      {{if .ShowAll}}Show only open enquiries{{else}}Show all, including closed{{end}}
-    </a>
+    <div class="flex flex-wrap items-baseline gap-4">
+      <a href="{{.ToggleClosedURL}}"
+         class="text-sm underline" style="color: var(--unit-color);">
+        {{if .ShowAll}}Show only open enquiries{{else}}Show all, including closed{{end}}
+      </a>
+      <a href="/admin/prospect-labels" class="text-sm underline" style="color: var(--unit-color);">
+        Statuses &amp; categories
+      </a>
+    </div>
   </div>
+  {{if .Categories}}
+    {{/* Only shown once a unit has made some categories — an empty
+         filter row would be a control that does nothing. */}}
+    <div class="flex flex-wrap items-center gap-2 mb-4 text-sm">
+      <span class="text-gray-500">Category:</span>
+      <a href="{{.FilterURL ""}}"
+         class="rounded-full px-3 py-1 {{if eq .Filter ""}}bg-gray-800 text-white{{else}}bg-gray-100 text-gray-700 hover:bg-gray-200{{end}}">All</a>
+      {{range .Categories}}
+        <a href="{{$.FilterURL .Value}}"
+           class="rounded-full px-3 py-1 {{if eq $.Filter .Value}}bg-gray-800 text-white{{else}}bg-gray-100 text-gray-700 hover:bg-gray-200{{end}}">{{.Label}}</a>
+      {{end}}
+      <a href="{{.FilterURL "none"}}"
+         class="rounded-full px-3 py-1 {{if eq .Filter "none"}}bg-gray-800 text-white{{else}}bg-gray-100 text-gray-700 hover:bg-gray-200{{end}}">Uncategorised</a>
+    </div>
+  {{end}}
+
   <p class="text-sm text-gray-600 mb-6 max-w-2xl">
     Families who filled in the form at <a href="/join" class="underline" style="color: var(--unit-color);">/join</a>.
     {{if .OpenCount}}{{.OpenCount}} still {{if eq .OpenCount 1}}needs{{else}}need{{end}} a reply.{{else}}Nothing is
@@ -206,6 +227,9 @@
             <span class="rounded-full px-2 py-0.5 text-xs font-medium {{if .Open}}bg-amber-200 text-amber-900{{else}}bg-gray-200 text-gray-700{{end}}">
               {{.StatusLabel}}
             </span>
+            {{if .CategoryLabel}}
+              <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 text-xs">{{.CategoryLabel}}</span>
+            {{end}}
           </div>
 
           <dl class="grid gap-x-6 gap-y-1 sm:grid-cols-2 text-sm mb-3">
@@ -232,14 +256,39 @@
           <form method="post" action="/admin/prospects/{{.ID}}" class="space-y-2">
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             {{if $.ShowAll}}<input type="hidden" name="all" value="1">{{end}}
+            {{if $.Filter}}<input type="hidden" name="category_filter" value="{{$.Filter}}">{{end}}
             <div class="flex flex-wrap items-end gap-2">
               <div>
                 <label class="block text-xs text-gray-500 mb-1" for="status-{{.ID}}">Status</label>
                 <select class="rounded-md border border-gray-300 px-3 py-2 text-sm" id="status-{{.ID}}" name="status">
                   {{$current := .Status}}
-                  {{range $.Statuses}}<option value="{{.Value}}" {{if eq .Value $current}}selected{{end}}>{{.Label}}</option>{{end}}
+                  {{/* A prospect sitting on a retired status keeps it as
+                       an option, selected, so saving a change of notes
+                       doesn't silently move them somewhere else. It is
+                       simply not on offer to anyone not already there. */}}
+                  {{$live := false}}
+                  {{range $.Statuses}}
+                    {{if eq .Value $current}}{{$live = true}}{{end}}
+                    <option value="{{.Value}}" {{if eq .Value $current}}selected{{end}}>{{.Label}}</option>
+                  {{end}}
+                  {{if not $live}}<option value="{{$current}}" selected>{{.StatusLabel}} (retired)</option>{{end}}
                 </select>
               </div>
+              {{if $.Categories}}
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1" for="category-{{.ID}}">Category</label>
+                  <select class="rounded-md border border-gray-300 px-3 py-2 text-sm" id="category-{{.ID}}" name="category">
+                    {{$currentCat := .Category}}
+                    <option value="">—</option>
+                    {{$liveCat := eq $currentCat ""}}
+                    {{range $.Categories}}
+                      {{if eq .Value $currentCat}}{{$liveCat = true}}{{end}}
+                      <option value="{{.Value}}" {{if eq .Value $currentCat}}selected{{end}}>{{.Label}}</option>
+                    {{end}}
+                    {{if not $liveCat}}<option value="{{$currentCat}}" selected>{{.CategoryLabel}} (retired)</option>{{end}}
+                  </select>
+                </div>
+              {{end}}
               <div class="flex-1 min-w-[16rem]">
                 <label class="block text-xs text-gray-500 mb-1" for="notes-{{.ID}}">Notes</label>
                 <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"

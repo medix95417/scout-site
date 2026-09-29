@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/47-yonkers/scout-site/internal/auth"
 	"github.com/47-yonkers/scout-site/internal/content"
@@ -253,6 +254,8 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		ActiveStorefrontID  string
 		StorageByCategory   []categorySummaryView
 		StorageTotal        categorySummaryView
+		MailTestOK          string
+		MailTestError       string
 	}{
 		baseData:            settingsBase(h.base(r, "Site Settings"), r.URL.Query().Get("save_error")),
 		Toggles:             views,
@@ -269,6 +272,8 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		ActiveStorefrontID:  activeStorefrontID,
 		StorageByCategory:   storageByCategory,
 		StorageTotal:        storageTotal,
+		MailTestOK:          r.URL.Query().Get("mail_test_ok"),
+		MailTestError:       r.URL.Query().Get("mail_test_error"),
 	}
 	h.render(w, h.systemSettings, data)
 }
@@ -518,6 +523,55 @@ func (h *Handlers) WelcomeEmailSettingsUpdateText(w http.ResponseWriter, r *http
 	}
 
 	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+}
+
+// SystemSettingsSendTestEmail sends one message to the signed-in
+// leader's own address, so the mail configuration can be checked from
+// the page that sets it.
+//
+// This exists because there was no way to find out whether mail worked
+// short of triggering a real send and reading the server's logs — and
+// the failures that matter most are silent by design. A wrong From
+// address reports itself only in a log line nobody is watching; a
+// disabled mailer reports nothing at all, since the features that would
+// have sent are the ones that quietly skip. A leader with shell access
+// to `docker compose logs` is not the audience this site is built for.
+//
+// The recipient is the sender's own login address and nothing else: a
+// free-text "send a test to…" box on a page a super admin can reach
+// would be a way to make this site send attacker-chosen mail from the
+// unit's own domain, and no test worth running needs it.
+//
+// The whole error goes back to the page rather than a "failed" flag,
+// because the errors here name the fix — the Fastmail identity mismatch
+// lists the addresses that would have worked, which is the difference
+// between one more guess and none.
+func (h *Handlers) SystemSettingsSendTestEmail(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireSuperAdmin(w, r, "/admin/settings"); !ok {
+		return
+	}
+	user, _ := auth.UserFromContext(r.Context())
+	unit, _ := units.UnitFromContext(r.Context())
+
+	to := strings.TrimSpace(user.Email)
+	if to == "" {
+		http.Redirect(w, r, "/admin/settings?mail_test_error="+
+			url.QueryEscape("this login has no email address to send a test to"), http.StatusSeeOther)
+		return
+	}
+
+	subject := "Test email from " + unit.Name
+	body := "This is a test message from " + unit.Name + "'s website, sent from Settings.\n\n" +
+		"If you are reading it, outgoing email works: password reset links, event reminders, " +
+		"welcome emails and newsletters will reach people the same way.\n\n" +
+		"Nobody else was sent a copy."
+
+	if err := h.Mailer.Send(r.Context(), to, subject, body); err != nil {
+		log.Printf("web: test email to %s: %v", to, err)
+		http.Redirect(w, r, "/admin/settings?mail_test_error="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/admin/settings?mail_test_ok="+url.QueryEscape(to), http.StatusSeeOther)
 }
 
 // settingsBase carries a save failure back onto the settings page.

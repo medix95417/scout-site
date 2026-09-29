@@ -1,0 +1,99 @@
+{{define "content"}}
+  <div class="flex flex-wrap items-baseline justify-between gap-3 mb-1">
+    <h1 class="text-2xl font-bold">Statuses &amp; Categories — {{.Unit.Name}}</h1>
+    <a href="/admin/prospects" class="text-sm underline" style="color: var(--unit-color);">Back to prospects</a>
+  </div>
+  <p class="text-sm text-gray-600 mb-6 max-w-2xl">
+    Two lists, and they answer different questions. A <strong>status</strong> is where a family has got to, and
+    moves as they progress. A <strong>category</strong> is how you file them — which program they asked about,
+    how they heard of us — and stays put. Both are yours to change; nothing here affects the other unit.
+  </p>
+
+  {{if .Error}}
+    <div class="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900 mb-6 max-w-2xl">
+      {{.Error}}
+    </div>
+  {{end}}
+
+  {{template "labelList" (dict
+      "Kind" "status" "Heading" "Statuses" "Labels" .Statuses "Counts" .Counts "CSRFToken" .CSRFToken
+      "Blurb" "The workflow an enquiry moves through. Mark a status closed when a family at it has been dealt with — those drop out of the default list and stop counting as needing a reply."
+      "AddLabel" "Add a status")}}
+
+  {{template "labelList" (dict
+      "Kind" "category" "Heading" "Categories" "Labels" .Categories "Counts" .Counts "CSRFToken" .CSRFToken
+      "Blurb" "Optional. Nothing is categorised until you say so, and the join form never guesses one. Leave this empty if you don't need a second way to sort."
+      "AddLabel" "Add a category")}}
+{{end}}
+
+{{/* One list, rendered twice. The two differ only in whether a row can
+     be open or closed, which is a status's idea of having been dealt
+     with and means nothing for a category. */}}
+{{define "labelList"}}
+  {{$isStatus := eq .Kind "status"}}
+  <h2 class="text-lg font-semibold mt-8 mb-1">{{.Heading}}</h2>
+  <p class="text-sm text-gray-600 mb-4 max-w-2xl">{{.Blurb}}</p>
+
+  <div class="max-w-2xl space-y-2 mb-4">
+    {{range .Labels}}
+      <div class="rounded-lg border {{if .Retired}}border-gray-200 bg-gray-50{{else}}border-gray-200 bg-white{{end}} p-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <form method="post" action="/admin/prospect-labels/{{.ID}}/rename" class="flex items-center gap-2 flex-1 min-w-0">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="text" name="label" value="{{.Label}}" maxlength="60"
+                   aria-label="Name"
+                   class="flex-1 min-w-0 rounded-md border border-gray-300 px-2 py-1 text-sm {{if .Retired}}text-gray-500{{end}}">
+            <button type="submit" class="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium hover:bg-gray-50">Rename</button>
+          </form>
+
+          <form method="post" action="/admin/prospect-labels/{{.ID}}/move" class="flex gap-1">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <button type="submit" name="dir" value="up" aria-label="Move {{.Label}} up"
+                    class="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs hover:bg-gray-50">↑</button>
+            <button type="submit" name="dir" value="down" aria-label="Move {{.Label}} down"
+                    class="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs hover:bg-gray-50">↓</button>
+          </form>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 mt-2 text-xs text-gray-500">
+          {{with index $.Counts .Value}}<span>{{.}} {{if eq . 1}}prospect{{else}}prospects{{end}}</span>{{end}}
+
+          {{if $isStatus}}
+            <form method="post" action="/admin/prospect-labels/{{.ID}}/closed">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <input type="hidden" name="closed" value="{{if .Closed}}0{{else}}1{{end}}">
+              <button type="submit" class="underline hover:text-gray-700">
+                {{if .Closed}}Counts as dealt with — make it open{{else}}Counts as open — mark it dealt with{{end}}
+              </button>
+            </form>
+          {{end}}
+
+          <form method="post" action="/admin/prospect-labels/{{.ID}}/retire">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="hidden" name="retired" value="{{if .Retired}}0{{else}}1{{end}}">
+            <button type="submit" class="underline hover:text-gray-700">
+              {{if .Retired}}Retired — put it back{{else}}Retire{{end}}
+            </button>
+          </form>
+        </div>
+      </div>
+    {{else}}
+      <p class="text-sm text-gray-500">None yet.</p>
+    {{end}}
+  </div>
+
+  <form method="post" action="/admin/prospect-labels" class="max-w-2xl flex flex-wrap items-center gap-2">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="kind" value="{{.Kind}}">
+    <input type="text" name="label" maxlength="60" required
+           placeholder="{{if $isStatus}}e.g. Left voicemail{{else}}e.g. Heard from a friend{{end}}"
+           aria-label="{{.AddLabel}}"
+           class="flex-1 min-w-0 rounded-md border border-gray-300 px-3 py-2 text-sm">
+    {{if $isStatus}}
+      <label class="flex items-center gap-1 text-sm text-gray-600">
+        <input type="checkbox" name="closed" value="1"> counts as dealt with
+      </label>
+    {{end}}
+    <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">{{.AddLabel}}</button>
+  </form>
+{{end}}

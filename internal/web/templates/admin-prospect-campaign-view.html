@@ -6,11 +6,11 @@
   <h1 class="text-2xl font-bold mb-1">{{.Campaign.Subject}}</h1>
   <p class="text-sm text-gray-600 mb-6">
     {{if .Campaign.Sent}}
-      Sent {{.SentOn}} to families marked <em>{{.Campaign.StatusLabels}}</em>.
+      Sent {{.SentOn}} to families marked <em>{{.Audience}}</em>.
     {{else if eq .Campaign.Status "sending"}}
-      Sending now to families marked <em>{{.Campaign.StatusLabels}}</em> — this page updates on its own.
+      Sending now to families marked <em>{{.Audience}}</em> — this page updates on its own.
     {{else}}
-      Draft, aimed at families marked <em>{{.Campaign.StatusLabels}}</em>.
+      Draft, aimed at families marked <em>{{.Audience}}</em>.
     {{end}}
   </p>
 

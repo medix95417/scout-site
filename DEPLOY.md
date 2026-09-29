@@ -194,12 +194,19 @@ Set these for production:
   API instead of SMTP, so nothing needs an SMTP port to be reachable at
   all. Needs `FASTMAIL_API_TOKEN` (Fastmail → Settings → Privacy &
   Security → Integrations → API tokens — grant it "Mail" access) and
-  `SMTP_FROM` still set to one of that Fastmail account's own
-  addresses/aliases (an address JMAP doesn't recognize as belonging to
-  the token is rejected with a clear error, listing what it does
-  recognize). `SMTP_HOST`/`PORT`/`USERNAME`/`TLS_MODE` are ignored when
-  this is set. `FASTMAIL_API_TOKEN`, like `SMTP_PASSWORD`, is
-  environment-only — never settable from `/admin/settings`.
+  `SMTP_FROM` still set to an address that Fastmail account can send as:
+  one of its own identities, or any address on a domain it holds a
+  `*@domain` catch-all for. Anything else is rejected with an error
+  listing the addresses that would have worked.
+  `SMTP_HOST`/`PORT`/`USERNAME`/`TLS_MODE` are ignored when this is set.
+  `FASTMAIL_API_TOKEN`, like `SMTP_PASSWORD`, is environment-only —
+  never settable from `/admin/settings`.
+
+  Note which half of that is settable from the web UI: the provider and
+  the token are environment-only, but **the From address is not**, and
+  it is required. A token with no From is a disabled mailer, which is
+  the shape this takes after a database wipe — see "Starting over"
+  below.
 - `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` — the file
   library and event photos (see README.md "Files") need an S3-compatible
   bucket you already run or manage — a self-hosted MinIO, AWS S3,
@@ -589,6 +596,46 @@ not show those files, because nothing points at them any more.
 - **The homepage text goes too.** Everything set under Edit Homepage —
   hero, "why us", meeting address and map, leader profiles — is
   `content_pages` and `leaders` rows, and comes back empty.
+- **Email stops working, if you configured it in the web UI.** The mail
+  server's host, port, username and From address can be set two ways —
+  in `.env`, or under Admin → Settings. The second stores them in
+  `system_settings`, which the schema drop takes with everything else.
+  The site then falls back to the environment, and if that is where you
+  never put them, it has nothing: no error, just "email is not
+  configured" wherever mail would have been sent.
+
+  `SMTP_PASSWORD` and `FASTMAIL_API_TOKEN` are environment-only by
+  design and survive — which is the confusing part, since you are left
+  holding the credential and not the address it belongs to.
+
+  Check both halves:
+
+  ```bash
+  docker compose exec db psql -U scoutsite -d scoutsite \
+    -c "select key, value from system_settings where key like 'smtp%';"
+  docker compose exec app printenv SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_FROM MAIL_PROVIDER
+  ```
+
+  (`printenv` with the names spelled out rather than `env | grep SMTP`,
+  which would print the password.) Re-entering them under Admin →
+  Settings works immediately and needs no restart; putting them in
+  `.env` instead means the next wipe leaves them alone.
+
+  Quicker than either: **Admin → Settings → "Send a test email to
+  myself"** sends one message to your own login address and reports what
+  happened on the page, error and all. Use it after a wipe rather than
+  waiting to find out from a password reset that didn't arrive.
+
+  On Fastmail JMAP this bites in a smaller way: the provider and token
+  come from the environment, but the From address can come from the
+  database, and JMAP needs both. A token with no From is disabled just
+  the same.
+- **Every Admin → Settings switch goes back to its default.** The
+  feature toggles live in the same `system_settings` table. Unlike the
+  mail server they have sensible defaults to fall back on, so nothing
+  breaks — but anything you had deliberately turned on or off is on
+  whatever the default is again, and it is worth a look down that page
+  after a wipe rather than discovering it later.
 
 ## Ongoing operations, continued
 

@@ -313,9 +313,14 @@
     Where outgoing mail (password reset links, event reminders) gets sent from. Leave any field blank to fall back
     to its environment variable — see DEPLOY.md. The SMTP password itself isn't set here; it stays in the
     <span class="font-mono">SMTP_PASSWORD</span> environment variable on the server, not in the database, since
-    it's the one real secret in this configuration. If this site sends mail via Fastmail's JMAP API instead of SMTP
-    (<span class="font-mono">MAIL_PROVIDER=fastmail-jmap</span>), these fields don't apply — that's configured
-    entirely through environment variables; see DEPLOY.md.
+    it's the one real secret in this configuration.
+  </p>
+  <p class="text-sm text-gray-600 mb-4 max-w-2xl">
+    <strong>Sending via Fastmail's JMAP API</strong> (<span class="font-mono">MAIL_PROVIDER=fastmail-jmap</span>)?
+    Then host, port and username below are ignored — but <strong>From still applies, and is required</strong>. It
+    must be an address the Fastmail account can actually send as: one of its own identities, or any address on a
+    domain it holds a <span class="font-mono">*@domain</span> catch-all for. An address at a domain the account
+    doesn't own is refused, and the test button below will name the addresses that would have worked.
   </p>
   <form method="post" action="/admin/settings/text" class="max-w-2xl space-y-3">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -330,4 +335,29 @@
       Save Email Settings
     </button>
   </form>
+
+  <div class="max-w-2xl mt-4">
+    {{if .MailTestOK}}
+      <p class="rounded-md border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900 mb-3">
+        Test email sent to <span class="font-mono">{{.MailTestOK}}</span>. If it doesn't arrive within a few
+        minutes, check that address's spam folder — the site has done its part.
+      </p>
+    {{end}}
+    {{if .MailTestError}}
+      <div class="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900 mb-3">
+        <p class="font-medium mb-1">The test email could not be sent.</p>
+        <p class="break-words">{{.MailTestError}}</p>
+      </div>
+    {{end}}
+    <form method="post" action="/admin/settings/test-email">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit" class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50">
+        Send a test email to myself
+      </button>
+    </form>
+    <p class="text-xs text-gray-500 mt-2">
+      Sends one message to your own login address and reports what happened, including the reason if it fails.
+      Nobody else is sent anything.
+    </p>
+  </div>
 {{end}}

@@ -137,12 +137,21 @@
       {{template "homeSectionHeading" (dict "Title" "Upcoming Events" "Href" "/calendar" "LinkText" "Full calendar")}}
       {{if .Events}}
         <ul class="space-y-3">
+          {{/* The whole card is the link, not just the title: on a phone
+               this is a thumb-sized target rather than one line of text,
+               and there is nothing else inside it to click. It lands on
+               the event's own entry in the calendar page's upcoming list
+               (see the id there), which is the same list this one is
+               drawn from, so every event shown here has somewhere to go. */}}
           {{range .Events}}
-            <li class="rounded-xl border border-gray-200 bg-white p-4">
-              <div class="text-xs text-gray-400">{{.DateRangeDisplay}}</div>
-              <div class="font-medium mt-0.5">{{.Title}}</div>
-              {{if .Location}}<div class="text-sm text-gray-500">{{.Location}}</div>{{end}}
-              {{if .Description}}<p class="text-sm mt-1 text-gray-600">{{.Description}}</p>{{end}}
+            <li>
+              <a href="/calendar#event-{{.ID}}"
+                 class="block rounded-xl border border-gray-200 bg-white p-4 transition hover:border-gray-300 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+                <div class="text-xs text-gray-400">{{.DateRangeDisplay}}</div>
+                <div class="font-medium mt-0.5">{{.Title}}</div>
+                {{if .Location}}<div class="text-sm text-gray-500">{{.Location}}</div>{{end}}
+                {{if .Description}}<p class="text-sm mt-1 text-gray-600">{{.Description}}</p>{{end}}
+              </a>
             </li>
           {{end}}
         </ul>

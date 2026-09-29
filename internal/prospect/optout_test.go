@@ -51,39 +51,33 @@ func TestAppendUnsubscribeFooterIsIdempotentAndPersonal(t *testing.T) {
 	}
 }
 
-// A campaign's audience is chosen with checkboxes, but arrives as form
-// values, which can be anything. Widening it past the real statuses would
-// mean emailing families the leader didn't pick.
-func TestFilterStatusesRejectsAnythingNotAStatus(t *testing.T) {
-	got := filterStatuses([]string{StatusNew, "everyone", StatusNew, "", StatusJoined})
-	want := []string{StatusNew, StatusJoined}
-	if len(got) != len(want) {
-		t.Fatalf("filterStatuses = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("filterStatuses = %v, want %v", got, want)
-		}
-	}
-	if len(filterStatuses(nil)) != 0 {
-		t.Error("filterStatuses(nil) should be empty")
-	}
-}
-
-// StatusLabels is what the admin page shows for "who did this go to", and
-// it reads back a stored array that may contain a status no longer in the
-// code — it must not render blank in that case.
+// StatusLabels is what the admin page shows for "who did this go to".
+// It reads back a stored array that may name a status the unit has
+// since retired, renamed, or that was never one of theirs — and it must
+// not render blank for any of them, since the audience is the whole
+// point of the row.
 func TestCampaignStatusLabels(t *testing.T) {
+	text := map[string]string{StatusNew: "New enquiry", StatusContacted: "Contacted"}
+
 	c := Campaign{TargetStatuses: []string{StatusNew, StatusContacted}}
-	got := c.StatusLabels()
+	got := c.StatusLabels(text)
 	if !strings.Contains(got, "New enquiry") || !strings.Contains(got, "Contacted") {
 		t.Errorf("StatusLabels = %q, want both statuses named", got)
 	}
-	if (Campaign{}).StatusLabels() != "no one" {
-		t.Errorf("an empty audience should read as %q, got %q", "no one", (Campaign{}).StatusLabels())
+	if (Campaign{}).StatusLabels(text) != "no one" {
+		t.Errorf("an empty audience should read as %q, got %q", "no one", (Campaign{}).StatusLabels(text))
 	}
+
+	// The case the per-unit lists make routine: a campaign outlives the
+	// status it targeted.
 	unknown := Campaign{TargetStatuses: []string{"retired_status"}}
-	if unknown.StatusLabels() != "retired_status" {
-		t.Errorf("an unrecognized status should fall back to its own value, got %q", unknown.StatusLabels())
+	if unknown.StatusLabels(text) != "retired_status" {
+		t.Errorf("an unrecognized status should fall back to its own value, got %q", unknown.StatusLabels(text))
+	}
+	// A renamed label reads as its new name, because the value is what
+	// is stored and the text is looked up fresh.
+	renamed := Campaign{TargetStatuses: []string{StatusNew}}
+	if got := renamed.StatusLabels(map[string]string{StatusNew: "Brand new"}); got != "Brand new" {
+		t.Errorf("a renamed status should read as its new name, got %q", got)
 	}
 }

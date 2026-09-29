@@ -46,21 +46,21 @@ type Campaign struct {
 	UpdatedAt      time.Time
 }
 
-// StatusLabels renders TargetStatuses the way the admin page reads them.
-func (c Campaign) StatusLabels() string {
+// StatusLabels renders TargetStatuses the way the admin page reads
+// them, given this unit's label text (see LabelText).
+//
+// Takes the map rather than reading the list itself because a campaign
+// is history: it may name a status the unit has since retired, or
+// renamed, and the map covers retired labels for exactly that reason.
+// Anything it doesn't cover falls back to the stored value, so an
+// audience never renders as blank.
+func (c Campaign) StatusLabels(text map[string]string) string {
 	if len(c.TargetStatuses) == 0 {
 		return "no one"
 	}
 	labels := make([]string, 0, len(c.TargetStatuses))
 	for _, v := range c.TargetStatuses {
-		label := v
-		for _, s := range Statuses {
-			if s.Value == v {
-				label = s.Label
-				break
-			}
-		}
-		labels = append(labels, label)
+		labels = append(labels, LabelIn(text, v))
 	}
 	return strings.Join(labels, ", ")
 }
@@ -119,11 +119,15 @@ func CreateCampaign(ctx context.Context, pool *pgxpool.Pool, unitID, subject, bo
 		return Campaign{}, fmt.Errorf("%w: that subject line is too long", ErrInvalid)
 	}
 
+	targets, err := filterStatuses(ctx, pool, unitID, statuses)
+	if err != nil {
+		return Campaign{}, err
+	}
 	c, err := scanCampaign(pool.QueryRow(ctx, `
 		INSERT INTO prospect_campaigns (unit_id, subject, body, target_statuses, created_by)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING `+campaignColumns,
-		unitID, subject, body, filterStatuses(statuses), actorID))
+		unitID, subject, body, targets, actorID))
 	if err != nil {
 		return Campaign{}, err
 	}
@@ -152,12 +156,16 @@ func UpdateCampaign(ctx context.Context, pool *pgxpool.Pool, id, unitID, subject
 		return Campaign{}, ErrCampaignSent
 	}
 
+	targets, err := filterStatuses(ctx, pool, unitID, statuses)
+	if err != nil {
+		return Campaign{}, err
+	}
 	c, err := scanCampaign(pool.QueryRow(ctx, `
 		UPDATE prospect_campaigns
 		SET subject = $1, body = $2, target_statuses = $3, updated_at = now()
 		WHERE id = $4 AND unit_id = $5 AND status = 'draft'
 		RETURNING `+campaignColumns,
-		subject, body, filterStatuses(statuses), id, unitID))
+		subject, body, targets, id, unitID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Campaign{}, ErrCampaignSent
 	}
@@ -239,7 +247,10 @@ func DeleteCampaign(ctx context.Context, pool *pgxpool.Pool, id, unitID, actorID
 // person means when they unsubscribe, and it took a two-enquiry test
 // against a real database to notice the difference.
 func RecipientsForStatuses(ctx context.Context, pool *pgxpool.Pool, unitID string, statuses []string) ([]Recipient, error) {
-	wanted := filterStatuses(statuses)
+	wanted, err := filterStatuses(ctx, pool, unitID, statuses)
+	if err != nil {
+		return nil, err
+	}
 	if len(wanted) == 0 {
 		return nil, nil
 	}
@@ -443,17 +454,30 @@ func truncateError(s string) string {
 	return s[:max] + "…"
 }
 
-// filterStatuses drops anything that isn't a real status, so a
-// hand-crafted form post can't widen a campaign's audience past what the
-// checkboxes offer.
-func filterStatuses(in []string) []string {
+// filterStatuses drops anything that isn't one of this unit's live
+// statuses, so a hand-crafted form post can't widen a campaign's
+// audience past what the checkboxes offer — including to another
+// unit's statuses, now that the list is per-unit.
+//
+// Retired statuses are dropped too: a campaign is something being sent
+// now, and a status the unit has withdrawn is not one it is still
+// recruiting from. The prospects already sitting on it keep it.
+func filterStatuses(ctx context.Context, pool *pgxpool.Pool, unitID string, in []string) ([]string, error) {
+	live, err := ListLabels(ctx, pool, unitID, KindStatus, false)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[string]bool, len(live))
+	for _, l := range live {
+		allowed[l.Value] = true
+	}
 	seen := map[string]bool{}
 	out := []string{}
 	for _, v := range in {
-		if IsStatus(v) && !seen[v] {
+		if allowed[v] && !seen[v] {
 			seen[v] = true
 			out = append(out, v)
 		}
 	}
-	return out
+	return out, nil
 }

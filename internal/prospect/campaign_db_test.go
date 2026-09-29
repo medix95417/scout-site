@@ -58,7 +58,7 @@ func (e env) prospect(t *testing.T, email, status string) Prospect {
 		t.Fatalf("creating prospect %s: %v", email, err)
 	}
 	if status != StatusNew {
-		if _, err := UpdateStatus(ctx, e.pool, e.unitID, p.ID, status, "", e.actor); err != nil {
+		if _, err := UpdateStatus(ctx, e.pool, e.unitID, p.ID, status, "", "", e.actor); err != nil {
 			t.Fatalf("setting status: %v", err)
 		}
 		p.Status = status
@@ -283,4 +283,80 @@ func TestSendRefusesWithoutAnUnsubscribeLink(t *testing.T) {
 	if back.Status != "draft" {
 		t.Errorf("campaign left at %q rather than returned to draft", back.Status)
 	}
+}
+
+// A campaign's audience is chosen with checkboxes, but arrives as form
+// values, which can be anything. Widening it past the statuses this
+// unit actually has would mean emailing families the leader didn't
+// pick — and now that the list is per-unit, "a real status" includes
+// "not another unit's".
+func TestFilterStatusesRejectsAnythingNotThisUnitsStatus(t *testing.T) {
+	e := newEnv(t, "Filter Test Family")
+	ctx := context.Background()
+
+	got, err := filterStatuses(ctx, e.pool, e.unitID, []string{StatusNew, "everyone", StatusNew, "", StatusJoined})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{StatusNew, StatusJoined}
+	if len(got) != len(want) {
+		t.Fatalf("filterStatuses = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("filterStatuses = %v, want %v", got, want)
+		}
+	}
+
+	empty, err := filterStatuses(ctx, e.pool, e.unitID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(empty) != 0 {
+		t.Error("filterStatuses(nil) should be empty")
+	}
+
+	// Another unit's status is not this unit's, even though both are
+	// real rows in the same table.
+	otherUnit := newUnit(t, e.pool)
+	theirs, err := CreateLabel(ctx, e.pool, otherUnit, KindStatus, "Their Own Stage", false, e.actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	crossed, err := filterStatuses(ctx, e.pool, e.unitID, []string{theirs.Value})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(crossed) != 0 {
+		t.Errorf("another unit's status got through: %v", crossed)
+	}
+
+	// A retired status is not a group to send to either.
+	contacted := labelByValue(t, e.pool, e.unitID, KindStatus, StatusContacted)
+	if _, err := SetLabelRetired(ctx, e.pool, e.unitID, contacted.ID, true, e.actor); err != nil {
+		t.Fatal(err)
+	}
+	after, err := filterStatuses(ctx, e.pool, e.unitID, []string{StatusNew, StatusContacted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != 1 || after[0] != StatusNew {
+		t.Errorf("a retired status is still a campaign target: %v", after)
+	}
+}
+
+// labelByValue finds one of a unit's labels by its stored value.
+func labelByValue(t *testing.T, pool *pgxpool.Pool, unitID, kind, value string) Label {
+	t.Helper()
+	all, err := ListLabels(context.Background(), pool, unitID, kind, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range all {
+		if l.Value == value {
+			return l
+		}
+	}
+	t.Fatalf("no %s label %q in this unit", kind, value)
+	return Label{}
 }
