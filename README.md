@@ -472,7 +472,8 @@ handles the pinned npm build; direct Go builds use committed embedded assets.
 After changing UI classes, run `npm ci --ignore-scripts && npm run build:assets`
 and commit the generated assets. See `frontend/README.md`.
 
-Shared household logins provide family access only. Leaders use individual
-logins for administrative permissions, while retaining cross-unit single sign-on.
-Before upgrading, follow **Security hardening rollout: personal leader logins**
-in `DEPLOY.md` to avoid losing administrator access.
+Shared household logins inherit active household members' roles in each unit,
+including leadership permissions. Individual logins remain optional and use only
+their own member's roles. Pack/Troop single sign-on is unchanged. Everyone who
+knows a shared password can exercise that household's permissions; use individual
+logins when personal accountability and separation are needed. See `DEPLOY.md`.
