@@ -9,6 +9,7 @@
 //	server -seed-demo            insert a full set of test logins/activity data (one per role), then exit — see DEMO_DATA.md
 //	server -send-event-reminders email RSVP'd members of soon-starting events, then exit (run via cron)
 //	server -refresh-calendar-feeds  re-fetch every subscribed external calendar, then exit (run via cron)
+//	server -create-personal-login create a login for a specific existing member, then exit (see DEPLOY.md)
 //	server -grant-role           grant an existing user a role in a unit, then exit (see DEPLOY.md "Adding a unit later")
 //	server -backfill-thumbnails  generate a cached thumbnail for every image file that doesn't already have one, then exit (safe to re-run) — runs automatically in the background on every normal server startup too, this is only for running it on demand/synchronously
 //	server -rekey-files          print which stored files would move into their event/documents/photos folder, then exit — changes nothing
@@ -47,6 +48,7 @@ func main() {
 	migrateOnly := flag.Bool("migrate", false, "apply pending migrations and exit")
 	seedOnly := flag.Bool("seed", false, "insert seed data (Troop/Pack units) and exit")
 	seedDemo := flag.Bool("seed-demo", false, "insert a full set of test logins and activity data (one per role — see DEMO_DATA.md) and exit; safe to re-run, no-ops if demo data already exists")
+	createPersonalLogin := flag.Bool("create-personal-login", false, "create an individual login for PERSONAL_MEMBER_ID using PERSONAL_EMAIL; prints a fresh temporary password once")
 	bootstrapAdmin := flag.Bool("bootstrap-admin", false, "create the first super-admin login from ADMIN_EMAIL/ADMIN_PASSWORD/ADMIN_FIRST_NAME/ADMIN_LAST_NAME env vars, then exit")
 	sendEventReminders := flag.Bool("send-event-reminders", false, "email everyone RSVP'd yes/maybe to an event starting within REMINDER_WINDOW_HOURS (default 24), then exit — meant to be run periodically via cron, see DEPLOY.md")
 	refreshCalendarFeeds := flag.Bool("refresh-calendar-feeds", false, "re-fetch every enabled external calendar subscription and update the events imported from it, then exit — meant to be run periodically via cron, see DEPLOY.md")
@@ -112,6 +114,15 @@ func main() {
 			log.Fatalf("bootstrap-admin: %v", err)
 		}
 		log.Printf("bootstrap-admin: created admin family %s for %s — you can now log in at either subdomain", familyID, in.Email)
+		return
+	}
+
+	if *createPersonalLogin {
+		password, err := bootstrap.CreatePersonalLogin(ctx, pool, os.Getenv("PERSONAL_MEMBER_ID"), os.Getenv("PERSONAL_EMAIL"))
+		if err != nil {
+			log.Fatalf("create-personal-login: %v", err)
+		}
+		fmt.Printf("Temporary password (change at first sign-in): %s\n", password)
 		return
 	}
 
@@ -336,7 +347,7 @@ func main() {
 	// those read the nonce it puts in the request context.
 	handler = csp.Middleware(handler)
 	handler = securityHeaders(handler)
-	handler = requestLogger(handler)
+	handler = requestLogger(mux, handler)
 
 	srv := &http.Server{
 		Addr:    cfg.ListenAddr,
@@ -396,24 +407,32 @@ func main() {
 	}
 }
 
-func requestLogger(next http.Handler) http.Handler {
+func requestLogger(mux *http.ServeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		next.ServeHTTP(w, r)
-		log.Printf("%s %s%s %s", r.Method, r.Host, r.URL.Path, time.Since(start))
+		log.Printf("%s host=%q route=%q duration=%s", r.Method, r.Host, loggedRoute(mux, r), time.Since(start))
 	})
 }
 
-// securityHeaders sets defense-in-depth response headers on every request.
-// The Content-Security-Policy is NOT here — it needs a per-request nonce,
-// so it's set by internal/csp.Middleware instead. HSTS is intentionally
-// left to Caddy,
-// which adds it automatically when it terminates TLS (see Caddyfile);
-// setting it here too would risk sending it over plain http:// in local
-// development.
+// loggedRoute never logs URL paths or queries, even for unmatched requests or
+// redirects before routing. Tokens and other user-supplied segments stay out.
+func loggedRoute(mux *http.ServeMux, r *http.Request) string {
+	// Resolve against registered routes rather than relying on r.Pattern:
+	// authentication middleware copies the request when adding its context.
+	_, pattern := mux.Handler(r)
+	if pattern != "" {
+		return pattern
+	}
+	return "[unmatched]"
+}
+
+// securityHeaders applies defense in depth and a no-store default. Caddy
+// explicitly sets HSTS at the TLS endpoint; local HTTP gets no HSTS.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
+		h.Set("Cache-Control", "private, no-store")
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
