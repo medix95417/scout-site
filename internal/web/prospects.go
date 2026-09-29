@@ -254,6 +254,10 @@ type prospectRow struct {
 	StatusLabel   string
 	CategoryLabel string
 	Open          bool
+	// AddedByLeader marks an enquiry someone typed in rather than one
+	// that arrived through the form — worth saying on the row, because
+	// it is the reason no automatic reply went to them.
+	AddedByLeader bool
 }
 
 // splitLabels takes a unit's full list and returns the live entries
@@ -369,7 +373,10 @@ type prospectsPageData struct {
 	StatusText   map[string]string
 	CategoryText map[string]string
 	// Filter is the category currently filtered to, "" for all.
-	Filter         string
+	Filter string
+	// AddError is what went wrong adding a family by hand, shown above
+	// the list — see prospect_add.go.
+	AddError       string
 	ShowAll        bool
 	OpenCount      int
 	OptedOutCount  int
@@ -500,7 +507,8 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 			// A status nobody has marked closed leaves the enquiry
 			// open — including one whose label has gone missing, which
 			// keeps it visible rather than quietly filed away.
-			Open: !closed[p.Status],
+			Open:          !closed[p.Status],
+			AddedByLeader: p.Source == prospect.SourceLeader,
 		})
 	}
 
@@ -513,6 +521,7 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 		StatusText:     statusText,
 		CategoryText:   categoryText,
 		Filter:         filter,
+		AddError:       r.URL.Query().Get("add_error"),
 		ShowAll:        showAll,
 		OpenCount:      openCount,
 		OptedOutCount:  optedOut,

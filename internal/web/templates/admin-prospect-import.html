@@ -1,0 +1,88 @@
+{{define "content"}}
+  <h1 class="text-2xl font-bold mb-1">Add a list — {{.Unit.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-6 max-w-2xl">
+    Nothing has been saved yet. This is what the paste was read as — check it, then add the ones that are ready.
+    <strong>No one on this list is emailed anything</strong>, now or when you save.
+  </p>
+
+  {{if .Error}}
+    <div class="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900 mb-6 max-w-2xl">
+      {{.Error}}
+    </div>
+  {{end}}
+
+  {{if .Rows}}
+    <p class="text-sm mb-4">
+      <strong>{{.Ready}}</strong> {{if eq .Ready 1}}family{{else}}families{{end}} to add.
+      {{if .Skipped}}<strong>{{.Skipped}}</strong> skipped — see why below.{{end}}
+    </p>
+
+    <div class="overflow-x-auto mb-6">
+      <table class="min-w-full text-sm border border-gray-200 rounded-lg bg-white">
+        <thead class="bg-gray-50 text-left">
+          <tr>
+            <th class="px-3 py-2 font-medium text-gray-500">Line</th>
+            {{range .Columns}}<th class="px-3 py-2 font-medium text-gray-500">{{.}}</th>{{end}}
+            <th class="px-3 py-2 font-medium text-gray-500">Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Rows}}
+            <tr class="border-t border-gray-100 {{if not .Ready}}bg-gray-50 text-gray-500{{end}}">
+              <td class="px-3 py-2 tabular-nums">{{.Line}}</td>
+              <td class="px-3 py-2">{{.ParentName}}</td>
+              <td class="px-3 py-2">{{.ParentEmail}}</td>
+              <td class="px-3 py-2">{{.ParentPhone}}</td>
+              <td class="px-3 py-2">{{.ChildName}}</td>
+              <td class="px-3 py-2">{{if .ChildAge}}{{.ChildAge}}{{end}}</td>
+              <td class="px-3 py-2">{{.ChildGrade}}</td>
+              <td class="px-3 py-2">{{.ChildSchool}}</td>
+              <td class="px-3 py-2">
+                {{if .Ready}}
+                  <span class="text-green-800">Will be added</span>
+                {{else if .Duplicate}}
+                  <span class="text-gray-600">Skipped — {{.Skip}}</span>
+                {{else}}
+                  <span class="text-red-800">Skipped — {{.Skip}}</span>
+                {{end}}
+              </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  {{end}}
+
+  <div class="flex flex-wrap items-center gap-3">
+    {{if .Ready}}
+      <form method="post" action="/admin/prospect-import">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="hidden" name="rows" value="{{.Raw}}">
+        <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">
+          Add {{.Ready}} {{if eq .Ready 1}}family{{else}}families{{end}}
+        </button>
+      </form>
+    {{end}}
+    <a href="/admin/prospects" class="text-sm underline" style="color: var(--unit-color);">
+      Back without adding anyone
+    </a>
+  </div>
+
+  {{/* The paste, so a leader can fix a column and try again without
+       going back to their spreadsheet and starting over. */}}
+  <details class="mt-8 max-w-3xl">
+    <summary class="cursor-pointer text-sm font-medium">Edit the list and read it again</summary>
+    <form method="post" action="/admin/prospect-import/preview" class="mt-3">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <textarea name="rows" rows="10"
+                class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono">{{.Raw}}</textarea>
+      <p class="text-xs text-gray-500 mt-1 mb-2">
+        One family per line, columns in this order: {{range $i, $c := .Columns}}{{if $i}}, {{end}}{{$c}}{{end}}.
+        Only the first four are needed.
+      </p>
+      <button type="submit" class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50">
+        Read it again
+      </button>
+    </form>
+  </details>
+{{end}}

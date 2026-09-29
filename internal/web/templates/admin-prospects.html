@@ -35,6 +35,99 @@
     <a href="/admin/settings" class="underline" style="color: var(--unit-color);">Site Settings</a> page.
   </p>
 
+  {{if .AddError}}
+    <div class="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900 mb-4 max-w-2xl">
+      {{.AddError}}
+    </div>
+  {{end}}
+
+  {{/* Adding by hand, collapsed: most visits to this page are to work
+       through enquiries that arrived on their own, and this should not
+       be the first thing in the way of that. */}}
+  <section class="mb-8 rounded-lg border border-gray-200 bg-white p-4">
+    <details>
+      <summary class="cursor-pointer select-none">
+        <span class="text-lg font-semibold align-middle">Add families yourself</span>
+        <span class="ml-2 align-middle text-sm text-gray-500">from a sign-up sheet or a list</span>
+      </summary>
+
+      <p class="text-sm text-gray-600 mt-3 mb-4 max-w-2xl">
+        For names that didn't come through the form — a school recruiting night, a list from the council, someone
+        who asked you in the car park. They're tracked exactly like an enquiry, and
+        <strong>nothing is emailed to them</strong>: they haven't asked the {{if eq .Unit.UnitType "pack"}}pack{{else}}troop{{end}}
+        for anything, so an automatic reply would be the first they'd hear of it. Write to them yourself, or include
+        them in an email campaign later — those carry an unsubscribe link.
+      </p>
+
+      <form method="post" action="/admin/prospects/add" class="max-w-2xl mb-6">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        {{if .ShowAll}}<input type="hidden" name="all" value="1">{{end}}
+        {{if .Filter}}<input type="hidden" name="category_filter" value="{{.Filter}}">{{end}}
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1" for="add-parent-name">Parent's name</label>
+            <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                   id="add-parent-name" name="parent_name" maxlength="120" required>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1" for="add-parent-email">Parent's email</label>
+            <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="email"
+                   id="add-parent-email" name="parent_email" maxlength="200" required>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1" for="add-parent-phone">Phone</label>
+            <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                   id="add-parent-phone" name="parent_phone" maxlength="40">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1" for="add-child-name">Child's name</label>
+            <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                   id="add-child-name" name="child_name" maxlength="120" required>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1" for="add-child-age">Age</label>
+            <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                   inputmode="numeric" id="add-child-age" name="child_age" maxlength="2">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1" for="add-child-grade">Grade</label>
+            <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                   id="add-child-grade" name="child_grade" maxlength="40">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xs text-gray-500 mb-1" for="add-child-school">School</label>
+            <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                   id="add-child-school" name="child_school" maxlength="120">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xs text-gray-500 mb-1" for="add-message">Where they came from</label>
+            <input class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text"
+                   id="add-message" name="message" maxlength="2000"
+                   placeholder="Sign-up sheet, Riverside Elementary, 14 Sep">
+          </div>
+        </div>
+        <button type="submit" class="mt-3 rounded-md px-4 py-2 text-sm btn-accent">Add this family</button>
+      </form>
+
+      <div class="max-w-2xl border-t border-gray-100 pt-4">
+        <h3 class="font-medium text-sm mb-1">Or paste a list</h3>
+        <p class="text-xs text-gray-500 mb-2">
+          One family per line, straight out of a spreadsheet or separated by commas. Columns in this order:
+          <strong>parent name, parent email, phone, child name, age, grade, school</strong> — only the first
+          four are needed. You'll see what it read before anything is saved.
+        </p>
+        <form method="post" action="/admin/prospect-import/preview">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <textarea name="rows" rows="5" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
+                    placeholder="Jamie Rivera&#9;jamie@example.com&#9;555-0100&#9;Sam Rivera&#9;9&#9;4th&#9;Riverside Elementary"></textarea>
+          <button type="submit" class="mt-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50">
+            Read the list
+          </button>
+        </form>
+      </div>
+    </details>
+  </section>
+
   <section class="mb-8 rounded-lg border border-gray-200 bg-white p-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
       {{/* The accordion. Collapsed, this is one line saying how much
@@ -229,6 +322,10 @@
             </span>
             {{if .CategoryLabel}}
               <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 text-xs">{{.CategoryLabel}}</span>
+            {{end}}
+            {{if .AddedByLeader}}
+              <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 text-xs"
+                    title="Added here rather than through the join form, so nothing was emailed to them automatically.">Added by hand</span>
             {{end}}
           </div>
 

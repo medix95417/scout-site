@@ -60,7 +60,12 @@ type Prospect struct {
 	// what the public form produces: a category is a leader's decision,
 	// so nothing is guessed on their behalf.
 	Category string
-	Notes    string
+	// Source is how this enquiry arrived: SourceForm when a family
+	// filled in the public form, SourceLeader when someone entered it
+	// on the admin page. It decides whether an automatic reply is
+	// appropriate — see migration 0049.
+	Source string
+	Notes  string
 	// EmailOptOut is set when this family has asked not to be included in
 	// recruiting emails — by themselves through the unsubscribe link, or
 	// by a leader on the admin page. Either way RecipientsForStatuses
@@ -125,7 +130,19 @@ type New struct {
 	ChildGrade  string
 	ChildSchool string
 	Message     string
+	// Source defaults to SourceForm when empty — see sourceOrForm.
+	Source string
 }
+
+// How an enquiry arrived. See migration 0049.
+const (
+	// SourceForm: a family filled in the public join form.
+	SourceForm = "form"
+	// SourceLeader: someone entered it on the admin page, from a list
+	// or a conversation. Nobody at this address has asked the unit for
+	// anything, which is why nothing is emailed to them automatically.
+	SourceLeader = "leader"
+)
 
 // Create validates and stores an enquiry.
 //
@@ -133,7 +150,13 @@ type New struct {
 // a prospect is that nobody involved is one yet. The row's own
 // created_at is the record that it arrived; everything a leader does to
 // it afterwards is audited by UpdateStatus.
-func Create(ctx context.Context, pool *pgxpool.Pool, in New) (Prospect, error) {
+// Validate checks an enquiry and normalises its whitespace, returning
+// the cleaned-up value.
+//
+// Split out of Create so the bulk-paste preview can hold a row to
+// exactly the rules the save will apply — a preview that promises a row
+// the save then refuses is worse than no preview at all.
+func Validate(in New) (New, error) {
 	in.ParentName = strings.TrimSpace(in.ParentName)
 	in.ParentEmail = strings.TrimSpace(in.ParentEmail)
 	in.ParentPhone = strings.TrimSpace(in.ParentPhone)
@@ -144,47 +167,96 @@ func Create(ctx context.Context, pool *pgxpool.Pool, in New) (Prospect, error) {
 
 	switch {
 	case in.ParentName == "":
-		return Prospect{}, fmt.Errorf("%w: your name is required", ErrInvalid)
+		return in, fmt.Errorf("%w: your name is required", ErrInvalid)
 	case len(in.ParentName) > MaxName:
-		return Prospect{}, fmt.Errorf("%w: that name is too long", ErrInvalid)
+		return in, fmt.Errorf("%w: that name is too long", ErrInvalid)
 	case in.ParentEmail == "" || !strings.Contains(in.ParentEmail, "@"):
-		return Prospect{}, fmt.Errorf("%w: a valid email address is required so we can reply", ErrInvalid)
+		return in, fmt.Errorf("%w: a valid email address is required so we can reply", ErrInvalid)
 	case len(in.ParentEmail) > MaxEmail:
-		return Prospect{}, fmt.Errorf("%w: that email address is too long", ErrInvalid)
+		return in, fmt.Errorf("%w: that email address is too long", ErrInvalid)
 	case len(in.ParentPhone) > MaxPhone:
-		return Prospect{}, fmt.Errorf("%w: that phone number is too long", ErrInvalid)
+		return in, fmt.Errorf("%w: that phone number is too long", ErrInvalid)
 	case in.ChildName == "":
-		return Prospect{}, fmt.Errorf("%w: your child's name is required", ErrInvalid)
+		return in, fmt.Errorf("%w: your child's name is required", ErrInvalid)
 	case len(in.ChildName) > MaxName:
-		return Prospect{}, fmt.Errorf("%w: that name is too long", ErrInvalid)
+		return in, fmt.Errorf("%w: that name is too long", ErrInvalid)
 	case in.ChildAge != nil && (*in.ChildAge < MinAge || *in.ChildAge > MaxAge):
-		return Prospect{}, fmt.Errorf("%w: enter an age between %d and %d, or leave it blank", ErrInvalid, MinAge, MaxAge)
+		return in, fmt.Errorf("%w: enter an age between %d and %d, or leave it blank", ErrInvalid, MinAge, MaxAge)
 	case len(in.ChildGrade) > MaxGrade:
-		return Prospect{}, fmt.Errorf("%w: that grade is too long", ErrInvalid)
+		return in, fmt.Errorf("%w: that grade is too long", ErrInvalid)
 	case len(in.ChildSchool) > MaxSchool:
-		return Prospect{}, fmt.Errorf("%w: that school name is too long", ErrInvalid)
+		return in, fmt.Errorf("%w: that school name is too long", ErrInvalid)
 	case len(in.Message) > MaxMessage:
-		return Prospect{}, fmt.Errorf("%w: please keep the message under %d characters", ErrInvalid, MaxMessage)
+		return in, fmt.Errorf("%w: please keep the message under %d characters", ErrInvalid, MaxMessage)
+	}
+	return in, nil
+}
+
+func Create(ctx context.Context, pool *pgxpool.Pool, in New) (Prospect, error) {
+	in, err := Validate(in)
+	if err != nil {
+		return Prospect{}, err
 	}
 
 	return scan(pool.QueryRow(ctx, `
 		INSERT INTO prospects (unit_id, parent_name, parent_email, parent_phone,
-			child_name, child_age, child_grade, child_school, message)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			child_name, child_age, child_grade, child_school, message, source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING `+columns,
 		in.UnitID, in.ParentName, in.ParentEmail, in.ParentPhone,
-		in.ChildName, in.ChildAge, in.ChildGrade, in.ChildSchool, in.Message))
+		in.ChildName, in.ChildAge, in.ChildGrade, in.ChildSchool, in.Message,
+		sourceOrForm(in.Source)))
+}
+
+// sourceOrForm defaults an unset Source to the form, so a caller that
+// predates this field — or simply doesn't care — still stores something
+// the CHECK accepts and the page can read.
+func sourceOrForm(v string) string {
+	if v == SourceLeader {
+		return SourceLeader
+	}
+	return SourceForm
+}
+
+// AddByLeader records an enquiry someone entered by hand, and audits it
+// against them.
+//
+// Separate from Create for two reasons, both about the difference
+// between a family writing in and a name off a list.
+//
+// It is audited, where Create deliberately is not: a form submission
+// has no actor — the whole point of a prospect is that nobody involved
+// is a member — but a leader typing someone in is an act by a known
+// person, and "who put this family on our list, and when" is the first
+// question anyone asks when a name turns out not to want to be there.
+//
+// And it stores SourceLeader, which is what keeps the automatic reply
+// away from them. Nobody at this address asked the unit for anything.
+func AddByLeader(ctx context.Context, pool *pgxpool.Pool, in New, actorID string) (Prospect, error) {
+	in.Source = SourceLeader
+	p, err := Create(ctx, pool, in)
+	if err != nil {
+		return Prospect{}, err
+	}
+	audit.Log(ctx, pool, audit.Entry{
+		EntityType: "prospect",
+		EntityID:   p.ID,
+		ActorID:    &actorID,
+		Action:     "create",
+		After:      p,
+	})
+	return p, nil
 }
 
 const columns = `id::text, unit_id::text, parent_name, parent_email, parent_phone,
-	child_name, child_age, child_grade, child_school, message, status, category, notes,
+	child_name, child_age, child_grade, child_school, message, status, category, source, notes,
 	email_opt_out, opt_out_at, created_at, updated_at`
 
 func scan(row pgx.Row) (Prospect, error) {
 	var p Prospect
 	err := row.Scan(&p.ID, &p.UnitID, &p.ParentName, &p.ParentEmail, &p.ParentPhone,
 		&p.ChildName, &p.ChildAge, &p.ChildGrade, &p.ChildSchool, &p.Message,
-		&p.Status, &p.Category, &p.Notes, &p.EmailOptOut, &p.OptOutAt, &p.CreatedAt, &p.UpdatedAt)
+		&p.Status, &p.Category, &p.Source, &p.Notes, &p.EmailOptOut, &p.OptOutAt, &p.CreatedAt, &p.UpdatedAt)
 	return p, err
 }
 
