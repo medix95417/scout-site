@@ -35,7 +35,7 @@ func prospectsPage(total int, showAllCampaigns bool, templates []emailtemplate.T
 	return prospectsPageData{
 		baseData:       testBase("Prospects"),
 		prospectsView:  newProspectsView(campaignHistory(total), false, showAllCampaigns),
-		Statuses:       prospect.Statuses,
+		Statuses:       prospect.DefaultStatuses(),
 		SavedTemplates: templates,
 	}
 }
@@ -210,7 +210,7 @@ func TestTheTwoViewTogglesDoNotClobberEachOther(t *testing.T) {
 	data := prospectsPageData{
 		baseData:      testBase("Prospects"),
 		prospectsView: newProspectsView(campaignHistory(9), true, false),
-		Statuses:      prospect.Statuses,
+		Statuses:      prospect.DefaultStatuses(),
 		ShowAll:       true,
 	}
 	if data.ToggleClosedURL != "/admin/prospects" {

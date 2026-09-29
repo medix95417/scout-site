@@ -29,6 +29,28 @@ tagged commit with an accurate date.
 
 ### Added
 
+- **A unit's prospect statuses are its own now, and there is a second
+  list to sort by.** The five stages an enquiry moved through were the
+  same five for every unit forever — a Troop wanting "Left voicemail"
+  between "New enquiry" and "Contacted" needed a code change. Under
+  "Statuses & categories" on the Prospects page a leader can now add
+  their own, rename them, reorder them, and choose which ones count as
+  dealt with — the thing that decides whether a family still shows as
+  needing a reply, which used to be "joined or declined" for everybody.
+
+  Alongside it, prospects have an optional **category**: a second,
+  independent way to file them, for what doesn't change as a family
+  progresses — which programme they asked about, how they heard of the
+  unit. Nothing is categorised until a leader says so, the join form
+  never guesses one, and the Prospects page can show one category at a
+  time, or just the ones nobody has filed yet.
+
+  Neither list can be deleted from, on purpose. A stage a unit stops
+  using is still written on the families who were at it and in the
+  audience of every message already sent to it, so **retiring** is how
+  a label leaves: it keeps its name everywhere it was used and simply
+  stops being offered for anything new.
+
 - **The homepage's upcoming events are links now.** Each one opens the
   calendar page at that event. The whole card is the link rather than
   just the title, so it is a thumb-sized target on a phone, and it

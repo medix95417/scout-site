@@ -176,6 +176,8 @@ const entityScopeSQL = `
 	UNION
 	SELECT id FROM prospect_campaigns WHERE unit_id = $1
 	UNION
+	SELECT id FROM prospect_labels WHERE unit_id = $1
+	UNION
 	SELECT id FROM email_templates WHERE unit_id = $1
 	UNION
 	-- A built-in role override is logged against the unit itself: the

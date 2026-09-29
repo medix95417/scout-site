@@ -174,8 +174,9 @@ type Handlers struct {
 
 	helpPage *template.Template
 
-	joinPage      *template.Template
-	prospectsPage *template.Template
+	joinPage           *template.Template
+	prospectsPage      *template.Template
+	prospectLabelsPage *template.Template
 
 	campaignForm *template.Template
 	campaignView *template.Template
@@ -594,6 +595,9 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.unsubscribed, err = parse("unsubscribed.html"); err != nil {
 		return nil, err
 	}
+	if h.prospectLabelsPage, err = parse("admin-prospect-labels.html"); err != nil {
+		return nil, err
+	}
 	if h.prospectsPage, err = parse("admin-prospects.html"); err != nil {
 		return nil, err
 	}
@@ -729,6 +733,20 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/prospect-campaigns/{id}", h.AdminCampaignUpdate)
 	mux.HandleFunc("POST /admin/prospect-campaigns/{id}/send", h.AdminCampaignSend)
 	mux.HandleFunc("POST /admin/prospect-campaigns/{id}/delete", h.AdminCampaignDelete)
+	// The unit's own status and category lists (migration 0048).
+	//
+	// On their own path for the same reason the campaigns above are:
+	// "/admin/prospects/labels/{id}/rename" is fine, but the shorter
+	// forms this needs would sit ambiguously beside
+	// "/admin/prospects/{id}/delete", and an ambiguous pair is a panic
+	// at registration rather than a 404 at request time.
+	mux.HandleFunc("GET /admin/prospect-labels", h.ProspectLabels)
+	mux.HandleFunc("POST /admin/prospect-labels", h.ProspectLabelCreate)
+	mux.HandleFunc("POST /admin/prospect-labels/{id}/rename", h.ProspectLabelRename)
+	mux.HandleFunc("POST /admin/prospect-labels/{id}/closed", h.ProspectLabelClosed)
+	mux.HandleFunc("POST /admin/prospect-labels/{id}/retire", h.ProspectLabelRetire)
+	mux.HandleFunc("POST /admin/prospect-labels/{id}/move", h.ProspectLabelMove)
+
 	mux.HandleFunc("GET /admin/prospect-templates/{id}", h.AdminCampaignTemplate)
 	mux.HandleFunc("POST /admin/prospect-templates/{id}/delete", h.AdminCampaignTemplateDelete)
 

@@ -61,6 +61,7 @@ var entityTypeTable = map[string]string{
 	"prospect":              "prospects",
 	"calendar_feed":         "calendar_feeds",
 	"prospect_campaign":     "prospect_campaigns",
+	"prospect_label":        "prospect_labels",
 	"email_template":        "email_templates",
 	"system_role":           "units", // units.id — a built-in role has no id of its own
 }

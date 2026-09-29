@@ -17,3 +17,20 @@ VALUES
     ('troop-47', 'Troop 47', 'troop', 'troop.47-yonkers.org', '#243E26', '#CE1126', '/static/logos/scouts-bsa-trademark.png'),
     ('pack-47',  'Pack 47',  'pack',  'pack.47-yonkers.org',  '#003F87', '#FDC116', '/static/logos/cub-scouts-trademark.png')
 ON CONFLICT (hostname) DO NOTHING;
+
+-- The default prospect workflow, one row per unit. Same five statuses
+-- the prospect_status enum held before migration 0048 moved them here
+-- so a unit can add its own; see that file for why. No categories are
+-- seeded — that list starts empty on purpose, since what a unit wants
+-- to file prospects by is entirely local to it.
+INSERT INTO prospect_labels (unit_id, kind, value, label, closed, sort_order)
+SELECT u.id, 'status', d.value, d.label, d.closed, d.sort_order
+FROM units u
+CROSS JOIN (VALUES
+    ('new',       'New enquiry',       false, 1),
+    ('contacted', 'Contacted',         false, 2),
+    ('visited',   'Visited a meeting', false, 3),
+    ('joined',    'Joined',            true,  4),
+    ('declined',  'Not joining',       true,  5)
+) AS d(value, label, closed, sort_order)
+ON CONFLICT (unit_id, kind, value) DO NOTHING;

@@ -119,8 +119,15 @@ func (h *Handlers) renderCampaignForm(w http.ResponseWriter, r *http.Request, un
 		selected[s] = true
 	}
 
-	choices := make([]campaignStatusChoice, 0, len(prospect.Statuses))
-	for _, s := range prospect.Statuses {
+	// This unit's own live statuses. A retired one is not offered as a
+	// target: it is not a group the unit is still recruiting from, and
+	// a draft that already named one has it dropped on save.
+	statuses, err := prospect.ListLabels(r.Context(), h.Pool, unit.ID, prospect.KindStatus, false)
+	if err != nil {
+		log.Printf("web: listing prospect statuses: %v", err)
+	}
+	choices := make([]campaignStatusChoice, 0, len(statuses))
+	for _, s := range statuses {
 		n, err := prospect.RecipientsForStatuses(r.Context(), h.Pool, unit.ID, []string{s.Value})
 		if err != nil {
 			log.Printf("web: counting prospects for status %s: %v", s.Value, err)
@@ -331,6 +338,33 @@ func (h *Handlers) AdminCampaignSend(w http.ResponseWriter, r *http.Request) {
 
 // AdminCampaignView is the record of a campaign: what was sent, to whom,
 // and whether it arrived.
+// campaignViewData is what admin-prospect-campaign-view.html renders.
+//
+// A named type rather than a struct literal inside the handler, for the
+// reason prospectsPageData gives: a render test can only build an
+// anonymous struct by declaring a copy, and the copy is what drifts —
+// as it did the moment the audience stopped being derivable from the
+// campaign alone.
+type campaignViewData struct {
+	baseData
+	Campaign prospect.Campaign
+	// Body is the exact HTML that was sent, shown in a sandboxed
+	// iframe (see the template) rather than rendered into this page.
+	// A plain string, not template.HTML: it goes into a srcdoc
+	// attribute, and html/template's attribute escaping is exactly
+	// what is wanted there.
+	Body       string
+	Recipients []campaignRecipientRow
+	Delivered  int
+	Failed     int
+	SentOn     string
+	// Audience is who this went to, already rendered: the campaign
+	// stores status values, and turning those into names needs the
+	// unit's list — retired entries included, since a campaign
+	// outlives the statuses it targeted.
+	Audience string
+}
+
 func (h *Handlers) AdminCampaignView(w http.ResponseWriter, r *http.Request) {
 	unit, _, ok := h.requireProspectManager(w, r, "/admin/prospects")
 	if !ok {
@@ -366,20 +400,12 @@ func (h *Handlers) AdminCampaignView(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 
-	data := struct {
-		baseData
-		Campaign prospect.Campaign
-		// Body is the exact HTML that was sent, shown in a sandboxed
-		// iframe (see the template) rather than rendered into this page.
-		// A plain string, not template.HTML: it goes into a srcdoc
-		// attribute, and html/template's attribute escaping is exactly
-		// what is wanted there.
-		Body       string
-		Recipients []campaignRecipientRow
-		Delivered  int
-		Failed     int
-		SentOn     string
-	}{
+	statusText, err := prospect.LabelText(r.Context(), h.Pool, unit.ID, prospect.KindStatus)
+	if err != nil {
+		log.Printf("web: loading prospect status names: %v", err)
+	}
+
+	data := campaignViewData{
 		baseData:   h.base(r, "Message to Prospects"),
 		Campaign:   c,
 		Body:       c.Body,
@@ -387,6 +413,7 @@ func (h *Handlers) AdminCampaignView(w http.ResponseWriter, r *http.Request) {
 		Delivered:  delivered,
 		Failed:     len(rows) - delivered,
 		SentOn:     newsletterSentOn(c.SentAt),
+		Audience:   c.StatusLabels(statusText),
 	}
 	h.render(w, h.campaignView, data)
 }

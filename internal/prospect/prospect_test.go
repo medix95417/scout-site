@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -53,6 +54,12 @@ func newUnit(t *testing.T, pool *pgxpool.Pool) string {
 	).Scan(&id); err != nil {
 		t.Fatalf("creating test unit: %v", err)
 	}
+	// A real unit gets the default statuses from migration 0048 or from
+	// seed.sql; one conjured straight into the table gets them here, so
+	// a test isn't working against a unit with no workflow at all.
+	if err := EnsureDefaults(context.Background(), pool, id); err != nil {
+		t.Fatalf("seeding default statuses: %v", err)
+	}
 	return id
 }
 
@@ -77,7 +84,9 @@ func TestCreate_StoresAnEnquiry(t *testing.T) {
 	if p.Status != StatusNew {
 		t.Errorf("a new enquiry should start as %q, got %q", StatusNew, p.Status)
 	}
-	if !p.Open() {
+	// "Open" is now whichever statuses the unit hasn't marked closed,
+	// so it is asked of the list rather than of the row.
+	if !inOpenList(t, ctx, pool, unitID, p.ID) {
 		t.Error("a new enquiry should count as open")
 	}
 	if p.ChildAge == nil || *p.ChildAge != 9 {
@@ -155,14 +164,14 @@ func TestUpdateStatus_TracksAndAudits(t *testing.T) {
 		t.Fatalf("creating a member: %v", err)
 	}
 
-	updated, err := UpdateStatus(ctx, pool, unitID, p.ID, StatusContacted, "Called 3 Sep, coming to a meeting", actorID)
+	updated, err := UpdateStatus(ctx, pool, unitID, p.ID, StatusContacted, "", "Called 3 Sep, coming to a meeting", actorID)
 	if err != nil {
 		t.Fatalf("UpdateStatus: %v", err)
 	}
 	if updated.Status != StatusContacted || updated.Notes == "" {
 		t.Fatalf("status/notes didn't stick: %+v", updated)
 	}
-	if !updated.Open() {
+	if !inOpenList(t, ctx, pool, unitID, p.ID) {
 		t.Error("a contacted enquiry is still open — it hasn't been resolved either way")
 	}
 
@@ -177,9 +186,13 @@ func TestUpdateStatus_TracksAndAudits(t *testing.T) {
 	}
 
 	// Joined and declined both close it — the open list is "still needs
-	// someone", not "hasn't joined".
+	// someone", not "hasn't joined". Which statuses close an enquiry is
+	// a per-unit flag now, and these two carry it by default.
 	for _, closed := range []string{StatusJoined, StatusDeclined} {
-		if Open(closed) {
+		if _, err := UpdateStatus(ctx, pool, unitID, p.ID, closed, "", "", actorID); err != nil {
+			t.Fatalf("UpdateStatus(%q): %v", closed, err)
+		}
+		if inOpenList(t, ctx, pool, unitID, p.ID) {
 			t.Errorf("%q should not count as open", closed)
 		}
 	}
@@ -193,7 +206,7 @@ func TestUpdateStatus_RejectsAnUnknownStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if _, err := UpdateStatus(ctx, pool, unitID, p.ID, "definitely-joining", "", ""); !errors.Is(err, ErrInvalid) {
+	if _, err := UpdateStatus(ctx, pool, unitID, p.ID, "definitely-joining", "", "", ""); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("expected ErrInvalid for an unknown status, got %v", err)
 	}
 }
@@ -214,7 +227,7 @@ func TestScopedToItsUnit(t *testing.T) {
 	if _, err := Get(ctx, pool, theirs, p.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("another unit should not be able to read this enquiry, got %v", err)
 	}
-	if _, err := UpdateStatus(ctx, pool, theirs, p.ID, StatusJoined, "", ""); !errors.Is(err, ErrNotFound) {
+	if _, err := UpdateStatus(ctx, pool, theirs, p.ID, StatusJoined, "", "", ""); !errors.Is(err, ErrNotFound) {
 		t.Errorf("another unit should not be able to update it, got %v", err)
 	}
 	if err := Delete(ctx, pool, theirs, p.ID, ""); !errors.Is(err, ErrNotFound) {
@@ -275,41 +288,75 @@ func TestListForUnit_OpenOnlyFiltersResolved(t *testing.T) {
 	}
 }
 
-// TestStatusesMatchTheDatabaseEnum guards the drift that would otherwise
-// only show up as a failed UPDATE in production: Statuses here and the
-// prospect_status enum in migration 0042 have to name the same set.
-func TestStatusesMatchTheDatabaseEnum(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
+// The default statuses are written down in three places — this
+// package, migration 0048 and seed.sql — and they have to agree.
+//
+// This replaces a test that compared the Go list against the
+// prospect_status enum. That enum is gone (the statuses are per-unit
+// rows now), but the drift it guarded only moved: a unit created by
+// the migration, a unit created by the seed, and a unit given its
+// defaults at runtime must all start with the same workflow, or which
+// one you are looking at depends on how your database came to exist.
+func TestDefaultStatusesAgreeEverywhere(t *testing.T) {
+	inGo := map[string]string{}
+	for _, l := range DefaultStatuses() {
+		inGo[l.Value] = l.Label
+	}
+	if len(inGo) == 0 {
+		t.Fatal("there are no default statuses at all")
+	}
 
-	rows, err := pool.Query(ctx, `SELECT unnest(enum_range(NULL::prospect_status))::text`)
+	for _, file := range []string{
+		"../db/migrations/0048_prospect_labels.sql",
+		"../db/migrations/seed.sql",
+	} {
+		body, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("reading %s: %v", file, err)
+		}
+		found := defaultStatusRows.FindAllStringSubmatch(string(body), -1)
+		if len(found) == 0 {
+			t.Errorf("%s no longer seeds any default statuses", file)
+			continue
+		}
+		inSQL := map[string]string{}
+		for _, m := range found {
+			inSQL[m[1]] = m[2]
+		}
+		for value, label := range inGo {
+			switch got, ok := inSQL[value]; {
+			case !ok:
+				t.Errorf("%s doesn't seed the default status %q", file, value)
+			case got != label:
+				t.Errorf("%s calls %q %q, this package calls it %q", file, value, got, label)
+			}
+		}
+		for value := range inSQL {
+			if _, ok := inGo[value]; !ok {
+				t.Errorf("%s seeds %q, which this package doesn't know about", file, value)
+			}
+		}
+	}
+}
+
+// defaultStatusRows matches a ('value', 'Label', closed, order) tuple in
+// the VALUES block both SQL files use to seed the defaults.
+var defaultStatusRows = regexp.MustCompile(`\('([a-z_-]+)',\s*'([^']+)',\s*(?:true|false),\s*\d+\)`)
+
+// inOpenList reports whether a prospect shows in the default view — the
+// one filtered to enquiries still wanting a reply. Which statuses those
+// are is the unit's own choice now (prospect_labels.closed), so this is
+// a database question and no longer a property of the row.
+func inOpenList(t *testing.T, ctx context.Context, pool *pgxpool.Pool, unitID, id string) bool {
+	t.Helper()
+	open, err := ListForUnit(ctx, pool, unitID, true)
 	if err != nil {
-		t.Fatalf("reading the enum: %v", err)
+		t.Fatalf("listing open prospects: %v", err)
 	}
-	defer rows.Close()
-
-	inDB := map[string]bool{}
-	for rows.Next() {
-		var v string
-		if err := rows.Scan(&v); err != nil {
-			t.Fatalf("scanning: %v", err)
-		}
-		inDB[v] = true
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterating: %v", err)
-	}
-
-	inGo := map[string]bool{}
-	for _, s := range Statuses {
-		inGo[s.Value] = true
-		if !inDB[s.Value] {
-			t.Errorf("status %q is offered in the UI but isn't in the prospect_status enum", s.Value)
+	for _, p := range open {
+		if p.ID == id {
+			return true
 		}
 	}
-	for v := range inDB {
-		if !inGo[v] {
-			t.Errorf("status %q exists in the database but is never offered, so nothing can ever reach it", v)
-		}
-	}
+	return false
 }

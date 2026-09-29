@@ -128,7 +128,7 @@ func TestAutoReplyFallsBackToTheDefaults(t *testing.T) {
 func TestProspectsPageRendersTheAutoEmailAccordionClosed(t *testing.T) {
 	data := prospectsPageData{
 		baseData:  testBase("Prospects"),
-		Statuses:  prospect.Statuses,
+		Statuses:  prospect.DefaultStatuses(),
 		AutoReply: autoReplyView{Subject: "Thanks!", Body: "Hello", MailerReady: true},
 	}
 	out := renderPage(t, "admin-prospects.html", data)
@@ -166,7 +166,7 @@ func TestProspectsPageRendersTheAutoEmailAccordionClosed(t *testing.T) {
 func TestProspectsPageSaysWhenEmailIsntConfigured(t *testing.T) {
 	data := prospectsPageData{
 		baseData:  testBase("Prospects"),
-		Statuses:  prospect.Statuses,
+		Statuses:  prospect.DefaultStatuses(),
 		AutoReply: autoReplyView{Subject: "s", Body: "b", Enabled: true, MailerReady: false},
 	}
 	out := renderPage(t, "admin-prospects.html", data)

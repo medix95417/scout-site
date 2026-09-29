@@ -245,6 +245,56 @@ func (h *Handlers) notifyProspect(r *http.Request, unit units.Unit, p prospect.P
 
 // --- Leader-facing tracking ------------------------------------------------
 
+// prospectRow is one enquiry as the page shows it: the record, plus
+// the three things that used to be methods on it and are now per-unit
+// questions — what its status and category read as, and whether it
+// still wants a reply.
+type prospectRow struct {
+	prospect.Prospect
+	StatusLabel   string
+	CategoryLabel string
+	Open          bool
+}
+
+// splitLabels takes a unit's full list and returns the live entries
+// (what the pickers offer), the value-to-name map for every entry
+// retired ones included (what rendering a stored value needs), and the
+// set of values that close an enquiry.
+func splitLabels(all []prospect.Label) (live []prospect.Label, text map[string]string, closed map[string]bool) {
+	live = make([]prospect.Label, 0, len(all))
+	text = make(map[string]string, len(all))
+	closed = make(map[string]bool)
+	for _, l := range all {
+		text[l.Value] = l.Label
+		if l.Closed {
+			closed[l.Value] = true
+		}
+		if !l.Retired() {
+			live = append(live, l)
+		}
+	}
+	return live, text, closed
+}
+
+// FilterURL is this page with the category filter set to one value,
+// keeping whatever else the leader had switched on. A method on the
+// data rather than a precomputed list because the template needs one
+// per category plus two fixed ones, and building them there would mean
+// string-concatenating query strings in a template.
+func (d prospectsPageData) FilterURL(category string) string {
+	q := url.Values{}
+	if d.ShowAll {
+		q.Set("all", "1")
+	}
+	if category != "" {
+		q.Set("category", category)
+	}
+	if len(q) == 0 {
+		return "/admin/prospects"
+	}
+	return "/admin/prospects?" + q.Encode()
+}
+
 // prospectsPageData is what admin-prospects.html renders. A named type
 // rather than a struct literal inside the handler so a render test can
 // build one — an anonymous struct can only be tested by declaring a copy
@@ -310,8 +360,16 @@ func newProspectsView(all []campaignRow, showClosed, showAllCampaigns bool) pros
 type prospectsPageData struct {
 	baseData
 	prospectsView
-	Prospects      []prospect.Prospect
-	Statuses       []prospect.StatusOption
+	Prospects []prospectRow
+	// The unit's own workflow and filing lists — live entries only,
+	// since these drive the pickers. StatusText and CategoryText cover
+	// retired ones too, for rendering a value already stored.
+	Statuses     []prospect.Label
+	Categories   []prospect.Label
+	StatusText   map[string]string
+	CategoryText map[string]string
+	// Filter is the category currently filtered to, "" for all.
+	Filter         string
 	ShowAll        bool
 	OpenCount      int
 	OptedOutCount  int
@@ -347,14 +405,50 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A unit with no statuses at all would render an empty dropdown and
+	// a page nobody can use. Both the migration and the seed put the
+	// defaults in; this covers anything that slipped between them.
+	if err := prospect.EnsureDefaults(r.Context(), h.Pool, unit.ID); err != nil {
+		log.Printf("web: ensuring default prospect statuses: %v", err)
+	}
+	// Loaded with the retired ones and split here, rather than queried
+	// twice: the pickers want only what is still offered, while naming
+	// and colouring a value already on a prospect needs the withdrawn
+	// ones too.
+	allStatuses, err := prospect.ListLabels(r.Context(), h.Pool, unit.ID, prospect.KindStatus, true)
+	if err != nil {
+		log.Printf("web: listing prospect statuses: %v", err)
+	}
+	allCategories, err := prospect.ListLabels(r.Context(), h.Pool, unit.ID, prospect.KindCategory, true)
+	if err != nil {
+		log.Printf("web: listing prospect categories: %v", err)
+	}
+	statuses, statusText, closed := splitLabels(allStatuses)
+	categories, categoryText, _ := splitLabels(allCategories)
+
 	showAll := r.URL.Query().Get("all") == "1"
 	showAllCampaigns := r.URL.Query().Get("campaigns") == "all"
+	filter := r.URL.Query().Get("category")
 	list, err := prospect.ListForUnit(r.Context(), h.Pool, unit.ID, !showAll)
 	if err != nil {
 		log.Printf("web: listing prospects: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	// Filtered here rather than in SQL: the list is already loaded, and
+	// a unit's enquiries number in the dozens, not the thousands.
+	// "none" is its own filter — "which of these has nobody filed yet"
+	// is the question a category list creates.
+	if filter != "" {
+		kept := make([]prospect.Prospect, 0, len(list))
+		for _, p := range list {
+			if (filter == "none" && p.Category == "") || p.Category == filter {
+				kept = append(kept, p)
+			}
+		}
+		list = kept
+	}
+
 	openCount, err := prospect.CountOpenForUnit(r.Context(), h.Pool, unit.ID)
 	if err != nil {
 		log.Printf("web: counting open prospects: %v", err)
@@ -372,7 +466,7 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 	for _, c := range campaigns {
 		campaignRows = append(campaignRows, campaignRow{
 			ID: c.ID, Subject: c.Subject, Status: c.Status, Sent: c.Sent(),
-			Audience: c.StatusLabels(), SentOn: newsletterSentOn(c.SentAt),
+			Audience: c.StatusLabels(statusText), SentOn: newsletterSentOn(c.SentAt),
 			RecipientCount: c.RecipientCount,
 		})
 	}
@@ -397,11 +491,28 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	rows := make([]prospectRow, 0, len(list))
+	for _, p := range list {
+		rows = append(rows, prospectRow{
+			Prospect:      p,
+			StatusLabel:   prospect.LabelIn(statusText, p.Status),
+			CategoryLabel: prospect.LabelIn(categoryText, p.Category),
+			// A status nobody has marked closed leaves the enquiry
+			// open — including one whose label has gone missing, which
+			// keeps it visible rather than quietly filed away.
+			Open: !closed[p.Status],
+		})
+	}
+
 	data := prospectsPageData{
 		baseData:       h.base(r, "Prospects"),
 		prospectsView:  newProspectsView(campaignRows, showAll, showAllCampaigns),
-		Prospects:      list,
-		Statuses:       prospect.Statuses,
+		Prospects:      rows,
+		Statuses:       statuses,
+		Categories:     categories,
+		StatusText:     statusText,
+		CategoryText:   categoryText,
+		Filter:         filter,
 		ShowAll:        showAll,
 		OpenCount:      openCount,
 		OptedOutCount:  optedOut,
@@ -487,7 +598,7 @@ func (h *Handlers) ProspectUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err := prospect.UpdateStatus(r.Context(), h.Pool, unit.ID, r.PathValue("id"),
-		r.FormValue("status"), r.FormValue("notes"), actor.ID)
+		r.FormValue("status"), r.FormValue("category"), r.FormValue("notes"), actor.ID)
 	if err != nil {
 		writeProspectError(w, err)
 		return
@@ -512,10 +623,19 @@ func (h *Handlers) ProspectDelete(w http.ResponseWriter, r *http.Request) {
 // prospectReturnTo keeps the leader on whichever filter they were
 // looking at rather than bouncing them back to the default view.
 func prospectReturnTo(r *http.Request) string {
+	q := url.Values{}
 	if r.FormValue("all") == "1" {
-		return "/admin/prospects?all=1"
+		q.Set("all", "1")
 	}
-	return "/admin/prospects"
+	// Saving one enquiry must not throw away the filter the leader was
+	// working through — they are usually going down a list.
+	if c := r.FormValue("category_filter"); c != "" {
+		q.Set("category", c)
+	}
+	if len(q) == 0 {
+		return "/admin/prospects"
+	}
+	return "/admin/prospects?" + q.Encode()
 }
 
 func writeProspectError(w http.ResponseWriter, err error) {

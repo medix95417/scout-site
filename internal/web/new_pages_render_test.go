@@ -88,15 +88,7 @@ func TestCampaignFormWarnsWhenMailIsOff(t *testing.T) {
 
 func TestCampaignViewRenders(t *testing.T) {
 	sent := time.Date(2026, 3, 4, 10, 0, 0, 0, time.UTC)
-	out := renderPage(t, "admin-prospect-campaign-view.html", struct {
-		baseData
-		Campaign   prospect.Campaign
-		Body       string
-		Recipients []campaignRecipientRow
-		Delivered  int
-		Failed     int
-		SentOn     string
-	}{
+	out := renderPage(t, "admin-prospect-campaign-view.html", campaignViewData{
 		baseData: testBase("Message to Prospects"),
 		Campaign: prospect.Campaign{
 			ID: "camp-1", Subject: "Come and visit", Status: "sent",
@@ -108,6 +100,7 @@ func TestCampaignViewRenders(t *testing.T) {
 			{Name: "Sam", Email: "sam@example.com", Err: "mailbox full"},
 		},
 		Delivered: 1, Failed: 1, SentOn: "Wed Mar 4, 2026 10:00 AM",
+		Audience: "New enquiry",
 	})
 
 	for _, want := range []string{"Hello there", "robin@example.com", "mailbox full", "New enquiry"} {
@@ -262,15 +255,7 @@ func TestSentMessageIsShownInASandboxedFrame(t *testing.T) {
 		page string
 		data any
 	}{
-		{"admin-prospect-campaign-view.html", struct {
-			baseData
-			Campaign   prospect.Campaign
-			Body       string
-			Recipients []campaignRecipientRow
-			Delivered  int
-			Failed     int
-			SentOn     string
-		}{
+		{"admin-prospect-campaign-view.html", campaignViewData{
 			baseData: testBase("Message"),
 			Campaign: prospect.Campaign{ID: "c1", Subject: "S", Status: "sent"},
 			Body:     hostile,

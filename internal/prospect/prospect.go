@@ -35,40 +35,11 @@ const (
 	StatusDeclined  = "declined"
 )
 
-// StatusOption is one status and how it reads on screen.
-type StatusOption struct {
-	Value string
-	Label string
-}
-
-// Statuses is every status a leader can set, in workflow order. Matches
-// the prospect_status enum in migration 0042 — the drift between the two
-// is what prospect_test.go's status test exists to catch.
-var Statuses = []StatusOption{
-	{StatusNew, "New enquiry"},
-	{StatusContacted, "Contacted"},
-	{StatusVisited, "Visited a meeting"},
-	{StatusJoined, "Joined"},
-	{StatusDeclined, "Not joining"},
-}
-
-// IsStatus reports whether a value is one this package recognizes — the
-// server-side check behind the admin dropdown, since a status arrives as
-// a form value and a form value can be anything.
-func IsStatus(v string) bool {
-	for _, s := range Statuses {
-		if s.Value == v {
-			return true
-		}
-	}
-	return false
-}
-
-// Open reports whether a status still wants someone's attention, which
-// is what the admin list defaults to showing.
-func Open(status string) bool {
-	return status != StatusJoined && status != StatusDeclined
-}
+// The statuses a unit starts with. They are no longer a fixed list:
+// migration 0048 moved them into prospect_labels, one row per unit, so
+// a leader can add their own — see labels.go. These constants remain
+// for the two values the rest of the system still names directly: the
+// status a new enquiry lands on, and the two the defaults mark closed.
 
 // Prospect is one enquiry.
 type Prospect struct {
@@ -83,7 +54,13 @@ type Prospect struct {
 	ChildSchool string
 	Message     string
 	Status      string
-	Notes       string
+	// Category is the unit's own filing of this enquiry — which program
+	// they asked about, how they heard of us — independent of Status,
+	// which is where they have got to. "" means uncategorised, which is
+	// what the public form produces: a category is a leader's decision,
+	// so nothing is guessed on their behalf.
+	Category string
+	Notes    string
 	// EmailOptOut is set when this family has asked not to be included in
 	// recruiting emails — by themselves through the unsubscribe link, or
 	// by a leader on the admin page. Either way RecipientsForStatuses
@@ -95,18 +72,22 @@ type Prospect struct {
 	UpdatedAt   time.Time
 }
 
-// StatusLabel is this prospect's status as it reads on screen.
-func (p Prospect) StatusLabel() string {
-	for _, s := range Statuses {
-		if s.Value == p.Status {
-			return s.Label
-		}
+// LabelIn renders a stored value using a unit's label text (see
+// LabelText), falling back to the raw value.
+//
+// The fallback is the point: a prospect can be sitting on a status
+// that has since been retired, and a campaign's audience can name one
+// that was never this unit's at all. Showing the slug is ugly; showing
+// nothing loses the fact that it was set.
+func LabelIn(text map[string]string, value string) string {
+	if value == "" {
+		return ""
 	}
-	return p.Status
+	if s, ok := text[value]; ok {
+		return s
+	}
+	return value
 }
-
-// Open reports whether this prospect still needs attention.
-func (p Prospect) Open() bool { return Open(p.Status) }
 
 // Field length caps. Enforced here as well as by CHECK constraints in
 // migration 0042: these produce a sentence the person filling in the
@@ -196,14 +177,14 @@ func Create(ctx context.Context, pool *pgxpool.Pool, in New) (Prospect, error) {
 }
 
 const columns = `id::text, unit_id::text, parent_name, parent_email, parent_phone,
-	child_name, child_age, child_grade, child_school, message, status::text, notes,
+	child_name, child_age, child_grade, child_school, message, status, category, notes,
 	email_opt_out, opt_out_at, created_at, updated_at`
 
 func scan(row pgx.Row) (Prospect, error) {
 	var p Prospect
 	err := row.Scan(&p.ID, &p.UnitID, &p.ParentName, &p.ParentEmail, &p.ParentPhone,
 		&p.ChildName, &p.ChildAge, &p.ChildGrade, &p.ChildSchool, &p.Message,
-		&p.Status, &p.Notes, &p.EmailOptOut, &p.OptOutAt, &p.CreatedAt, &p.UpdatedAt)
+		&p.Status, &p.Category, &p.Notes, &p.EmailOptOut, &p.OptOutAt, &p.CreatedAt, &p.UpdatedAt)
 	return p, err
 }
 
@@ -224,10 +205,21 @@ func Get(ctx context.Context, pool *pgxpool.Pool, unitID, id string) (Prospect, 
 
 // ListForUnit returns a unit's prospects, newest first. openOnly narrows
 // to the ones still needing attention.
+// closedStatusesSQL names this unit's closed statuses, for the queries
+// that show only the enquiries still wanting attention — which ones
+// those are is the unit's own choice now (prospect_labels.closed),
+// where it used to be "joined or declined" for everyone.
+//
+// A subquery rather than a join so a prospect whose status matches no
+// label still counts as open: it stays on the page to be dealt with,
+// rather than disappearing from a list nobody would think to widen.
+const closedStatusesSQL = `SELECT value FROM prospect_labels
+	WHERE unit_id = $1 AND kind = 'status' AND closed`
+
 func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string, openOnly bool) ([]Prospect, error) {
 	sql := `SELECT ` + columns + ` FROM prospects WHERE unit_id = $1`
 	if openOnly {
-		sql += ` AND status NOT IN ('joined', 'declined')`
+		sql += ` AND status NOT IN (` + closedStatusesSQL + `)`
 	}
 	sql += ` ORDER BY created_at DESC`
 
@@ -253,7 +245,7 @@ func ListForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string, openOnl
 func CountOpenForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (int, error) {
 	var n int
 	err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM prospects WHERE unit_id = $1 AND status NOT IN ('joined', 'declined')`,
+		`SELECT count(*) FROM prospects WHERE unit_id = $1 AND status NOT IN (`+closedStatusesSQL+`)`,
 		unitID).Scan(&n)
 	return n, err
 }
@@ -262,9 +254,26 @@ func CountOpenForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (i
 // Audited: this is a leader acting on someone's enquiry, and "we called
 // them and they're coming Tuesday" is exactly the kind of thing the next
 // leader needs to be able to find.
-func UpdateStatus(ctx context.Context, pool *pgxpool.Pool, unitID, id, status, notes, actorID string) (Prospect, error) {
-	if !IsStatus(status) {
+func UpdateStatus(ctx context.Context, pool *pgxpool.Pool, unitID, id, status, category, notes, actorID string) (Prospect, error) {
+	// Checked against this unit's own live labels: the permitted set is
+	// per-unit now, and both values arrive as form fields.
+	known, err := LabelExists(ctx, pool, unitID, KindStatus, status)
+	if err != nil {
+		return Prospect{}, err
+	}
+	if !known {
 		return Prospect{}, fmt.Errorf("%w: unknown status %q", ErrInvalid, status)
+	}
+	// "" is always allowed — it is what uncategorised means, and the
+	// only way back to it once a category has been set.
+	if category != "" {
+		known, err := LabelExists(ctx, pool, unitID, KindCategory, category)
+		if err != nil {
+			return Prospect{}, err
+		}
+		if !known {
+			return Prospect{}, fmt.Errorf("%w: unknown category %q", ErrInvalid, category)
+		}
 	}
 	if len(notes) > MaxNotes {
 		return Prospect{}, fmt.Errorf("%w: those notes are too long", ErrInvalid)
@@ -276,9 +285,9 @@ func UpdateStatus(ctx context.Context, pool *pgxpool.Pool, unitID, id, status, n
 	}
 
 	after, err := scan(pool.QueryRow(ctx, `
-		UPDATE prospects SET status = $1, notes = $2, updated_at = now()
-		WHERE id = $3 AND unit_id = $4
-		RETURNING `+columns, status, strings.TrimSpace(notes), id, unitID))
+		UPDATE prospects SET status = $1, category = $2, notes = $3, updated_at = now()
+		WHERE id = $4 AND unit_id = $5
+		RETURNING `+columns, status, category, strings.TrimSpace(notes), id, unitID))
 	if err != nil {
 		return Prospect{}, err
 	}
