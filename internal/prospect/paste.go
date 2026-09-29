@@ -42,10 +42,10 @@ type PasteRow struct {
 	// Skip says why this row will not be stored, and is shown against
 	// the line. Empty means it will be.
 	Skip string
-	// Duplicate marks a row skipped because this unit already has an
-	// enquiry from that address — worth distinguishing from a bad row,
-	// since pasting the same list twice is a normal thing to do and
-	// should read as "already have them", not as an error.
+	// Duplicate marks a row skipped because this unit already has this
+	// enquiry — worth distinguishing from a bad row, since pasting the
+	// same list twice is a normal thing to do and should read as
+	// "already have them", not as an error.
 	Duplicate bool
 }
 
@@ -64,7 +64,7 @@ func (r PasteRow) Ready() bool { return r.Skip == "" }
 // why. A caller that only wants the storable ones filters on Ready;
 // showing the rest is the point of the preview.
 func ParsePaste(ctx context.Context, pool *pgxpool.Pool, unitID, raw string) ([]PasteRow, error) {
-	existing, err := emailsForUnit(ctx, pool, unitID)
+	existing, err := existingEnquiries(ctx, pool, unitID)
 	if err != nil {
 		return nil, err
 	}
@@ -126,14 +126,14 @@ func ParsePaste(ctx context.Context, pool *pgxpool.Pool, unitID, raw string) ([]
 			}
 		}
 
-		key := strings.ToLower(row.ParentEmail)
+		key := enquiryKey(row.ParentEmail, row.ChildName)
 		switch {
 		case row.Skip != "":
 			// already skipped for a better reason
 		case existing[key]:
 			row.Skip, row.Duplicate = "already on this unit's list", true
 		case seen[key]:
-			row.Skip, row.Duplicate = "the same address appears earlier in this paste", true
+			row.Skip, row.Duplicate = "the same child appears earlier in this paste", true
 		default:
 			seen[key] = true
 		}
@@ -176,23 +176,41 @@ func looksLikeHeader(fields []string) bool {
 	return strings.Contains(first, "name") && strings.Contains(second, "email")
 }
 
-// emailsForUnit is every address this unit already has an enquiry from,
-// lowercased — so pasting a list twice reports the second one as
-// already held rather than creating a duplicate of everybody.
-func emailsForUnit(ctx context.Context, pool *pgxpool.Pool, unitID string) (map[string]bool, error) {
+// enquiryKey identifies one enquiry for the purpose of spotting a
+// duplicate: the parent's address AND the child's name, not the address
+// alone.
+//
+// Address alone was wrong in the ordinary case. A family with two
+// children gives one email for both, so the second child was reported
+// as "already on this unit's list" and silently dropped — which is
+// exactly the family a unit most wants both halves of. Two rows sharing
+// an address are two enquiries; two rows sharing an address AND a
+// child's name are the same list pasted twice.
+//
+// Campaign recipients still de-duplicate by address alone, and should:
+// two children at one address is one inbox, and one copy of a letter.
+// See RecipientsForStatuses.
+func enquiryKey(email, childName string) string {
+	return strings.ToLower(strings.TrimSpace(email)) + "\x00" + strings.ToLower(strings.Join(strings.Fields(childName), " "))
+}
+
+// existingEnquiries is every enquiry this unit already holds, keyed by
+// enquiryKey — so pasting a list twice reports the second one as already
+// held rather than creating a duplicate of everybody.
+func existingEnquiries(ctx context.Context, pool *pgxpool.Pool, unitID string) (map[string]bool, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT lower(parent_email) FROM prospects WHERE unit_id = $1`, unitID)
+		`SELECT parent_email, child_name FROM prospects WHERE unit_id = $1`, unitID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := map[string]bool{}
 	for rows.Next() {
-		var e string
-		if err := rows.Scan(&e); err != nil {
+		var email, child string
+		if err := rows.Scan(&email, &child); err != nil {
 			return nil, err
 		}
-		out[e] = true
+		out[enquiryKey(email, child)] = true
 	}
 	return out, rows.Err()
 }

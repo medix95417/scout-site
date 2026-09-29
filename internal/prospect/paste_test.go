@@ -101,8 +101,15 @@ func TestParsePasteSkipsWhatItCannotStore(t *testing.T) {
 		"No Child\tnochild@example.com",
 		"Bad Age\tbadage@example.com\t\tChild Four\tnine",
 		"Existing Parent\texisting@example.com\t\tExisting Child",
-		"Twice Over\ttwice@example.com\t\tChild Five",
-		"Twice Again\tTWICE@example.com\t\tChild Six",
+		// Two children at one address. Both are kept: one family email
+		// covering several kids is the ordinary case, and dropping the
+		// second is dropping the family a unit most wants both halves
+		// of.
+		"Two Kids\tsiblings@example.com\t\tFirst Sibling",
+		"Two Kids\tSIBLINGS@example.com\t\tSecond Sibling",
+		// The same child at the same address, though, is the same list
+		// pasted twice.
+		"Two Kids\tsiblings@example.com\t\tFirst Sibling",
 		"Fine Parent\tfine@example.com\t\tChild Seven",
 	}, "\n")
 
@@ -110,11 +117,11 @@ func TestParsePasteSkipsWhatItCannotStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 9 {
-		t.Fatalf("got %d rows, want 9 — every line comes back, skipped or not", len(rows))
+	if len(rows) != 10 {
+		t.Fatalf("got %d rows, want 10 — every line comes back, skipped or not", len(rows))
 	}
 
-	ready := map[int]bool{7: true, 9: true}
+	ready := map[int]bool{7: true, 8: true, 10: true}
 	for _, r := range rows {
 		if got := r.Ready(); got != ready[r.Line] {
 			t.Errorf("line %d: ready = %v (%s), want %v", r.Line, got, r.Skip, ready[r.Line])
@@ -126,15 +133,68 @@ func TestParsePasteSkipsWhatItCannotStore(t *testing.T) {
 	if !rows[5].Duplicate {
 		t.Error("someone already on the list wasn't marked as a duplicate")
 	}
-	if !rows[7].Duplicate {
-		t.Error("the same address twice in one paste wasn't marked as a duplicate")
+	if !rows[8].Duplicate {
+		t.Error("the same child twice in one paste wasn't marked as a duplicate")
 	}
 	if rows[0].Duplicate || rows[4].Duplicate {
 		t.Error("a malformed row was reported as a duplicate")
 	}
-	// Case doesn't make a new family.
-	if !strings.Contains(rows[7].Skip, "earlier in this paste") {
-		t.Errorf("TWICE@ vs twice@ wasn't caught: %q", rows[7].Skip)
+	// Case doesn't make a new child, or a new family.
+	if !strings.Contains(rows[8].Skip, "earlier in this paste") {
+		t.Errorf("the repeated child wasn't caught: %q", rows[8].Skip)
+	}
+	if rows[7].Skip != "" {
+		t.Errorf("SIBLINGS@ vs siblings@ with a different child was refused: %q", rows[7].Skip)
+	}
+}
+
+// One family email covering two children is the ordinary case, not a
+// duplicate — it was the reason the second child of every two-child
+// family was silently dropped from a pasted list.
+func TestTwoChildrenAtOneAddress(t *testing.T) {
+	e := newEnv(t, "Sibling Family")
+	ctx := context.Background()
+
+	// Through the single-add path first: this never had the check, and
+	// must keep not having it.
+	for _, child := range []string{"First Sibling", "Second Sibling"} {
+		if _, err := AddByLeader(ctx, e.pool, New{
+			UnitID: e.unitID, ParentName: "Two Kids",
+			ParentEmail: "siblings@example.com", ChildName: child,
+		}, e.actor); err != nil {
+			t.Fatalf("adding %s: %v", child, err)
+		}
+	}
+
+	// Then a paste that adds a third at the same address.
+	rows, err := ParsePaste(ctx, e.pool, e.unitID,
+		"Two Kids\tsiblings@example.com\t\tThird Sibling")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || !rows[0].Ready() {
+		t.Fatalf("a third child at a known address was refused: %+v", rows)
+	}
+	if _, err := SavePaste(ctx, e.pool, rows, e.actor); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := ListForUnit(ctx, e.pool, e.unitID, false, OrderNewest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 3 {
+		t.Errorf("the unit holds %d enquiries, want 3 — one per child", len(list))
+	}
+
+	// And a campaign still reaches that inbox once. Two children at one
+	// address is one family and one copy of a letter.
+	got, err := RecipientsForStatuses(ctx, e.pool, e.unitID, []string{StatusNew})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Errorf("a campaign would send %d copies to one address, want 1", len(got))
 	}
 }
 
@@ -148,7 +208,7 @@ func TestParsePasteStoresNothing(t *testing.T) {
 		"Jamie Rivera\tjamie@example.com\t\tSam Rivera"); err != nil {
 		t.Fatal(err)
 	}
-	list, err := ListForUnit(ctx, e.pool, e.unitID, false)
+	list, err := ListForUnit(ctx, e.pool, e.unitID, false, OrderNewest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +239,7 @@ func TestSavePaste(t *testing.T) {
 		t.Errorf("stored %d, want 2", n)
 	}
 
-	list, err := ListForUnit(ctx, e.pool, e.unitID, false)
+	list, err := ListForUnit(ctx, e.pool, e.unitID, false, OrderNewest)
 	if err != nil {
 		t.Fatal(err)
 	}

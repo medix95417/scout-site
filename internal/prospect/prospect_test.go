@@ -234,7 +234,7 @@ func TestScopedToItsUnit(t *testing.T) {
 		t.Errorf("another unit should not be able to delete it, got %v", err)
 	}
 
-	list, err := ListForUnit(ctx, pool, theirs, false)
+	list, err := ListForUnit(ctx, pool, theirs, false, OrderNewest)
 	if err != nil {
 		t.Fatalf("ListForUnit: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestListForUnit_OpenOnlyFiltersResolved(t *testing.T) {
 		t.Fatalf("closing one: %v", err)
 	}
 
-	openList, err := ListForUnit(ctx, pool, unitID, true)
+	openList, err := ListForUnit(ctx, pool, unitID, true, OrderNewest)
 	if err != nil {
 		t.Fatalf("ListForUnit(openOnly): %v", err)
 	}
@@ -271,7 +271,7 @@ func TestListForUnit_OpenOnlyFiltersResolved(t *testing.T) {
 		t.Fatalf("open-only should return just the unresolved one, got %d", len(openList))
 	}
 
-	all, err := ListForUnit(ctx, pool, unitID, false)
+	all, err := ListForUnit(ctx, pool, unitID, false, OrderNewest)
 	if err != nil {
 		t.Fatalf("ListForUnit(all): %v", err)
 	}
@@ -349,7 +349,7 @@ var defaultStatusRows = regexp.MustCompile(`\('([a-z_-]+)',\s*'([^']+)',\s*(?:tr
 // a database question and no longer a property of the row.
 func inOpenList(t *testing.T, ctx context.Context, pool *pgxpool.Pool, unitID, id string) bool {
 	t.Helper()
-	open, err := ListForUnit(ctx, pool, unitID, true)
+	open, err := ListForUnit(ctx, pool, unitID, true, OrderNewest)
 	if err != nil {
 		t.Fatalf("listing open prospects: %v", err)
 	}

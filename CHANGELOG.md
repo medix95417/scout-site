@@ -27,6 +27,36 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **An enquiry can be corrected after it is entered.** "Correct these
+  details" on each one opens the parent's name, email and phone, and
+  the child's name, age, grade and school. An email misheard over the
+  phone or a name copied off a sign-up sheet no longer means deleting
+  the record and typing it again. Kept as its own form, separate from
+  the status and notes above it: moving a family along happens
+  constantly and shouldn't re-submit — or risk blanking — eight contact
+  fields. Every correction is recorded against whoever made it.
+- **The list can be sorted by status.** Newest-first stays the default;
+  "By status" groups the list by where each family has got to, in the
+  unit's own status order rather than alphabetically, so a leader
+  working through everyone still at one stage has them together.
+
+### Changed
+
+- **One family email can now cover several children.** Adding a second
+  child at an address the unit already held was reported as a duplicate
+  and silently dropped from a pasted list — which is the family a unit
+  most wants both halves of. Two rows sharing an address are two
+  enquiries now; only a matching address *and* child's name counts as
+  the same list pasted twice. A campaign still reaches that address
+  once, not once per child.
+- **A child younger than Scouting takes can be recorded.** The age
+  floor was 3, so a one-year-old sibling met at a recruiting night
+  either went in with a blank age or into the notes, where nothing can
+  sort on it. It is 0 now, and still capped at 21 so a slipped digit is
+  caught.
+
 ## [2.16.0] — 2026-09-29
 
 ### Added
