@@ -497,12 +497,8 @@ func anyUnitHasCapability(ctx context.Context, pool *pgxpool.Pool, rolesByUnit m
 	return false, nil
 }
 
-// RolesForFamilyInUnit returns the union of roles held by any member of a
-// family within a unit. Phase 1 logs in at the family level (one account
-// per family, per the requirements doc), so a family's effective
-// permissions in a unit are the roles held by whichever of its members —
-// almost always an adult leader — carries a role there. A family with no
-// members holding leadership roles simply gets the implicit "parent" view.
+// RolesForFamilyInUnit lists active household members' roles for membership
+// and administrative inspection. These are NOT permissions for a shared login.
 func RolesForFamilyInUnit(ctx context.Context, pool *pgxpool.Pool, familyID, unitID string) ([]string, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT DISTINCT role_assignments.role::text
