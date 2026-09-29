@@ -37,26 +37,14 @@ func NonceFromContext(ctx context.Context) string {
 	return nonce
 }
 
-// scriptSources are the external origins allowed to serve JavaScript:
-// Tailwind's play CDN, and cdnjs for htmx, Quill and QRious. Everything
-// else has to be same-origin or carry the nonce.
-var scriptSources = []string{
-	"https://cdn.tailwindcss.com",
-	"https://cdnjs.cloudflare.com",
-}
-
-// Policy returns the header value for a request carrying nonce.
-//
-// style-src keeps 'unsafe-inline', and that's deliberate rather than an
-// oversight. Tailwind's play CDN generates CSS at runtime and injects
-// <style> elements the server never sees, so it can't nonce them. Inline
-// style is also a far weaker foothold than inline script — it can't call
-// anything — so the trade is worth making to keep script-src strict.
+// Policy allows scripts only with a per-response nonce, including our local
+// vendored scripts. Do not allow all of 'self': uploads share this origin.
+// Inline styles remain for unit colors, editor styles, and existing templates.
 func Policy(nonce string) string {
 	return strings.Join([]string{
 		"default-src 'self'",
-		"script-src 'nonce-" + nonce + "' " + strings.Join(scriptSources, " "),
-		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
+		"script-src 'nonce-" + nonce + "'",
+		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 		"font-src 'self' https://fonts.gstatic.com",
 		// data: covers inline SVG/preview images; https: covers a hero or
 		// leader photo pointed at an external URL, which the image picker

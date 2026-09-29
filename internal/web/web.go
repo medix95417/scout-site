@@ -646,7 +646,12 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	if err != nil {
 		panic("web: static assets: " + err.Error()) // can't happen — "static" is embedded above
 	}
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(staticSub)))
+	staticHandler := http.StripPrefix("/static/", http.FileServerFS(staticSub))
+	mux.Handle("GET /static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Embedded, developer-owned assets are the only cacheable responses.
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		staticHandler.ServeHTTP(w, r)
+	}))
 
 	mux.HandleFunc("GET /{$}", h.Home)
 	mux.HandleFunc("GET /fundraiser", h.FundraiserStorefront)
@@ -993,20 +998,17 @@ type baseData struct {
 	Version            string // this build's release version — see internal/version, shown in base.html's footer
 }
 
-// rolesFor resolves the current login's roles in a unit. A family-wide
-// login (user.MemberID == nil, still the default/common case) gets the
-// union of every role anyone in the family holds — RolesForFamilyInUnit's
-// original Phase 1 behavior. An individual member login (see
-// internal/auth.User.MemberID — e.g. a Scout logging in as themselves
-// rather than through their family's shared login) gets only that one
-// member's own roles: per the site's "an individual login sees just their
-// own stuff" design, a parent's Scoutmaster access should never leak into
-// their Scout's own login just because they share a family.
+// rolesFor answers membership as well as role identity. Shared logins receive
+// only a membership marker; leadership always belongs to an individual login.
 func (h *Handlers) rolesFor(ctx context.Context, user auth.User, unitID string) ([]string, error) {
 	if user.MemberID != nil {
 		return units.RolesForMemberInUnit(ctx, h.Pool, *user.MemberID, unitID)
 	}
-	return units.RolesForFamilyInUnit(ctx, h.Pool, user.FamilyID, unitID)
+	roles, err := units.RolesForFamilyInUnit(ctx, h.Pool, user.FamilyID, unitID)
+	if err != nil || len(roles) == 0 {
+		return nil, err
+	}
+	return []string{"parent"}, nil
 }
 
 // capabilitiesFor resolves the current login's roles in a unit straight
@@ -1016,6 +1018,11 @@ func (h *Handlers) rolesFor(ctx context.Context, user auth.User, unitID string) 
 // count exactly the same as an equivalent fixed role's everywhere in the
 // app.
 func (h *Handlers) capabilitiesFor(ctx context.Context, user auth.User, unitID string) (units.Capabilities, error) {
+	// Do not resolve even "parent" through configurable role overrides: an
+	// override must never turn a shared password into leadership authority.
+	if user.MemberID == nil {
+		return units.Capabilities{}, nil
+	}
 	roles, err := h.rolesFor(ctx, user, unitID)
 	if err != nil {
 		return nil, err
@@ -1043,20 +1050,12 @@ func (h *Handlers) actingMember(ctx context.Context, user auth.User, unitID stri
 	return family.ActingMemberForFamilyInUnit(ctx, h.Pool, user.FamilyID, unitID)
 }
 
-// rosterScope resolves the current login's roster-management scope in a
-// unit — roster.ScopeForMember for an individual member login, or
-// roster.ScopeForFamily's original family-wide computation otherwise. See
-// rolesFor's comment for why this split matters: without it, an
-// individual login belonging to a leader (e.g. an Assistant Scoutmaster
-// with their own login) would have its roster scope silently broadened by
-// whatever roles OTHER members of their family happen to hold, which
-// breaks the "just their own stuff" guarantee just as surely as leaking
-// permissions would.
+// rosterScope grants management scope only to individual logins.
 func (h *Handlers) rosterScope(ctx context.Context, user auth.User, unitID string) (roster.Scope, error) {
 	if user.MemberID != nil {
 		return roster.ScopeForMember(ctx, h.Pool, *user.MemberID, unitID)
 	}
-	return roster.ScopeForFamily(ctx, h.Pool, user.FamilyID, unitID)
+	return roster.Scope{}, nil
 }
 
 // isAccountOwner reports whether the current login "owns" a ledger

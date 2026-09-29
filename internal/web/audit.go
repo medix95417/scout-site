@@ -197,9 +197,9 @@ func (h *Handlers) AuditExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 
 	cw := csv.NewWriter(w)
-	_ = cw.Write([]string{"When", "Who", "Action", "Function", "IP address", "Entity ID"})
+	_ = cw.Write([]string{"When", "Who", "Action", "Function", "IP address", "Entity ID", "Authenticated login ID"})
 	for _, e := range entries {
-		_ = cw.Write([]string{e.OccurredAt, csvCell(e.ActorName), csvCell(e.Action), entityTypeLabel(e.EntityType), csvCell(e.IPAddress), csvCell(e.EntityID)})
+		_ = cw.Write([]string{e.OccurredAt, csvCell(e.ActorName), csvCell(e.Action), entityTypeLabel(e.EntityType), csvCell(e.IPAddress), csvCell(e.EntityID), e.AuthenticatedUserID})
 	}
 	cw.Flush()
 	if err := cw.Error(); err != nil {

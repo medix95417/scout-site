@@ -78,7 +78,7 @@ func (h *Handlers) logSignIn(r *http.Request, userID, action string) {
 		return
 	}
 
-	audit.Log(r.Context(), h.Pool, audit.Entry{
+	audit.Log(audit.WithAuthenticatedUser(r.Context(), user.ID), h.Pool, audit.Entry{
 		EntityType: "login",
 		EntityID:   actor.ID,
 		ActorID:    &actor.ID,

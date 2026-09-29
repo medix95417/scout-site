@@ -112,6 +112,7 @@ func normalizeMediaType(ct string) string {
 // user-uploaded bytes. The single place that decides inline-vs-download,
 // so both the download and thumbnail routes get the same treatment.
 func writeUserFileHeaders(w http.ResponseWriter, contentType, filename string) {
+	w.Header().Set("Cache-Control", "private, no-store")
 	mediaType := normalizeMediaType(contentType)
 	inline := inlineRenderableTypes[mediaType]
 	if mediaType == "" {

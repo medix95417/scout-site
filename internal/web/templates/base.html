@@ -36,8 +36,8 @@
   {{if eq .Unit.UnitType "pack"}}
     <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&display=swap" rel="stylesheet">
   {{end}}
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.3/htmx.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script nonce="{{.CSPNonce}}" src="/static/vendor/htmx-2.0.3.min.js"></script>
+  <link rel="stylesheet" href="/static/vendor/tailwind.css">
   <style>
     :root { --unit-color: {{.Unit.ThemeColor}}; --accent-color: {{.Unit.AccentColor}}; --accent-text-color: {{.Unit.AccentTextColor}}; }
     /* BSA Digital Brand Guidelines: Roboto Slab for headlines, Roboto for

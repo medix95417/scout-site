@@ -1046,3 +1046,47 @@ page. It is escaped on both paths: `url.QueryEscape` for the link, and
 `html/template`'s own contextual escaping for the text, with a test that
 a name containing quotes, angle brackets or an ampersand cannot break out
 of either.
+
+
+## 2026-09-29 — shared login authority, log secrets, caching and browser assets
+
+Shared family logins retain membership but no longer resolve role capabilities
+or roster management scope. Individual logins retain their own per-unit roles;
+custom roles and parent overrides cannot elevate a shared credential. New
+bootstrap admins are individual logins. The operator-only personal-login command
+creates a fresh credential for an explicitly selected existing member, refuses
+existing accounts, requires a first-login password change and audits the action.
+No shared password or session is converted into a personal leader credential.
+Follow DEPLOY.md's pre-deployment transition to avoid admin lockout.
+
+Audit records now retain the authenticated user ID separately from the member
+acted for (migration 0050); old entries are left unknown. Application request
+logging uses registered route patterns, never user-supplied paths or queries.
+Caddy filters request URI/referrer fields from default logs, including errors,
+and omits access entries for credential routes. Previously stored logs still
+need a retention/access review; tokens are not automatically rotated.
+
+All dynamic and uploaded-file responses default to private, no-store, including
+thumbnail variants; only embedded developer assets have public caching. Already
+cached copies and deliberate downloads cannot be revoked. Browser JavaScript is
+vendored locally with pinned npm versions, integrity lockfile, licenses and an
+output checksum manifest. Tailwind 3 is compiled before serving. CSP permits
+scripts only with the request nonce, including local scripts; it does not allow
+all same-origin scripts because uploads also use that origin. Fonts and optional
+external images retain their prior policy.
+
+Caddy explicitly enables HSTS with max-age=86400 on the two configured hosts,
+without includeSubDomains/preload; the Go HTTP development server does not set
+HSTS. Reload the proxy configuration during deployment and verify both hosts.
+
+MFA enrollment enforcement is deliberately not part of this change. Enrolled
+factors are verified, but the current requirement setting is an enrollment
+reminder; its wording does not establish a mandatory enrollment gate.
+
+Validation added: HTTP log redaction (including unknown routes/redirects),
+no-store on successful/error responses and file headers, local nonce-protected
+script references and generated CSS, and a PostgreSQL-backed test using real
+sessions for shared versus individual authority, role revocation, cross-unit
+membership, custom parent overrides, the personal-login transition and distinct
+authenticated-user/acting-member audit identities. CI runs the database test
+and checks asset reproducibility and Caddy configuration.

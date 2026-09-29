@@ -7,8 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A Go web app serving two Scouting units (a Troop and a Pack) from one
 binary and one Postgres database, tenant-resolved per request by the
 `Host` header (`internal/units.ByHostname`/`Middleware`). Server-rendered
-`html/template` + htmx + Tailwind (via CDN) — no separate frontend build
-or JS toolchain. See `README.md` for the full feature rundown,
+`html/template` + locally vendored htmx + compiled Tailwind CSS.
+Docker builds assets from package-lock.json; direct Go builds use committed assets.
+After changing template/Go class names, run `npm ci --ignore-scripts && npm run build:assets`. See `README.md` for the full feature rundown,
 `scout-website-architecture-phase1.md` for the original architecture
 writeup, `PHASE2_TREASURY.md` for the fund-accounting design, and
 `SECURITY_AUDIT.md` for security posture/decisions.
@@ -67,6 +68,14 @@ assumes it's in request context), then attach the logged-in user
 reads inside-out — the last `handler = X(handler)` line runs first — and
 CSRF genuinely depends on running after `auth.WithUser`, since it sizes
 the request-body limit by whether the caller is signed in.
+
+**Shared logins never carry leadership authority.** Individual logins resolve
+only their own roles. Shared logins preserve household unit membership but get
+no capabilities and no roster-management scope, even with role overrides.
+Bootstrap creates individual admins. Follow DEPLOY.md's personal-login transition
+before upgrading an existing deployment; never attach a shared credential to a
+privileged member. Audit records the authenticated user ID separately from the
+acting member.
 
 **Multi-tenancy + roles.** One family/login can exist across both units;
 roles (Cubmaster, Scoutmaster, Den Leader, Treasurer, super_admin, etc.)

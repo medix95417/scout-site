@@ -1,0 +1,13 @@
+{
+  "name": "scout-site-assets",
+  "private": true,
+  "scripts": {
+    "build:assets": "tailwindcss -c frontend/tailwind.config.cjs -i frontend/input.css -o internal/web/static/vendor/tailwind.css --minify && node scripts/vendor-assets.cjs"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.19",
+    "htmx.org": "2.0.3",
+    "quill": "2.0.2",
+    "qrious": "4.0.2"
+  }
+}

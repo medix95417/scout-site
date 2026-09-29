@@ -17,6 +17,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type authenticatedUserKey struct{}
+
+// WithAuthenticatedUser records the login separately from the member being
+// acted for. Only the authentication middleware (or successful sign-in) sets it.
+func WithAuthenticatedUser(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, authenticatedUserKey{}, userID)
+}
+
 type Entry struct {
 	EntityType        string
 	EntityID          string
@@ -37,6 +45,7 @@ type Entry struct {
 // alerting infrastructure is an operational decision, not an architecture
 // one.
 func Log(ctx context.Context, pool *pgxpool.Pool, e Entry) {
+	userID, _ := ctx.Value(authenticatedUserKey{}).(string)
 	beforeJSON, err := marshalNullable(e.Before)
 	if err != nil {
 		log.Printf("audit: marshaling before_state for %s/%s: %v", e.EntityType, e.EntityID, err)
@@ -49,9 +58,9 @@ func Log(ctx context.Context, pool *pgxpool.Pool, e Entry) {
 	}
 
 	_, err = pool.Exec(ctx, `
-		INSERT INTO audit_log (entity_type, entity_id, actor_id, action, before_state, after_state, approval_request_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, e.EntityType, e.EntityID, e.ActorID, e.Action, beforeJSON, afterJSON, e.ApprovalRequestID)
+		INSERT INTO audit_log (entity_type, entity_id, actor_id, action, before_state, after_state, approval_request_id, authenticated_user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, '')::uuid)
+	`, e.EntityType, e.EntityID, e.ActorID, e.Action, beforeJSON, afterJSON, e.ApprovalRequestID, userID)
 	if err != nil {
 		log.Printf("audit: failed to write entry for %s/%s action=%s: %v", e.EntityType, e.EntityID, e.Action, err)
 	}
@@ -67,13 +76,14 @@ func marshalNullable(v any) ([]byte, error) {
 // LogEntry is what the admin-facing audit view (and CSV export) reads
 // back.
 type LogEntry struct {
-	ID         string
-	EntityType string
-	EntityID   string
-	ActorID    string // "" for system-initiated actions — see ActorName
-	ActorName  string // resolved from members, "system" if ActorID was nil
-	Action     string
-	OccurredAt string // pre-formatted for display; see internal/web
+	AuthenticatedUserID string // login used, separate from the acting member
+	ID                  string
+	EntityType          string
+	EntityID            string
+	ActorID             string // "" for system-initiated actions — see ActorName
+	ActorName           string // resolved from members, "system" if ActorID was nil
+	Action              string
+	OccurredAt          string // pre-formatted for display; see internal/web
 	// IPAddress is where the action came from, for the entries that
 	// record one — today that means sign-ins (see internal/web's
 	// startSession), which are the entries where "who did this" is worth
@@ -256,7 +266,8 @@ func ForUnitFiltered(ctx context.Context, pool *pgxpool.Pool, f Filter) ([]LogEn
 			COALESCE(members.first_name || ' ' || members.last_name, 'system'),
 			audit_log.action,
 			to_char(audit_log.occurred_at, 'YYYY-MM-DD HH24:MI'),
-			COALESCE(audit_log.after_state->>'ip', '')
+			COALESCE(audit_log.after_state->>'ip', ''),
+			COALESCE(audit_log.authenticated_user_id::text, '')
 		FROM audit_log
 		LEFT JOIN members ON members.id = audit_log.actor_id
 		WHERE audit_log.entity_id IN (`+entityScopeSQL+`)`+extraWhere+`
@@ -270,7 +281,7 @@ func ForUnitFiltered(ctx context.Context, pool *pgxpool.Pool, f Filter) ([]LogEn
 	var entries []LogEntry
 	for rows.Next() {
 		var e LogEntry
-		if err := rows.Scan(&e.ID, &e.EntityType, &e.EntityID, &e.ActorID, &e.ActorName, &e.Action, &e.OccurredAt, &e.IPAddress); err != nil {
+		if err := rows.Scan(&e.ID, &e.EntityType, &e.EntityID, &e.ActorID, &e.ActorName, &e.Action, &e.OccurredAt, &e.IPAddress, &e.AuthenticatedUserID); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)

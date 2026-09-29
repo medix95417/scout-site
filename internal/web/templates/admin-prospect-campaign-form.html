@@ -1,6 +1,6 @@
 {{define "extrahead"}}
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/2.0.2/quill.snow.min.css" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/2.0.2/quill.min.js"></script>
+  <link href="/static/vendor/quill-2.0.2.snow.css" rel="stylesheet">
+  <script nonce="{{.CSPNonce}}" src="/static/vendor/quill-2.0.2.js"></script>
   {{if eq .Campaign.Status "sending"}}
     <!-- The background send transitions this to "sent" on its own; a
          plain refresh picks that up with no JS polling. -->
