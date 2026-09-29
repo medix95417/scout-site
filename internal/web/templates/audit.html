@@ -58,7 +58,7 @@
         {{range .Entries}}
           <tr class="border-t border-gray-100">
             <td class="px-4 py-2 whitespace-nowrap">{{.OccurredAt}}</td>
-            <td class="px-4 py-2">{{.ActorName}}</td>
+            <td class="px-4 py-2">{{.ActorName}}{{if .AuthenticatedUserID}}<div class="text-xs text-gray-500">Login: {{.AuthenticatedUserID}}</div>{{end}}</td>
             <td class="px-4 py-2">{{.Action}}</td>
             <td class="px-4 py-2 text-gray-500">{{.EntityLabel}}</td>
             <td class="px-4 py-2 text-gray-500 whitespace-nowrap">{{.IPAddress}}</td>

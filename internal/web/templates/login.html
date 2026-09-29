@@ -3,6 +3,7 @@
   <p class="text-sm font-medium mb-2" style="color: var(--unit-color);">Welcome back to {{.Unit.Name}}</p>
   <h1 class="text-2xl font-bold mb-2">Family Log In</h1>
   <p class="text-sm text-gray-600 mb-6">One login for your Pack and Troop. Your family's access follows you when you switch sites.</p>
+  <p class="text-sm text-gray-600 mb-4">Leaders: use your individual login for administration or treasury. A shared family login provides family access only. Ask an administrator to set up your individual login if needed.</p>
   <form method="post" action="/login" class="max-w-sm space-y-4">
     <input type="hidden" name="next" value="{{.Next}}">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
