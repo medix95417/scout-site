@@ -31,6 +31,27 @@ tagged commit with an accurate date.
 
 ### Added
 
+- **Prospects can be added by hand, one at a time or as a pasted
+  list.** Until now the only way one existed was a family filling in
+  the public form, so a name off a school sign-up sheet or a council
+  lead list either went in somebody's inbox or nowhere. "Add families
+  yourself" on the Prospects page takes one at a time, or a list pasted
+  straight out of a spreadsheet — tab- or comma-separated — and shows
+  what it read, line by line, before anything is stored: which rows
+  will be added, which are malformed and why, and which are already on
+  the list. Pasting the same list twice adds nobody.
+
+  **Nobody added this way is emailed anything.** A form submission gets
+  an automatic reply because the family just asked and is probably
+  still looking at the screen; someone off a list asked for nothing,
+  and a "thanks for your enquiry" they don't recognise would be the
+  first they knew of the unit holding their address. Write to them
+  yourself, or include them in a campaign later — those carry an
+  unsubscribe link. Enquiries added by hand are marked as such on the
+  list, and are recorded against whoever added them.
+
+### Added
+
 - **A unit's prospect statuses are its own now, and there is a second
   list to sort by.** The five stages an enquiry moved through were the
   same five for every unit forever — a Troop wanting "Left voicemail"

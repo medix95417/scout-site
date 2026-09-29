@@ -177,6 +177,7 @@ type Handlers struct {
 	joinPage           *template.Template
 	prospectsPage      *template.Template
 	prospectLabelsPage *template.Template
+	prospectImport     *template.Template
 
 	campaignForm *template.Template
 	campaignView *template.Template
@@ -598,6 +599,9 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.prospectLabelsPage, err = parse("admin-prospect-labels.html"); err != nil {
 		return nil, err
 	}
+	if h.prospectImport, err = parse("admin-prospect-import.html"); err != nil {
+		return nil, err
+	}
 	if h.prospectsPage, err = parse("admin-prospects.html"); err != nil {
 		return nil, err
 	}
@@ -714,6 +718,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	// ServeMux resolves as the more specific pattern — no ambiguity, and
 	// TestRoutesRegisterWithoutPanic is what says so.
 	mux.HandleFunc("POST /admin/prospects/auto-email", h.ProspectAutoReplyUpdate)
+	mux.HandleFunc("POST /admin/prospects/add", h.ProspectAdd)
 	mux.HandleFunc("POST /admin/prospects/{id}", h.ProspectUpdate)
 	mux.HandleFunc("POST /admin/prospects/{id}/delete", h.ProspectDelete)
 	mux.HandleFunc("POST /admin/prospects/{id}/opt-out", h.ProspectOptOut)
@@ -740,6 +745,13 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	// forms this needs would sit ambiguously beside
 	// "/admin/prospects/{id}/delete", and an ambiguous pair is a panic
 	// at registration rather than a 404 at request time.
+	// Adding a list by hand. On the sibling path for the same reason as
+	// the campaigns and labels above — "/admin/prospects/import/preview"
+	// beside "/admin/prospects/{id}/delete" is the ambiguous shape that
+	// panics at registration.
+	mux.HandleFunc("POST /admin/prospect-import/preview", h.ProspectImportPreview)
+	mux.HandleFunc("POST /admin/prospect-import", h.ProspectImportSave)
+
 	mux.HandleFunc("GET /admin/prospect-labels", h.ProspectLabels)
 	mux.HandleFunc("POST /admin/prospect-labels", h.ProspectLabelCreate)
 	mux.HandleFunc("POST /admin/prospect-labels/{id}/rename", h.ProspectLabelRename)
