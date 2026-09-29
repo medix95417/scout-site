@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.16.0] — 2026-09-29
+
 ### Added
 
 - **A news post can link to a file in your library, and any link can be
