@@ -725,6 +725,7 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	// TestRoutesRegisterWithoutPanic is what says so.
 	mux.HandleFunc("POST /admin/prospects/auto-email", h.ProspectAutoReplyUpdate)
 	mux.HandleFunc("POST /admin/prospects/add", h.ProspectAdd)
+	mux.HandleFunc("POST /admin/prospects/bulk-status", h.ProspectBulkStatus)
 	mux.HandleFunc("POST /admin/prospects/{id}", h.ProspectUpdate)
 	mux.HandleFunc("POST /admin/prospects/{id}/details", h.ProspectUpdateDetails)
 	mux.HandleFunc("POST /admin/prospects/{id}/delete", h.ProspectDelete)

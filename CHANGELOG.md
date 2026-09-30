@@ -27,6 +27,35 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **Prospects can be moved between statuses in bulk.** Tick the families
+  on the Prospects page, pick a status in the bar above the list and
+  choose "Move them". The evening after a recruiting night, moving a
+  dozen families from "New enquiry" to "Visited a meeting" is one go
+  instead of one save and one page reload per family.
+
+  "Tick everything shown" takes whatever is currently on screen, which
+  in the "By status" view — with one stage open and the rest collapsed —
+  means exactly that stage. Opening a different stage clears the ticks
+  that went out of sight, so nothing travels in a batch unseen.
+
+  Only the status moves in bulk. Notes are what was said to one family
+  and a category is a judgement per enquiry; a batch overwrite of either
+  would destroy more than it saved.
+
+  The page says what it did, and accounts for every family ticked:
+  "Moved 3 enquiries to Visited a meeting; 1 was already at Visited a
+  meeting" rather than a bare "moved 3" that reads as a partial failure.
+  Nothing is pre-selected in the destination picker, so a stray click
+  cannot send a selection back to "New enquiry". Each enquiry that moves
+  gets its own Activity Log entry, the same as moving one by hand;
+  families already at the chosen status are left alone and not logged.
+
+  Which of the ticked enquiries belong to the current unit is settled in
+  the SQL, so an id from the other unit's site matches nothing rather
+  than being moved.
+
 ## [2.17.2] — 2026-09-30
 
 ### Added

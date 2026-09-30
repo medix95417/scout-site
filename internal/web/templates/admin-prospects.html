@@ -49,6 +49,13 @@
     </div>
   {{end}}
 
+  {{if .Notice}}
+    {{/* A result rather than a problem, so not the red box above. */}}
+    <div class="rounded-md border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900 mb-4 max-w-2xl">
+      {{.Notice}}
+    </div>
+  {{end}}
+
   {{/* Adding by hand, collapsed: most visits to this page are to work
        through enquiries that arrived on their own, and this should not
        be the first thing in the way of that. */}}
@@ -314,6 +321,50 @@
     </details>
   </section>
 
+  {{if and .Prospects .CanBulkMove}}
+    {{/* Moving a batch at once: the tick boxes are on the rows and the
+         picker is here, which in plain HTML means each box names this
+         form by id rather than sitting inside it. It has to be that way
+         round — every row already carries a form of its own, and forms
+         cannot nest, so a form wrapped around the whole list would break
+         the per-row ones.
+
+         Only the status is offered in bulk. Notes are prose about one
+         family and a category is a judgement per enquiry; a batch
+         overwrite of either would destroy more than it saved. */}}
+    <form method="post" action="/admin/prospects/bulk-status" id="prospect-bulk"
+          class="mb-4 flex flex-wrap items-end gap-x-4 gap-y-2 rounded-lg border border-gray-300 bg-gray-50 p-3"
+          data-confirm="Move the ticked families to the status you chose?">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      {{if .ShowAll}}<input type="hidden" name="all" value="1">{{end}}
+      {{if .Filter}}<input type="hidden" name="category_filter" value="{{.Filter}}">{{end}}
+      {{if eq .Sort "status"}}<input type="hidden" name="sort" value="status">{{end}}
+      <div>
+        <label class="block text-xs text-gray-500 mb-1" for="bulk-status">Move the ticked families to</label>
+        {{/* Nothing is pre-selected. Left to default to the first
+             status, a stray click on "Move them" would send every
+             ticked family back to "New enquiry" — the most damaging
+             thing this control can do, and the one nobody meant. The
+             server refuses an empty status too, so a browser that
+             ignores `required` gets the same answer. */}}
+        <select class="rounded-md border border-gray-300 px-3 py-2 text-sm" id="bulk-status" name="status" required>
+          <option value="" selected disabled>Choose a status…</option>
+          {{range .Statuses}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+        </select>
+      </div>
+      <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Move them</button>
+      {{/* Both of these only do anything with JavaScript, so neither
+           claims anything before it has run: the count starts empty
+           rather than saying "none selected" on a page where it would
+           never update, and ticking every box by hand still works. */}}
+      <label class="hidden items-center gap-2 text-sm" data-needs-js>
+        <input type="checkbox" data-check-all="ids">
+        <span>Tick everything shown</span>
+      </label>
+      <span class="text-sm text-gray-600" data-selected-count aria-live="polite"></span>
+    </form>
+  {{end}}
+
   {{if .Prospects}}
     {{if .Groups}}
       {{/* Grouped by status, one accordion each, in the unit's own
@@ -360,6 +411,14 @@
         <section class="rounded-lg border {{if .Open}}border-amber-300 bg-amber-50{{else}}border-gray-200 bg-white{{end}} p-4">
           <div class="flex flex-wrap items-baseline justify-between gap-2 mb-2">
             <h2 class="font-semibold">
+              {{if $.CanBulkMove}}
+                {{/* Owned by the bulk-move form above by id, because it
+                     cannot be inside it: this row has forms of its own
+                     and forms do not nest. */}}
+                <input type="checkbox" form="prospect-bulk" name="ids" value="{{.ID}}"
+                       class="mr-1 align-middle"
+                       aria-label="Tick {{.ChildName}} to move with the others">
+              {{end}}
               {{.ChildName}}
               <span class="font-normal text-gray-600">
                 — via {{.ParentName}}
