@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"os"
 	"strings"
 	"testing"
@@ -60,11 +61,23 @@ func TestOnlyOneFunctionSelectsProspectAddressesToEmail(t *testing.T) {
 				return true
 			}
 			name := fn.Name.Name
-			// The three functions allowed to read an address: the one
-			// that picks recipients, the one that reads back who was
-			// already written to, and the single-row loads.
+			// The functions allowed to read an address: the one that
+			// picks recipients, the one that reads back who was already
+			// written to, and the single-row loads.
 			switch name {
 			case "RecipientsForStatuses", "CampaignRecipients", "Get", "GetAnyUnit", "Create", "scan":
+				return true
+			case "AddressesAlsoElsewhere":
+				// Reads addresses only to count them — it answers "how
+				// many of these families are also somewhere else", and
+				// returns a number, never a list. Allowed on that
+				// condition and checked for it below, so the day it
+				// starts handing addresses back it is a recipient list
+				// again and this guard has to be faced properly.
+				if got := resultTypes(fn); got != "int, error" {
+					t.Errorf("%s returns (%s); it is exempt from the recipient-list rule only "+
+						"while it returns a count, so re-read that rule before changing this", name, got)
+				}
 				return true
 			}
 
@@ -102,4 +115,23 @@ func functionSource(t *testing.T, file, fnName string) string {
 	}
 	t.Fatalf("no function %s in %s", fnName, file)
 	return ""
+}
+
+// resultTypes renders a function's return types, for the guard above.
+func resultTypes(fn *ast.FuncDecl) string {
+	if fn.Type.Results == nil {
+		return ""
+	}
+	var out []string
+	for _, f := range fn.Type.Results.List {
+		name := types.ExprString(f.Type)
+		if len(f.Names) == 0 {
+			out = append(out, name)
+			continue
+		}
+		for range f.Names {
+			out = append(out, name)
+		}
+	}
+	return strings.Join(out, ", ")
 }

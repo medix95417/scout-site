@@ -481,3 +481,47 @@ func filterStatuses(ctx context.Context, pool *pgxpool.Pool, unitID string, in [
 	}
 	return out, nil
 }
+
+// AddressesAlsoElsewhere counts how many of the addresses a campaign
+// would reach also have a child at a status it is NOT aimed at.
+//
+// This exists because the counts beside each status are per address,
+// not per child, and a family with two children can sit in two of them
+// at once. A leader who moves one child to "Visited a meeting" and sees
+// the family still counted under "New enquiry" has found a sibling, not
+// a bug — but nothing on the page said so, and the only way to tell was
+// to read the database.
+//
+// Grouped by address over every prospect this unit holds, then kept
+// only where the family has a child both inside the chosen statuses and
+// outside them. The opt-out rules mirror RecipientsForStatuses exactly,
+// so this counts the same families that would actually be written to
+// and never reports an overlap for someone who is not a recipient.
+func AddressesAlsoElsewhere(ctx context.Context, pool *pgxpool.Pool, unitID string, statuses []string) (int, error) {
+	wanted, err := filterStatuses(ctx, pool, unitID, statuses)
+	if err != nil {
+		return 0, err
+	}
+	if len(wanted) == 0 {
+		return 0, nil
+	}
+
+	var n int
+	err = pool.QueryRow(ctx, `
+		SELECT count(*) FROM (
+			SELECT lower(p.parent_email)
+			FROM prospects p
+			WHERE p.unit_id = $1
+			  AND NOT p.email_opt_out
+			  AND NOT EXISTS (
+			      SELECT 1 FROM prospects q
+			      WHERE q.unit_id = p.unit_id
+			        AND lower(q.parent_email) = lower(p.parent_email)
+			        AND q.email_opt_out
+			  )
+			GROUP BY lower(p.parent_email)
+			HAVING bool_or(p.status = ANY($2)) AND bool_or(NOT (p.status = ANY($2)))
+		) AS split_across
+	`, unitID, wanted).Scan(&n)
+	return n, err
+}

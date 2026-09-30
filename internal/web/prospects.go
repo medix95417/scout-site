@@ -258,6 +258,39 @@ type prospectRow struct {
 	// that arrived through the form — worth saying on the row, because
 	// it is the reason no automatic reply went to them.
 	AddedByLeader bool
+	// Siblings names the other enquiries sharing this one's email
+	// address, each with where it has got to.
+	//
+	// Shown because the email counts are per family: a leader who
+	// moves one child along and sees the family still counted under
+	// the old status has found a sibling, and had no way to know it
+	// from this page. Empty for the ordinary one-child family.
+	Siblings []prospectSibling
+}
+
+// prospectSibling is another enquiry at the same address.
+type prospectSibling struct {
+	ChildName string
+	Status    string
+}
+
+// siblingsOf is every other enquiry sharing this one's address.
+func siblingsOf(p prospect.Prospect, byEmail map[string][]prospect.Prospect, statusText map[string]string) []prospectSibling {
+	same := byEmail[strings.ToLower(strings.TrimSpace(p.ParentEmail))]
+	if len(same) < 2 {
+		return nil
+	}
+	out := make([]prospectSibling, 0, len(same)-1)
+	for _, other := range same {
+		if other.ID == p.ID {
+			continue
+		}
+		out = append(out, prospectSibling{
+			ChildName: other.ChildName,
+			Status:    prospect.LabelIn(statusText, other.Status),
+		})
+	}
+	return out
 }
 
 // splitLabels takes a unit's full list and returns the live entries
@@ -585,6 +618,22 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Every enquiry this unit holds, whatever the page is currently
+	// showing: a sibling can be at a closed status, or filed under
+	// another category, and either would hide it from the list above
+	// while still being the reason a family counts twice in the email
+	// picker. Its own query rather than a reuse of the filtered list
+	// for exactly that reason.
+	byEmail := map[string][]prospect.Prospect{}
+	everyone, err := prospect.ListForUnit(r.Context(), h.Pool, unit.ID, false, prospect.OrderNewest)
+	if err != nil {
+		log.Printf("web: listing every prospect for sibling detection: %v", err)
+	}
+	for _, p := range everyone {
+		key := strings.ToLower(strings.TrimSpace(p.ParentEmail))
+		byEmail[key] = append(byEmail[key], p)
+	}
+
 	rows := make([]prospectRow, 0, len(list))
 	for _, p := range list {
 		rows = append(rows, prospectRow{
@@ -596,6 +645,7 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 			// keeps it visible rather than quietly filed away.
 			Open:          !closed[p.Status],
 			AddedByLeader: p.Source == prospect.SourceLeader,
+			Siblings:      siblingsOf(p, byEmail, statusText),
 		})
 	}
 
