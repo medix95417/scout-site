@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.17.2] — 2026-09-30
+
 ### Added
 
 - **The prospects pages now say when one family sits under two
