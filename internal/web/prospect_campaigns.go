@@ -60,16 +60,28 @@ type campaignStatusChoice struct {
 	// Count is how many prospects currently hold this status and have not
 	// opted out — shown next to the checkbox so a leader can see the size
 	// of the audience before sending rather than after.
+	//
+	// Counted by address rather than by child, because one letter goes
+	// to one inbox however many children a family has enquired about.
 	Count int
+	// AlsoElsewhere is how many of those addresses have another child
+	// at a different status. Without it, a family that appears under
+	// two statuses looks like a status change that failed to save —
+	// see AddressesAlsoElsewhere.
+	AlsoElsewhere int
 }
 
 // campaignFormData is the composer, for both a new campaign and an edit.
 type campaignFormData struct {
 	baseData
-	IsEdit           bool
-	Campaign         prospect.Campaign
-	Statuses         []campaignStatusChoice
-	RecipientCount   int
+	IsEdit         bool
+	Campaign       prospect.Campaign
+	Statuses       []campaignStatusChoice
+	RecipientCount int
+	// OverlapCount is how many of the families this message would reach
+	// also have a child at a status it is not aimed at — the ones who
+	// may read it as being about a stage they have already passed.
+	OverlapCount     int
 	SavedTemplates   []emailtemplate.Template
 	StarterTemplates template.JS
 	MailerReady      bool
@@ -132,14 +144,22 @@ func (h *Handlers) renderCampaignForm(w http.ResponseWriter, r *http.Request, un
 		if err != nil {
 			log.Printf("web: counting prospects for status %s: %v", s.Value, err)
 		}
+		also, err := prospect.AddressesAlsoElsewhere(r.Context(), h.Pool, unit.ID, []string{s.Value})
+		if err != nil {
+			log.Printf("web: counting overlapping addresses for status %s: %v", s.Value, err)
+		}
 		choices = append(choices, campaignStatusChoice{
-			Value: s.Value, Label: s.Label, Selected: selected[s.Value], Count: len(n),
+			Value: s.Value, Label: s.Label, Selected: selected[s.Value], Count: len(n), AlsoElsewhere: also,
 		})
 	}
 
 	reach, err := prospect.RecipientsForStatuses(r.Context(), h.Pool, unit.ID, c.TargetStatuses)
 	if err != nil {
 		log.Printf("web: counting campaign recipients: %v", err)
+	}
+	overlap, err := prospect.AddressesAlsoElsewhere(r.Context(), h.Pool, unit.ID, c.TargetStatuses)
+	if err != nil {
+		log.Printf("web: counting overlapping campaign recipients: %v", err)
 	}
 
 	saved, err := emailtemplate.ListForUnit(r.Context(), h.Pool, unit.ID, emailtemplate.KindProspect)
@@ -158,6 +178,7 @@ func (h *Handlers) renderCampaignForm(w http.ResponseWriter, r *http.Request, un
 		Campaign:         c,
 		Statuses:         choices,
 		RecipientCount:   len(reach),
+		OverlapCount:     overlap,
 		SavedTemplates:   saved,
 		StarterTemplates: prospectStarterTemplatesJSON(unit),
 		MailerReady:      h.Mailer.Enabled(r.Context()),

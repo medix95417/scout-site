@@ -33,14 +33,24 @@
           <label class="flex items-center gap-2 text-sm">
             <input type="checkbox" name="statuses" value="{{.Value}}" {{if .Selected}}checked{{end}}>
             <span>{{.Label}}</span>
-            <span class="text-xs text-gray-500">({{.Count}} {{if eq .Count 1}}family{{else}}families{{end}} who can be emailed)</span>
+            <span class="text-xs text-gray-500">
+              ({{.Count}} {{if eq .Count 1}}family{{else}}families{{end}} who can be emailed{{if .AlsoElsewhere}}, {{.AlsoElsewhere}} of them also at another status{{end}})
+            </span>
           </label>
         {{end}}
       </div>
       <p class="text-xs text-gray-500 mt-3">
-        Counts exclude anyone who has opted out. As saved, this message reaches
+        Counts exclude anyone who has opted out, and are per family rather than per child — one letter goes to one
+        inbox however many children a family has enquired about. As saved, this message reaches
         <strong>{{.RecipientCount}}</strong> {{if eq .RecipientCount 1}}family{{else}}families{{end}}.
       </p>
+      {{if .OverlapCount}}
+        <p class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 mt-2">
+          <strong>{{.OverlapCount}}</strong> of {{if eq .OverlapCount 1}}them has{{else}}them have{{end}} another
+          child at a status you haven't ticked — a family with two children sits under both until every one of
+          them has moved. Worth a read of the wording if it assumes nobody has been along yet.
+        </p>
+      {{end}}
       <p class="text-xs text-gray-500 mt-2">
         To say something different to different families, send more than one message: tick the statuses this one
         suits, then write another for the rest. A first invitation to people who have only enquired and a

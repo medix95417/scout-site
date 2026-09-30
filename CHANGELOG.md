@@ -27,6 +27,24 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **The prospects pages now say when one family sits under two
+  statuses.** Emails are counted and sent per family, not per child —
+  one letter to one inbox, however many children have enquired — so a
+  family with two children stays under the old status until both have
+  been moved. That is correct, and with nothing saying so it read
+  exactly like a status change that had failed to save.
+
+  The email picker now adds "1 of them also at another status" beside
+  each count, and warns before sending when the chosen audience
+  includes a family with a child at a status you haven't ticked — the
+  wording may assume nobody has been along yet. Each enquiry on the
+  list shows the others at the same address, with where each has got
+  to.
+
+  Display only: nothing about who receives an email has changed.
+
 ## [2.17.1] — 2026-09-29
 
 ### Added

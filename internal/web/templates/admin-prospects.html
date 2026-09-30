@@ -371,6 +371,17 @@
             {{if .CategoryLabel}}
               <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 text-xs">{{.CategoryLabel}}</span>
             {{end}}
+            {{if .Siblings}}
+              {{/* The email picker counts families, not children, so a
+                   family with two enquiries sits under two statuses at
+                   once. Saying so here is what stops that reading as a
+                   status change that didn't save. */}}
+              <span class="rounded-full bg-sky-100 text-sky-900 px-2 py-0.5 text-xs"
+                    title="One email address, more than one enquiry. Emails are counted and sent per family, so this address stays under every status its children are at.">
+                Also at this email:
+                {{range $i, $s := .Siblings}}{{if $i}}, {{end}}{{$s.ChildName}} ({{$s.Status}}){{end}}
+              </span>
+            {{end}}
             {{if .AddedByLeader}}
               <span class="rounded-full bg-gray-100 text-gray-600 px-2 py-0.5 text-xs"
                     title="Added here rather than through the join form, so nothing was emailed to them automatically.">Added by hand</span>
