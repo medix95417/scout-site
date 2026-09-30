@@ -490,9 +490,16 @@ type prospectsPageData struct {
 	// Groups is the list split by status, one accordion each. Empty in
 	// the default newest-first view, where the list is flat.
 	Groups []prospectStatusGroup
+	// CanBulkMove gates the tick boxes and the bar that acts on them.
+	// False for a unit with a single status, where there is nowhere to
+	// move anyone to and the controls would be furniture.
+	CanBulkMove bool
 	// AddError is what went wrong adding a family by hand, shown above
 	// the list — see prospect_add.go.
-	AddError       string
+	AddError string
+	// Notice is what a bulk move just did, shown in the same place but
+	// as a result rather than a problem.
+	Notice         string
 	ShowAll        bool
 	OpenCount      int
 	OptedOutCount  int
@@ -668,7 +675,9 @@ func (h *Handlers) ProspectsList(w http.ResponseWriter, r *http.Request) {
 		Filter:         filter,
 		Sort:           string(order),
 		Groups:         groups,
+		CanBulkMove:    len(statuses) > 1,
 		AddError:       r.URL.Query().Get("add_error"),
+		Notice:         r.URL.Query().Get("moved"),
 		ShowAll:        showAll,
 		OpenCount:      openCount,
 		OptedOutCount:  optedOut,
@@ -760,6 +769,98 @@ func (h *Handlers) ProspectUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, prospectReturnTo(r), http.StatusSeeOther)
+}
+
+// ProspectBulkStatus moves every ticked enquiry to one status.
+//
+// The tick boxes live on the rows and the picker lives in a bar above
+// the list, which in plain HTML means the boxes belong to a form they
+// are not inside — see the `form` attribute in admin-prospects.html.
+// The alternative is a form wrapping the whole list, and the rows
+// already carry a form each, which cannot nest.
+func (h *Handlers) ProspectBulkStatus(w http.ResponseWriter, r *http.Request) {
+	unit, actor, ok := h.requireContentEditor(w, r, "/admin/prospects")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Nothing ticked is a mis-click, not an error worth a status code:
+	// say so above the list the leader is still looking at.
+	ids := r.Form["ids"]
+	if len(ids) == 0 {
+		h.backToProspects(w, r, "Tick the families you want to move first — nothing was selected, so nothing changed.")
+		return
+	}
+
+	status := r.FormValue("status")
+	moved, err := prospect.UpdateStatusMany(r.Context(), h.Pool, unit.ID, ids, status, actor.ID)
+	if err != nil {
+		if errors.Is(err, prospect.ErrInvalid) {
+			h.backToProspects(w, r, "That status isn't one of this unit's, so nothing was moved.")
+			return
+		}
+		writeProspectError(w, err)
+		return
+	}
+	h.backToProspectsWith(w, r, "moved", bulkMoveNotice(moved, len(ids), h.statusLabel(r, unit.ID, status)))
+}
+
+// statusLabel is what one stored status value reads as in this unit.
+// Only for the message after a bulk move, so a failure to load the
+// labels falls back to the raw value rather than failing the move that
+// already happened.
+func (h *Handlers) statusLabel(r *http.Request, unitID, value string) string {
+	all, err := prospect.ListLabels(r.Context(), h.Pool, unitID, prospect.KindStatus, true)
+	if err != nil {
+		log.Printf("web: naming a status after a bulk move: %v", err)
+		return value
+	}
+	_, text, _ := splitLabels(all)
+	return prospect.LabelIn(text, value)
+}
+
+// bulkMoveNotice says what the move did, in the leader's terms.
+//
+// It accounts for every id posted. "Moved 3" when four were ticked
+// reads as a partial failure, and the cause is almost always that one
+// was already at that status — which is worth saying plainly rather
+// than leaving someone to re-tick and try again.
+func bulkMoveNotice(moved prospect.BulkMove, selected int, label string) string {
+	var b strings.Builder
+	switch moved.Moved {
+	case 0:
+		b.WriteString("Nothing moved")
+	case 1:
+		b.WriteString("Moved 1 enquiry to " + label)
+	default:
+		b.WriteString("Moved " + strconv.Itoa(moved.Moved) + " enquiries to " + label)
+	}
+	if moved.Already > 0 {
+		b.WriteString("; " + strconv.Itoa(moved.Already))
+		if moved.Moved == 0 {
+			b.WriteString(" of those")
+		}
+		b.WriteString(" " + was(moved.Already) + " already at " + label)
+	}
+	// Anything left over was not this unit's, which the page cannot
+	// produce and a hand-made request can. Reported rather than
+	// swallowed: a silent discrepancy in a count is worse than an odd
+	// sentence.
+	if rest := selected - moved.Moved - moved.Already; rest > 0 {
+		b.WriteString("; " + strconv.Itoa(rest) + " " + was(rest) + " no longer in this list")
+	}
+	return b.String() + "."
+}
+
+func was(n int) string {
+	if n == 1 {
+		return "was"
+	}
+	return "were"
 }
 
 // ProspectUpdateDetails saves a correction to an enquiry's contact

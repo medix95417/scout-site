@@ -414,6 +414,138 @@ func UpdateStatus(ctx context.Context, pool *pgxpool.Pool, unitID, id, status, c
 	return after, nil
 }
 
+// BulkMove is what UpdateStatusMany did, split so the page can say it
+// exactly. Moved and Already are both needed because "4 selected, 3
+// moved" is otherwise indistinguishable from a failure, when the usual
+// cause is simply that one of them was already there.
+type BulkMove struct {
+	// Moved is how many enquiries actually changed status.
+	Moved int
+	// Already is how many were at that status to begin with and were
+	// left alone — not written to, not audited.
+	Already int
+}
+
+// UpdateStatusMany moves a whole selection of enquiries to one status.
+//
+// This is the one operation on this page that is worth doing in bulk. A
+// leader comes back from a recruiting night with a dozen families to
+// move from New enquiry to Visited a meeting, and doing that a row at a
+// time is twelve round trips through a page that rebuilds itself each
+// time. Nothing else here batches usefully: notes are prose about one
+// family, and a category is a judgement per enquiry.
+//
+// Which of the posted ids are this unit's is answered in SQL — the
+// `unit_id = $1 AND id = ANY($2)` that every bulk action in this
+// codebase uses — rather than by looping and checking each one. An id
+// from the other unit matches nothing and is skipped, instead of being
+// acted on by a handler that forgot a check.
+//
+// Rows already at the target status are excluded by the same predicate
+// rather than updated to the value they already hold. That keeps the
+// Activity Log free of a dozen entries recording nothing, keeps
+// updated_at meaning "when this last changed", and is what lets the
+// count reported back be honest.
+//
+// Audited one entry per enquiry, the same shape UpdateStatus writes.
+// One entry for the batch would be quicker and would be the wrong
+// record: the question afterwards is always "what happened to this
+// family", asked on one family's name.
+func UpdateStatusMany(ctx context.Context, pool *pgxpool.Pool, unitID string, ids []string, status, actorID string) (BulkMove, error) {
+	if len(ids) == 0 {
+		return BulkMove{}, nil
+	}
+
+	// Against this unit's own live labels, so a bulk move can't land a
+	// dozen families on a status that has been retired — the same check
+	// UpdateStatus makes for one.
+	known, err := LabelExists(ctx, pool, unitID, KindStatus, status)
+	if err != nil {
+		return BulkMove{}, err
+	}
+	if !known {
+		return BulkMove{}, fmt.Errorf("%w: unknown status %q", ErrInvalid, status)
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return BulkMove{}, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var already int
+	if err := tx.QueryRow(ctx, `
+		SELECT count(*) FROM prospects
+		WHERE unit_id = $1 AND id = ANY($2) AND status = $3
+	`, unitID, ids, status).Scan(&already); err != nil {
+		return BulkMove{}, err
+	}
+
+	// Locked in a stable order, so two leaders moving overlapping
+	// selections at once queue up rather than deadlocking each other.
+	before, err := scanAll(tx.Query(ctx, `
+		SELECT `+columns+` FROM prospects
+		WHERE unit_id = $1 AND id = ANY($2) AND status <> $3
+		ORDER BY id
+		FOR UPDATE
+	`, unitID, ids, status))
+	if err != nil {
+		return BulkMove{}, err
+	}
+	if len(before) == 0 {
+		return BulkMove{Already: already}, tx.Commit(ctx)
+	}
+
+	after, err := scanAll(tx.Query(ctx, `
+		UPDATE prospects SET status = $3, updated_at = now()
+		WHERE unit_id = $1 AND id = ANY($2) AND status <> $3
+		RETURNING `+columns, unitID, ids, status))
+	if err != nil {
+		return BulkMove{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return BulkMove{}, err
+	}
+
+	// Paired by id rather than by position: RETURNING makes no promise
+	// about row order, and an audit entry pairing one family's before
+	// with another's after would be worse than none.
+	was := make(map[string]Prospect, len(before))
+	for _, p := range before {
+		was[p.ID] = p
+	}
+	for _, p := range after {
+		audit.Log(ctx, pool, audit.Entry{
+			EntityType: "prospect",
+			EntityID:   p.ID,
+			ActorID:    &actorID,
+			Action:     "update",
+			Before:     was[p.ID],
+			After:      p,
+		})
+	}
+	return BulkMove{Moved: len(after), Already: already}, nil
+}
+
+// scanAll reads a whole result set of prospects, for the queries that
+// return more than one row.
+func scanAll(rows pgx.Rows, err error) ([]Prospect, error) {
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Prospect
+	for rows.Next() {
+		p, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
 // UpdateDetails changes the contact details a leader typed or a family
 // submitted — everything except where the enquiry has got to, which
 // UpdateStatus owns.

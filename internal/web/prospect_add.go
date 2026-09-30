@@ -171,13 +171,23 @@ func (h *Handlers) ProspectImportSave(w http.ResponseWriter, r *http.Request) {
 // backToProspects returns to the list, carrying a message about the add
 // when there is one.
 func (h *Handlers) backToProspects(w http.ResponseWriter, r *http.Request, msg string) {
+	h.backToProspectsWith(w, r, "add_error", msg)
+}
+
+// backToProspectsWith returns to the list carrying one message, under
+// the parameter that decides how the page shows it: "add_error" for
+// something that went wrong, "moved" for something that worked. Two
+// parameters rather than one flash slot because they are styled
+// differently, and a green box saying a paste failed would be worse
+// than no message at all.
+func (h *Handlers) backToProspectsWith(w http.ResponseWriter, r *http.Request, param, msg string) {
 	to := prospectReturnTo(r)
 	if msg != "" {
 		sep := "?"
 		if strings.Contains(to, "?") {
 			sep = "&"
 		}
-		to += sep + "add_error=" + url.QueryEscape(msg)
+		to += sep + param + "=" + url.QueryEscape(msg)
 	}
 	http.Redirect(w, r, to, http.StatusSeeOther)
 }

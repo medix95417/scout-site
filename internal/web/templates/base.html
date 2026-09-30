@@ -380,6 +380,79 @@
       if (message && !window.confirm(message)) e.preventDefault();
     });
 
+    // Tick-everything and a live count for the prospects page's bulk
+    // status move. Both are enhancements: the tick boxes and the form
+    // work without either.
+    //
+    // Delegated from document and resolved on each event, like
+    // everything else in this block, because this script runs BEFORE the
+    // page content below is parsed — a querySelector at load time here
+    // finds nothing and silently wires up neither.
+    (function () {
+      function master() {
+        return document.querySelector('[data-check-all]');
+      }
+      function boxes(m) {
+        var name = (m && m.getAttribute('data-check-all')) || 'ids';
+        return Array.prototype.slice.call(
+          document.querySelectorAll('input[type=checkbox][name="' + name + '"]'));
+      }
+      // What "everything shown" means in the by-status view: ticking all
+      // while one stage is open takes that stage, which is the whole
+      // reason it is useful there.
+      //
+      // The collapsed-section test is an explicit ancestor check and not
+      // offsetParent, which does NOT report a row inside a closed
+      // <details> as hidden — current browsers collapse that content
+      // with content-visibility rather than display, and it keeps its
+      // layout box. Trusting offsetParent alone ticked every row on the
+      // page and then submitted the invisible ones.
+      function shown(box) {
+        return box.offsetParent !== null && !box.closest('details:not([open])');
+      }
+      function recount() {
+        var count = document.querySelector('[data-selected-count]');
+        if (!count) return;
+        var n = boxes(master()).filter(function (b) { return b.checked; }).length;
+        count.textContent = n === 0 ? '' : n + ' ticked';
+      }
+
+      // Revealed only once this has run, so a page with JavaScript off
+      // is never offered a control that would do nothing. A class rather
+      // than the hidden attribute: Tailwind's display utilities are
+      // author styles and would win over [hidden] outright.
+      document.addEventListener('DOMContentLoaded', function () {
+        var label = document.querySelector('[data-needs-js]');
+        if (!label) return;
+        label.classList.remove('hidden');
+        label.classList.add('flex');
+      });
+
+      document.addEventListener('change', function (e) {
+        var m = master();
+        if (m && e.target === m) {
+          boxes(m).forEach(function (b) {
+            if (shown(b)) b.checked = m.checked;
+          });
+          recount();
+          return;
+        }
+        if (boxes(m).indexOf(e.target) !== -1) recount();
+      });
+
+      // Closing an accordion changes what "shown" means, so a box left
+      // ticked out of sight would otherwise go into the batch unseen.
+      document.addEventListener('toggle', function (e) {
+        if (e.target.tagName !== 'DETAILS' || e.target.open) return;
+        var m = master();
+        boxes(m).forEach(function (b) {
+          if (e.target.contains(b)) b.checked = false;
+        });
+        if (m) m.checked = false;
+        recount();
+      }, true);
+    })();
+
     // Selects that submit their own form on change (the file library's
     // category picker), previously onchange="this.form.submit()".
     document.addEventListener('change', function (e) {
