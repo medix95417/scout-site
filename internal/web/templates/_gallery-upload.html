@@ -120,6 +120,27 @@
       var haltNote = '';    // why a run stopped early, if it did
       var tally = { pub: 0, members: 0 };  // how the files were saved
 
+      // A video that has gone up gets its poster, made by this browser from
+      // the copy now on the site. Strictly in the background and one at a time,
+      // and never allowed to fail the upload: the worst case is the dark box a
+      // video had before posters, which the Files page can fill in later.
+      //
+      // From the site's own address rather than from the file just chosen: the
+      // site's Content-Security-Policy (default-src 'self') does not allow a
+      // blob: URL as media, and loosening it is not worth saving this read. A
+      // browser reads a video in ranges, so it takes a few megabytes of it, not
+      // the whole file.
+      var posterQueue = Promise.resolve();
+      var postersPending = 0;
+      function makePoster(fileId) {
+        if (!window.ScoutPoster) { return; }
+        postersPending++;
+        posterQueue = posterQueue.then(function () {
+          return window.ScoutPoster.make(fileId, '/files/' + encodeURIComponent(fileId) + '/download', token)
+            .catch(function () { return false; });
+        }).then(function () { postersPending--; });
+      }
+
       // --- what a file is --------------------------------------------------
       // The server decides from the bytes. This only decides how to GROUP
       // them: photos together, a video on its own. A file with no type from
@@ -318,6 +339,7 @@
                 var res = outcome.results[i];
                 if (res && res.url) {
                   window.mediaListAppend(target, res.url, !!res.video);
+                  if (res.video && res.id) { makePoster(res.id); }
                   added++;
                   unsaved = true;
                   if (outcome.isPublic) { tally.pub++; } else { tally.members++; }
@@ -447,6 +469,15 @@
         if (running) {
           e.preventDefault();
           say('Wait for the upload to finish, or press Stop, before saving — otherwise the rest wouldn’t be in the album.', 'warn');
+          return;
+        }
+        // Leaving the page would end a poster half-way, and the video would
+        // show as a dark box. It takes a moment; saving carries on after it.
+        if (postersPending > 0) {
+          e.preventDefault();
+          say('Making preview pictures for the videos — saving in a moment.', 'warn');
+          var submitter = e.submitter || undefined;
+          posterQueue.then(function () { form.requestSubmit(submitter); });
           return;
         }
         unsaved = false;

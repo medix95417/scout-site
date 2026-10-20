@@ -298,8 +298,10 @@
      dozens: so the photos are loading="lazy" (the script warms the slides
      beside the one showing), and a video is preload="none", which fetches
      nothing until someone presses play. A video's first frame would be a
-     nicer preview, and costs a slice of the file from this server for
-     every video on every visit. */}}
+     nicer preview, but costs a slice of the file from this server for every
+     video on every visit — so its poster stands in: a small still, made by
+     a leader's browser (see video_poster.go), shown while the video itself is
+     untouched. A video with no poster yet shows the dark box it always did. */}}
 {{define "photoCarousel"}}
   {{if .Photos}}
     <div class="relative">
@@ -318,7 +320,7 @@
         {{range .Photos}}
           <figure class="snap-start flex-shrink-0 w-full {{$figureBg}}">
             {{if .IsVideo}}
-              <video src="{{.URL}}" controls preload="none" class="w-full {{$height}} {{$fit}} bg-black"></video>
+              <video src="{{.URL}}" controls preload="none" {{with posterURL .URL}}poster="{{.}}" {{end}}class="w-full {{$height}} {{$fit}} bg-black"></video>
             {{else}}
               <a href="{{.URL}}" data-lightbox-open>
                 <img src="{{thumbURL .URL}}" alt="{{.Caption}}" loading="lazy" class="w-full {{$height}} {{$fit}}">
@@ -523,7 +525,7 @@
       {{range $i, $p := .Photos}}
         <button type="button" class="flex-shrink-0 w-20 h-16 rounded-md overflow-hidden border-2 relative {{if eq $i 0}}border-blue-500{{else}}border-gray-200{{end}}" data-carousel-thumb="{{$i}}" aria-label="{{if $p.Caption}}{{$p.Caption}}{{else}}View photo{{end}}">
           {{if $p.IsVideo}}
-            <video src="{{$p.URL}}" muted preload="none" class="h-full w-full object-cover bg-gray-900"></video>
+            <video src="{{$p.URL}}" muted preload="none" {{with posterURL $p.URL}}poster="{{.}}" {{end}}class="h-full w-full object-cover bg-gray-900"></video>
             <span class="absolute bottom-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">&#9654;</span>
           {{else}}
             <img src="{{thumbURL $p.URL}}" alt="{{$p.Caption}}" loading="lazy" class="h-full w-full object-cover">

@@ -27,6 +27,28 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **Videos show a picture instead of a black box until they are played.**
+  When a leader uploads a video in the album editor, their browser takes a
+  frame from it and sends it up as a small picture, which the album, the
+  thumbnail strip and the Files page then show in place of the dark box. It is
+  made in the browser because the browser is the one place that can already
+  play whatever a phone recorded; the server has no video decoder, and the
+  runtime image is distroless, so adding one (ffmpeg) would have meant a much
+  larger image or a third-party binary that couldn't be tested here. The
+  server only checks that what arrives is really a picture, writes it out again
+  as a JPEG of at most 640 pixels, and files it under the video's id, so a
+  poster follows its video through the rekey pass and is deleted with it. A
+  poster is served under exactly the rule that serves its video, so a frame of
+  a members-only video is members-only.
+  Videos uploaded before this have none: a leader sees a "Preview pictures for
+  videos" panel at the top of the Files page and presses one button, and their
+  browser works through them one at a time (and says which, if any, it
+  couldn't read — a browser that can't play a video can't take a frame from
+  it, so a phone video in an unusual format may need Safari). Requires the new
+  `has_poster` column (migration 0052, applied automatically on startup).
+
 ### Fixed
 
 - **Videos can be skipped through, resumed, and watched on a slow
@@ -63,8 +85,8 @@ tagged commit with an accurate date.
 - **A video no longer fetches part of its file on every page view.** Videos in
   albums, the thumbnail strip and the Files page were `preload="metadata"`,
   which asks this server for a slice of every video on every visit. They are
-  now `preload="none"` and load when someone presses play. The cost is that
-  an unplayed video shows as a dark box rather than its first frame.
+  now `preload="none"` and load when someone presses play, and show a
+  poster picture in the meantime (see Added).
 
 ## [2.18.1] — 2026-10-20
 

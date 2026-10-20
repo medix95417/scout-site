@@ -212,6 +212,7 @@ var templateFuncs = template.FuncMap{
 	"heroSizeClass":      heroSizeClass,
 	"homeHeroSizeClass":  homeHeroSizeClass,
 	"thumbURL":           thumbURL,
+	"posterURL":          posterURL,
 	"bannerURL":          bannerURL,
 	"splitUnitName":      splitUnitName,
 	"numeralImages":      templateNumeralImages,
@@ -421,7 +422,7 @@ func redirectTo(path string) http.HandlerFunc {
 // assembled, so that TestEveryTemplateParses exercises the same path New
 // does rather than a copy of it that could drift.
 func parsePageTemplate(page string) (*template.Template, error) {
-	return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/_image-picker.html", "templates/_gallery-upload.html", "templates/_file-link-picker.html", "templates/_webauthn.html", "templates/"+page)
+	return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/_image-picker.html", "templates/_gallery-upload.html", "templates/_video-poster.html", "templates/_file-link-picker.html", "templates/_webauthn.html", "templates/"+page)
 }
 
 func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *mailer.Mailer, store *storage.Store) (*Handlers, error) {
@@ -916,6 +917,10 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /files/{id}/download", h.FileDownload)
 	mux.HandleFunc("GET /files/{id}/thumb", h.FileThumbnail)
 	mux.HandleFunc("GET /files/{id}/banner", h.FileBanner)
+	// A video's poster: served to whoever may see the video, made by a
+	// leader's browser (see video_poster.go).
+	mux.HandleFunc("GET /files/{id}/poster", h.FilePoster)
+	mux.HandleFunc("POST /files/{id}/poster", h.FilePosterUpload)
 	mux.HandleFunc("POST /files/{id}/delete", h.FileDelete)
 	mux.HandleFunc("POST /files/{id}/link", h.FileSetEventLinks)
 	mux.HandleFunc("POST /files/{id}/public", h.FileSetPublic)

@@ -428,6 +428,9 @@ Added since Phase 2, backing the features described above:
   content-addressed keys used for hosted newsletter images.
 - `internal/thumbnail` — server-side image thumbnail generation, run
   eagerly at upload time and on demand for older files.
+  A video's poster picture is a different case: a leader's browser makes it
+  (a frame drawn onto a canvas) and `internal/web/video_poster.go` files it,
+  because the server has no video decoder — see `internal/files/poster.go`.
 - `internal/resources` — the Resources page's data model (public and
   members-only documents/links, either a pasted URL or a file-library
   pick).

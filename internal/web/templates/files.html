@@ -11,6 +11,25 @@
     </div>
   {{end}}
 
+  {{if and .CanManage .StorageConfigured .PosterBacklog}}
+    {{/* Videos uploaded before posters existed, or whose poster couldn't be
+         made at the time. Hidden until the script is running, so it is never
+         a button that does nothing. The ids ride along so the script has its
+         list without a second request. */}}
+    <section class="rounded-lg border border-gray-200 bg-white p-4 mb-8 max-w-lg" hidden data-poster-backfill
+             data-csrf="{{.CSRFToken}}" data-ids="{{range $i, $v := .PosterBacklog}}{{if $i}},{{end}}{{$v.ID}}{{end}}">
+      <h2 class="text-lg font-semibold mb-1">Preview pictures for videos</h2>
+      <p class="text-sm text-gray-600 mb-3">
+        <span data-pb-count>{{len .PosterBacklog}}</span> of your videos {{if eq (len .PosterBacklog) 1}}doesn't{{else}}don't{{end}}
+        have a preview picture yet, so {{if eq (len .PosterBacklog) 1}}it shows{{else}}they show{{end}} as a dark box until played.
+        This browser can make them: it opens each video, takes a still, and sends it up. It reads part of each video, so
+        on a phone you may prefer to do it on Wi-Fi. Keep this page open until it finishes.
+      </p>
+      <button type="button" class="rounded-md px-4 py-2 text-sm btn-accent" data-pb-start>Make preview pictures</button>
+      <p class="text-sm mt-2" data-pb-status aria-live="polite"></p>
+    </section>
+  {{end}}
+
   {{if and .CanManage .StorageConfigured}}
     <section class="rounded-lg border border-gray-200 bg-white p-4 mb-8 max-w-lg">
       <h2 class="text-lg font-semibold mb-3">Upload a file</h2>
@@ -153,6 +172,7 @@
   {{end}}
 
   {{if .CanManage}}{{template "fileLibraryScript" .}}{{end}}
+  {{if and .CanManage .PosterBacklog}}{{template "videoPosterScript" .}}{{template "posterBacklogScript" .}}{{end}}
 {{end}}
 
 {{/* fileLibraryScript does two small jobs, both pure enhancement — with
@@ -169,6 +189,73 @@
 
      2. The bulk bar counts what's selected, and each event group offers
         a select-all for the files inside it. */}}
+{{/* posterBacklogScript runs the panel above: one video at a time, it asks the
+     browser for a still (see _video-poster.html), sends it up, and shows it in
+     the list. One at a time because each one reads part of a video, and a phone
+     reading five at once would be slow at all of them. */}}
+{{define "posterBacklogScript"}}
+  <script nonce="{{.CSPNonce}}">
+    (function () {
+      var panel = document.querySelector('[data-poster-backfill]');
+      if (!panel || !window.ScoutPoster) { return; }
+      var ids = panel.getAttribute('data-ids').split(',').filter(Boolean);
+      var token = panel.getAttribute('data-csrf');
+      var button = panel.querySelector('[data-pb-start]');
+      var status = panel.querySelector('[data-pb-status]');
+      var running = false;
+      panel.hidden = false;
+
+      function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+      button.addEventListener('click', async function () {
+        if (running) { return; }
+        running = true;
+        button.disabled = true;
+        var made = 0;
+        var failed = [];
+        for (var i = 0; i < ids.length; i++) {
+          var id = ids[i];
+          status.textContent = 'Making preview ' + (i + 1) + ' of ' + ids.length + '…';
+          var ok = false;
+          try {
+            ok = await window.ScoutPoster.make(id, '/files/' + id + '/download', token);
+          } catch (err) {
+            ok = false;
+          }
+          if (ok) {
+            made++;
+            // Show it in the list now rather than at the next visit.
+            var video = document.querySelector('[data-file-video="' + id + '"]');
+            if (video) { video.poster = '/files/' + id + '/poster?made=' + Date.now(); }
+          } else {
+            failed.push(id);
+          }
+        }
+        var message = 'Made ' + plural(made, 'preview picture', 'preview pictures') + '.';
+        if (failed.length > 0) {
+          message += ' ' + plural(failed.length, 'video', 'videos') +
+            ' couldn’t be read by this browser, so ' + (failed.length === 1 ? 'it stays' : 'they stay') +
+            ' a dark box until played. Some phone videos need Safari or a newer browser.';
+          ids = failed;
+          button.textContent = 'Try ' + (failed.length === 1 ? 'that one' : 'those') + ' again';
+          button.disabled = false;
+        } else {
+          button.hidden = true;
+        }
+        status.textContent = message;
+        running = false;
+      });
+
+      window.addEventListener('beforeunload', function (e) {
+        if (running) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
+      });
+    })();
+  </script>
+{{end}}
+
 {{define "fileLibraryScript"}}
   <script nonce="{{.CSPNonce}}">
     (function () {
@@ -310,7 +397,7 @@
         {{if hasPrefix $f.ContentType "image/"}}
           <img src="/files/{{$f.ID}}/thumb" alt="" loading="lazy" class="h-12 w-12 flex-shrink-0 object-cover rounded-md border border-gray-200">
         {{else if hasPrefix $f.ContentType "video/"}}
-          <video src="/files/{{$f.ID}}/download" muted preload="none" class="h-12 w-12 flex-shrink-0 object-cover rounded-md border border-gray-200 bg-black"></video>
+          <video src="/files/{{$f.ID}}/download" muted preload="none" data-file-video="{{$f.ID}}" {{if $f.HasPoster}}poster="/files/{{$f.ID}}/poster" {{end}}class="h-12 w-12 flex-shrink-0 object-cover rounded-md border border-gray-200 bg-black"></video>
         {{end}}
         <div class="min-w-0">
           <a href="/files/{{$f.ID}}/download" target="_blank" class="font-medium hover:underline truncate block" style="color: var(--unit-color);">

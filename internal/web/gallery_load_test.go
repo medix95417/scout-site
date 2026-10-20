@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/47-yonkers/scout-site/internal/content"
+	"github.com/47-yonkers/scout-site/internal/files"
 )
 
 // What a photo page costs the server is decided in its markup, and a revert
@@ -161,5 +162,143 @@ func TestTheLastPageLinksOnlyBack(t *testing.T) {
 	}
 	if strings.Contains(out, "Older albums") || strings.Contains(out, `rel="next"`) {
 		t.Error("the last page links forward to nothing")
+	}
+}
+
+// --- posters ---------------------------------------------------------------
+
+// A video that has not been played is a dark box unless it has a picture to
+// show. Pointing at one is the template's whole part in that; the test is that
+// it does, only for videos that can have one, on both places a video appears.
+func TestAVideoPointsAtItsPoster(t *testing.T) {
+	out := renderGalleryDetailWith(t, []content.GalleryPhoto{
+		{URL: "/files/lib/download", Caption: "Ours", IsVideo: true},
+		{URL: "https://example.org/clip.mp4", Caption: "Somebody else's", IsVideo: true},
+	})
+
+	var ours, elsewhere []string
+	for _, tag := range videoTag.FindAllString(out, -1) {
+		if strings.Contains(tag, "/files/lib/download") {
+			ours = append(ours, tag)
+		} else {
+			elsewhere = append(elsewhere, tag)
+		}
+	}
+	if len(ours) != 2 || len(elsewhere) != 2 { // each video is in the slides and in the strip
+		t.Fatalf("found %d of ours and %d of the other, want 2 and 2", len(ours), len(elsewhere))
+	}
+	for _, tag := range ours {
+		if !strings.Contains(tag, `poster="/files/lib/poster"`) {
+			t.Errorf("a library video doesn't point at its poster:\n%s", tag)
+		}
+	}
+	for _, tag := range elsewhere {
+		if strings.Contains(tag, "poster=") {
+			t.Errorf("a video from elsewhere points at a poster this site can't have made:\n%s", tag)
+		}
+	}
+}
+
+func filesPageWithVideos(canManage bool, backlog []files.VideoPoster) fileLibraryData {
+	return fileLibraryData{
+		baseData:          testBase("Files"),
+		SelectedEventIDs:  map[string]bool{},
+		CanManage:         canManage,
+		StorageConfigured: true,
+		PosterBacklog:     backlog,
+		EventGroups: []eventFileGroupView{{
+			EventTitle: "Not linked to an event",
+			Files: []fileRow{
+				{File: files.File{ID: "has-one", Filename: "a.mp4", ContentType: "video/mp4", Category: files.CategoryEventPhoto},
+					SizeDisplay: "1 MB", LinkedEventIDs: map[string]bool{}, HasPoster: true},
+				{File: files.File{ID: "has-none", Filename: "b.mp4", ContentType: "video/mp4", Category: files.CategoryEventPhoto},
+					SizeDisplay: "1 MB", LinkedEventIDs: map[string]bool{}},
+			},
+		}},
+	}
+}
+
+func TestTheFilesPageShowsAPosterOnlyWhereThereIsOne(t *testing.T) {
+	out := renderPage(t, "files.html", filesPageWithVideos(true, nil))
+	by := map[string]string{}
+	for _, tag := range videoTag.FindAllString(out, -1) {
+		switch {
+		case strings.Contains(tag, `data-file-video="has-one"`):
+			by["has-one"] = tag
+		case strings.Contains(tag, `data-file-video="has-none"`):
+			by["has-none"] = tag
+		}
+	}
+	if !strings.Contains(by["has-one"], `poster="/files/has-one/poster"`) {
+		t.Errorf("a video with a poster doesn't show it:\n%s", by["has-one"])
+	}
+	if by["has-none"] == "" || strings.Contains(by["has-none"], "poster=") {
+		t.Errorf("a video without one points at a poster that is not there:\n%s", by["has-none"])
+	}
+}
+
+// The panel that makes the missing posters is for a leader, and only while
+// there is something for it to do. It is hidden until its script runs, so it
+// is never a button that does nothing.
+func TestThePosterPanelIsForALeaderWithVideosWaiting(t *testing.T) {
+	waiting := []files.VideoPoster{{ID: "has-none", Label: "b.mp4"}, {ID: "also-none", Label: "c.mp4"}}
+
+	out := renderPage(t, "files.html", filesPageWithVideos(true, waiting))
+	if !strings.Contains(out, "data-poster-backfill") {
+		t.Fatal("a leader with videos waiting is not offered the panel")
+	}
+	for _, want := range []string{
+		`data-ids="has-none,also-none"`, // the list the script works through
+		`data-csrf=`,                    // its POSTs need the token
+		`hidden data-poster-backfill`,   // hidden until the script runs
+		"2</span> of your videos don",   // the count, in the plural
+		"window.ScoutPoster",            // the capture script is on the page
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the panel or its script is missing %q", want)
+		}
+	}
+
+	for name, data := range map[string]fileLibraryData{
+		"a leader with nothing waiting":     filesPageWithVideos(true, nil),
+		"a member who cannot edit the site": filesPageWithVideos(false, waiting),
+	} {
+		if strings.Contains(renderPage(t, "files.html", data), "data-poster-backfill") {
+			t.Errorf("%s is shown the panel", name)
+		}
+	}
+}
+
+func TestTheAlbumEditorLoadsTheCaptureScriptBeforeTheUploader(t *testing.T) {
+	src, err := readSource("templates/admin-content-form.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	poster := strings.Index(src, `template "videoPosterScript"`)
+	uploader := strings.Index(src, `template "galleryUploaderScript"`)
+	if poster < 0 || uploader < 0 || poster > uploader {
+		t.Errorf("the capture script must be on the page before the uploader that calls it (poster at %d, uploader at %d)", poster, uploader)
+	}
+}
+
+// The capture reads the video from this site's own address, never from a
+// blob: URL of the file just chosen. The site's Content-Security-Policy
+// (default-src 'self') refuses blob: as media, so a capture from one fails in
+// every browser — silently, because a poster that can't be made is only ever a
+// dark box — and nothing but a real browser notices. This is the cheap
+// reminder of why the page does it the longer way.
+func TestPosterCaptureNeverReadsABlobURL(t *testing.T) {
+	for _, file := range []string{"templates/_video-poster.html", "templates/_gallery-upload.html", "templates/files.html"} {
+		src, err := readSource(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(src, "createObjectURL") {
+			t.Errorf("%s makes a blob: URL, which the site's CSP will not let a <video> load", file)
+		}
+	}
+	src, _ := readSource("templates/_gallery-upload.html")
+	if !strings.Contains(src, `'/files/' + encodeURIComponent(fileId) + '/download'`) {
+		t.Error("the album uploader no longer captures from the uploaded copy at /files/{id}/download")
 	}
 }

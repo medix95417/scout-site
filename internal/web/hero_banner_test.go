@@ -126,8 +126,30 @@ func TestBothVariantsShareOneImplementation(t *testing.T) {
 	if !ok {
 		t.Fatal("serveImageVariant not found")
 	}
-	if !strings.Contains(shared, "requiresLoginToDownload(") {
-		t.Error("serveImageVariant doesn't check whether this file needs a login")
+	// The access check lives in servableFile, the front door every route that
+	// serves a file's bytes goes through — so what has to hold is that the
+	// variant route goes through it, and that it still makes the check.
+	if !strings.Contains(shared, "h.servableFile(") {
+		t.Error("serveImageVariant doesn't go through servableFile, so its access check can drift from the download's")
+	}
+	door, ok := functionBody(src, "servableFile")
+	if !ok {
+		t.Fatal("servableFile not found")
+	}
+	if !strings.Contains(door, "requiresLoginToDownload(") {
+		t.Error("servableFile doesn't check whether this file needs a login")
+	}
+	for _, fn := range []string{"FileDownload"} {
+		if body, ok := functionBody(src, fn); !ok || !strings.Contains(body, "h.servableFile(") {
+			t.Errorf("%s doesn't go through servableFile", fn)
+		}
+	}
+	poster, err := readSource("video_poster.go")
+	if err != nil {
+		t.Fatalf("reading video_poster.go: %v", err)
+	}
+	if body, ok := functionBody(poster, "FilePoster"); !ok || !strings.Contains(body, "h.servableFile(") {
+		t.Error("FilePoster doesn't go through servableFile — a frame of a members-only video is the video's content")
 	}
 }
 
