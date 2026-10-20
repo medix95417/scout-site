@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.18.1] — 2026-10-20
+
 ### Fixed
 
 - **Uploading a large file on the Files page no longer costs the server
