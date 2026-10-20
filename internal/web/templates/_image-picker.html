@@ -291,7 +291,15 @@
      the "lightbox" block below — showing it uncropped, full-size, with
      its own prev/next to step through every photo in this same
      carousel; the href is kept so a visitor can still right-click/
-     ctrl-click straight to the original file. */}}
+     ctrl-click straight to the original file.
+
+     What a carousel costs the server is the point of how it loads. Each
+     photo is a request, each video another, and an album can hold
+     dozens: so the photos are loading="lazy" (the script warms the slides
+     beside the one showing), and a video is preload="none", which fetches
+     nothing until someone presses play. A video's first frame would be a
+     nicer preview, and costs a slice of the file from this server for
+     every video on every visit. */}}
 {{define "photoCarousel"}}
   {{if .Photos}}
     <div class="relative">
@@ -310,10 +318,10 @@
         {{range .Photos}}
           <figure class="snap-start flex-shrink-0 w-full {{$figureBg}}">
             {{if .IsVideo}}
-              <video src="{{.URL}}" controls preload="metadata" class="w-full {{$height}} {{$fit}}"></video>
+              <video src="{{.URL}}" controls preload="none" class="w-full {{$height}} {{$fit}} bg-black"></video>
             {{else}}
               <a href="{{.URL}}" data-lightbox-open>
-                <img src="{{thumbURL .URL}}" alt="{{.Caption}}" class="w-full {{$height}} {{$fit}}">
+                <img src="{{thumbURL .URL}}" alt="{{.Caption}}" loading="lazy" class="w-full {{$height}} {{$fit}}">
               </a>
             {{end}}
             {{if .Caption}}<figcaption class="p-2 text-xs text-gray-600">{{.Caption}}</figcaption>{{end}}
@@ -371,8 +379,39 @@
       }
       if (prev) prev.addEventListener('click', function () { car.scrollBy({ left: -car.clientWidth, behavior: 'smooth' }); });
       if (next) next.addEventListener('click', function () { advance(); });
+
+      // Every photo here is loading="lazy", and a lazy image inside a
+      // scroller does not start until it is itself scrolled into view, which
+      // on its own would show an empty slide for a moment after each step. So
+      // the slides either side of the one showing are told to load ahead of
+      // being needed.
+      function warm() {
+        var at = Math.round(car.scrollLeft / (car.clientWidth || 1));
+        for (var i = at - 1; i <= at + 1; i++) {
+          var img = car.children[i] && car.children[i].querySelector('img[loading="lazy"]');
+          if (img) img.loading = 'eager';
+        }
+      }
+      car.addEventListener('scroll', warm, { passive: true });
+
+      // A carousel only does anything while it is on screen: one far down the
+      // page neither loads its neighbours nor turns over, which is what stops
+      // a visitor who stays at the top of /gallery from slowly fetching every
+      // album's photos in the background.
+      var onScreen = !('IntersectionObserver' in window);
+      if (!onScreen) {
+        new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) {
+            onScreen = e.isIntersecting;
+            if (onScreen) warm();
+          });
+        }, { rootMargin: '200px 0px' }).observe(car);
+      } else {
+        warm();
+      }
+
       var autorotate = car.getAttribute('data-carousel-autorotate');
-      if (autorotate) setInterval(advance, parseInt(autorotate, 10));
+      if (autorotate) setInterval(function () { if (onScreen) advance(); }, parseInt(autorotate, 10));
     });
 
     // Wires a photoCarouselThumbnails strip to the photoCarousel it's
@@ -484,10 +523,10 @@
       {{range $i, $p := .Photos}}
         <button type="button" class="flex-shrink-0 w-20 h-16 rounded-md overflow-hidden border-2 relative {{if eq $i 0}}border-blue-500{{else}}border-gray-200{{end}}" data-carousel-thumb="{{$i}}" aria-label="{{if $p.Caption}}{{$p.Caption}}{{else}}View photo{{end}}">
           {{if $p.IsVideo}}
-            <video src="{{$p.URL}}" muted preload="metadata" class="h-full w-full object-cover"></video>
+            <video src="{{$p.URL}}" muted preload="none" class="h-full w-full object-cover bg-gray-900"></video>
             <span class="absolute bottom-0.5 right-0.5 rounded-full bg-gray-900/75 text-white text-[9px] leading-none px-1 py-0.5">&#9654;</span>
           {{else}}
-            <img src="{{thumbURL $p.URL}}" alt="{{$p.Caption}}" class="h-full w-full object-cover">
+            <img src="{{thumbURL $p.URL}}" alt="{{$p.Caption}}" loading="lazy" class="h-full w-full object-cover">
           {{end}}
         </button>
       {{end}}

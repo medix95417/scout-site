@@ -117,7 +117,8 @@ func TestPreviewCarouselsStillCrop(t *testing.T) {
 		{"gallery.html", struct {
 			baseData
 			Items []publicPostView
-		}{testBase("Photos"), []publicPostView{{ID: "g1", Title: "Camp", PostedOn: "15 Jul 2026", Photos: galleryPhotos()}}}},
+			Pager pager
+		}{testBase("Photos"), []publicPostView{{ID: "g1", Title: "Camp", PostedOn: "15 Jul 2026", Photos: galleryPhotos()}}, newPager(1, galleryPageSize, "", "/gallery")}},
 	} {
 		out := renderPage(t, page.name, page.data)
 		if !strings.Contains(out, "object-cover") {

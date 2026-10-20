@@ -27,6 +27,45 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Videos can be skipped through, resumed, and watched on a slow
+  connection.** The server answered every file request with the whole file
+  as a plain 200 and cut the response off after 60 seconds. A Range request
+  — what a browser sends to jump ahead in a video, or to carry on after a
+  dropped connection — got the file back from the start, so skipping ahead
+  landed at 0:00; and anyone whose download took longer than a minute was
+  cut off part-way (a 12 Mbit/s viewer got 73% of a 130 MB video). Downloads
+  now say how long they are, advertise `Accept-Ranges`, answer a range with
+  `206` and exactly those bytes (asking the bucket for only that range), and
+  carry the stored file's `ETag` and `Last-Modified` so a resumed download
+  can tell the file hasn't changed. The same applies to a resource's download
+  and to thumbnails. A download is no longer held to 60 seconds in total: it
+  may go on as long as the viewer keeps taking bytes (30 minutes at the
+  outside), while one that stops taking them is still dropped after about a
+  minute. The access checks, the safe headers and `Cache-Control: no-store`
+  are unchanged and apply to ranged requests too.
+
+### Changed
+
+- **A page of photo albums costs the server far less.** `/gallery` showed every
+  album's carousel at once, and every photo and video in it was a request to
+  this server. In a browser, 14 albums of 8 photos meant 112 thumbnail
+  requests plus 4 video-file requests on load, growing with every photo
+  ever uploaded. Now `/gallery` shows twelve albums at a time (newest first,
+  with "Older albums" / "Newer albums" links), carousel photos load lazily
+  (the slides next to the one showing load ahead of being needed, so a step
+  never lands on a blank slide), and a carousel that is off screen neither
+  loads nor turns over. The same page measures 48 thumbnails and no video
+  requests on load — and still 48 with two 40-photo albums added, where
+  before it was 192 — because what loads no longer depends on how many
+  photos an album holds.
+- **A video no longer fetches part of its file on every page view.** Videos in
+  albums, the thumbnail strip and the Files page were `preload="metadata"`,
+  which asks this server for a slice of every video on every visit. They are
+  now `preload="none"` and load when someone presses play. The cost is that
+  an unplayed video shows as a dark box rather than its first frame.
+
 ## [2.18.1] — 2026-10-20
 
 ### Fixed

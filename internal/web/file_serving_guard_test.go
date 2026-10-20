@@ -58,9 +58,12 @@ func TestEveryStoredByteResponseUsesTheSafeHeaders(t *testing.T) {
 				}
 				switch f := call.Fun.(type) {
 				case *ast.SelectorExpr:
-					// h.Storage.Get(...) — pulling an uploaded object out
-					// of object storage to write to a response.
-					if f.Sel.Name == "Get" {
+					// h.Storage.Get(...) or h.Storage.Open(...) — pulling an
+					// uploaded object out of object storage to write to a
+					// response. Open is how a response that can be ranged
+					// reads one; leaving it out would let a route that used
+					// it skip this check without anyone noticing.
+					if f.Sel.Name == "Get" || f.Sel.Name == "Open" {
 						if inner, ok := f.X.(*ast.SelectorExpr); ok && inner.Sel.Name == "Storage" {
 							fetchesStoredBytes = true
 						}

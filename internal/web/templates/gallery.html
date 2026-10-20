@@ -17,6 +17,15 @@
         </div>
       {{end}}
     </div>
+    {{with .Pager}}
+      {{if gt .Pages 1}}
+        <nav class="mt-8 flex items-center justify-between text-sm" aria-label="Pages of photo albums">
+          {{if .PrevURL}}<a href="{{.PrevURL}}" rel="prev" class="font-medium hover:underline" style="color: var(--unit-color);">&larr; Newer albums</a>{{else}}<span></span>{{end}}
+          <span class="text-gray-500">Page {{.Page}} of {{.Pages}}</span>
+          {{if .NextURL}}<a href="{{.NextURL}}" rel="next" class="font-medium hover:underline" style="color: var(--unit-color);">Older albums &rarr;</a>{{else}}<span></span>{{end}}
+        </nav>
+      {{end}}
+    {{end}}
     {{template "lightbox" .}}
     {{template "photoCarouselScript" .}}
   {{else}}

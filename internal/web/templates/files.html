@@ -310,7 +310,7 @@
         {{if hasPrefix $f.ContentType "image/"}}
           <img src="/files/{{$f.ID}}/thumb" alt="" loading="lazy" class="h-12 w-12 flex-shrink-0 object-cover rounded-md border border-gray-200">
         {{else if hasPrefix $f.ContentType "video/"}}
-          <video src="/files/{{$f.ID}}/download" muted preload="metadata" class="h-12 w-12 flex-shrink-0 object-cover rounded-md border border-gray-200"></video>
+          <video src="/files/{{$f.ID}}/download" muted preload="none" class="h-12 w-12 flex-shrink-0 object-cover rounded-md border border-gray-200 bg-black"></video>
         {{end}}
         <div class="min-w-0">
           <a href="/files/{{$f.ID}}/download" target="_blank" class="font-medium hover:underline truncate block" style="color: var(--unit-color);">

@@ -309,19 +309,31 @@ func (h *Handlers) newsDetail(w http.ResponseWriter, r *http.Request, p content.
 	h.render(w, h.newsDetailTmpl, data)
 }
 
+// galleryPageSize is how many albums /gallery shows at once. Every album on
+// the page is a carousel, and every carousel is requests to this server for
+// its photos, so the page's cost grows with the number of albums — on a small
+// server, a unit with years of albums made one visit to /gallery the most
+// expensive thing on the site. Twelve fills four rows of the three-column grid.
+const galleryPageSize = 12
+
 func (h *Handlers) galleryList(w http.ResponseWriter, r *http.Request, posts []content.Post) {
 	unit, _ := units.UnitFromContext(r.Context())
 	_, loggedIn := auth.UserFromContext(r.Context())
 
-	items := make([]publicPostView, 0, len(posts))
-	for _, p := range posts {
+	// Only this page's albums are read further: the other pages' photo lists
+	// are neither parsed nor checked against the library.
+	pg := newPager(len(posts), galleryPageSize, r.URL.Query().Get("page"), "/gallery")
+
+	items := make([]publicPostView, 0, pg.End-pg.Start)
+	for _, p := range posts[pg.Start:pg.End] {
 		photos := h.filterViewableGalleryPhotos(r.Context(), unit.ID, content.ParseGalleryPhotos(p.Body), loggedIn)
 		items = append(items, publicPostView{ID: p.ID, Title: p.Title, PostedOn: postedOn(p.DisplayDate()), Photos: photos})
 	}
 	data := struct {
 		baseData
 		Items []publicPostView
-	}{baseData: h.base(r, "Photos"), Items: items}
+		Pager pager
+	}{baseData: h.base(r, "Photos"), Items: items, Pager: pg}
 	h.render(w, h.galleryListTmpl, data)
 }
 

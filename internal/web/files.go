@@ -489,18 +489,7 @@ func (h *Handlers) FileDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	obj, err := h.Storage.Get(r.Context(), f.StorageKey)
-	if err != nil {
-		log.Printf("web: fetching file from storage: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	defer obj.Close()
-
-	writeUserFileHeaders(w, f.ContentType, f.Filename)
-	if _, err := io.Copy(w, obj); err != nil {
-		log.Printf("web: streaming file download: %v", err)
-	}
+	h.serveStoredFile(w, r, f)
 }
 
 // thumbStorageSuffix is appended to a file's own storage key to derive
@@ -584,13 +573,11 @@ func (h *Handlers) serveImageVariant(w http.ResponseWriter, r *http.Request, suf
 	}
 
 	variantKey := f.StorageKey + suffix
-	if cached, err := h.Storage.Get(r.Context(), variantKey); err == nil {
+	if cached, err := h.Storage.Open(r.Context(), variantKey); err == nil {
 		defer cached.Close()
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Header().Set("Cache-Control", "private, no-store")
-		if _, err := io.Copy(w, cached); err != nil {
-			log.Printf("web: streaming cached thumbnail: %v", err)
-		}
+		serveStoredContent(w, r, cached, cached.ModTime, cached.ETag)
 		return
 	}
 
@@ -611,7 +598,7 @@ func (h *Handlers) serveImageVariant(w http.ResponseWriter, r *http.Request, suf
 			// serving user-uploaded content and needs the same headers the
 			// download route gets — not just a bare Content-Type.
 			writeUserFileHeaders(w, f.ContentType, f.Filename)
-			w.Write(src)
+			serveStoredContent(w, r, bytes.NewReader(src), time.Time{}, "")
 			return
 		}
 		log.Printf("web: generating thumbnail on demand for %s: %v", f.ID, err)
@@ -621,7 +608,7 @@ func (h *Handlers) serveImageVariant(w http.ResponseWriter, r *http.Request, suf
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "private, no-store")
-	w.Write(thumb)
+	serveStoredContent(w, r, bytes.NewReader(thumb), time.Time{}, "")
 }
 
 // fetchAndCacheThumbnail fetches storageKey's bytes from store,
