@@ -108,6 +108,9 @@ type contentFormData struct {
 	// chooser — documents only, see adminContentForm.
 	DocumentGroups     []files.EventFileGroup
 	DocumentsUngrouped []files.File
+	// Upload is the album editor's own uploader — see gallery_upload.go.
+	// Zero for the news editor, which has no use for it.
+	Upload galleryUploadView
 }
 
 // contentKind describes the fixed differences between "post" (news) and
@@ -150,7 +153,7 @@ var (
 		PageType: "gallery", Label: "Photo Album", LabelPlural: "Photos",
 		BasePath: "/admin/gallery", PublicPath: "/gallery",
 		BodyLabel:       "Photos",
-		BodyHelp:        "One photo per line: paste a link to an image hosted elsewhere (e.g. a photo shared publicly from Google Photos/Drive), or click one from your library below — either way, optionally followed by | and a caption, e.g. https://example.com/photo.jpg | Sam at the summit.",
+		BodyHelp:        "One photo or video per line. Upload them from your device with the box below, click one already in your library, or paste a link to an image hosted elsewhere (e.g. a photo shared publicly from Google Photos/Drive) — any of them, optionally followed by | and a caption, e.g. https://example.com/photo.jpg | Sam at the summit.",
 		BodyPlaceholder: "https://example.com/photo1.jpg | Setting up camp\nhttps://example.com/photo2.jpg",
 		HasImagePicker:  true,
 		HasDate:         true,
@@ -511,6 +514,7 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 		baseData: h.base(r, kind.Label), Kind: kind, IsEdit: isEdit, Post: post, PhotoDateInput: photoDateInput,
 		PublicMediaGroups: publicMediaGroups, PublicMediaUngrouped: publicMediaUngrouped, EventPhotoGroups: eventPhotoGroups,
 		DocumentGroups: documentGroups, DocumentsUngrouped: documentsUngrouped,
+		Upload: newGalleryUploadView(h.Storage != nil),
 	}
 	h.render(w, h.adminContentFormTmpl, data)
 }

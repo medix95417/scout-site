@@ -25,6 +25,10 @@
     <div>
       <label class="block text-sm font-medium mb-1" for="body">{{.Kind.BodyLabel}}</label>
       <p class="text-xs text-gray-500 mb-2">{{.Kind.BodyHelp}}</p>
+      {{/* Above the list it adds to: choose or drop files and they are sent
+           in small batches, each landing in the list below as it arrives.
+           Album editor only — the news editor has no photo list. */}}
+      {{if .Kind.HasImagePicker}}{{template "galleryUploader" (dict "Upload" .Upload "CSRFToken" .CSRFToken "Target" "body")}}{{end}}
       <textarea
         id="body" name="body" rows="8"
         placeholder="{{.Kind.BodyPlaceholder}}"
@@ -117,6 +121,6 @@
     </div>
   {{end}}
 
-  {{if .Kind.HasImagePicker}}{{template "imagePickerScript" .}}{{end}}
+  {{if .Kind.HasImagePicker}}{{template "imagePickerScript" .}}{{if .Upload.Enabled}}{{template "galleryUploaderScript" .}}{{end}}{{end}}
   {{if .Kind.HasFilePicker}}{{template "fileLinkPickerScript" .}}{{end}}
 {{end}}

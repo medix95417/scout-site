@@ -56,6 +56,47 @@ tagged commit with an accurate date.
   the SQL, so an id from the other unit's site matches nothing rather
   than being moved.
 
+- **Photos and videos can be uploaded straight from the album editor.**
+  Adding a photo to an album used to be two trips — upload it on the
+  Files page, then come back and pick it from the library. The album's
+  page now has a box above the photo list: choose files (or drop them)
+  and they go up and are added to the list as they arrive. It works on a
+  new album as well as an existing one.
+
+  They are sent in small batches, one request at a time, in the order
+  they were chosen: up to five photos together, or a single video on its
+  own. A dropped connection costs the batch it was in rather than
+  everything, each batch lands in the list the moment it arrives, and
+  anything that didn't go in is listed by name with the reason and a
+  button to try just those again. After two dropped batches in a row it
+  stops instead of churning through the rest. The page won't save while
+  files are still going up, and asks before letting you leave with
+  uploaded files that haven't been saved into the album.
+
+  The files are saved as public or members-only to match the album's
+  visibility when they go up — a public album's photos have to be public
+  or a signed-out visitor sees an empty album, and a members-only album's
+  must not be, or anyone holding a link could open them. If the
+  visibility is changed afterwards the page says which files went up the
+  other way. They are filed as event photos and videos in the library
+  like any other, so they can be linked to an event or renamed there.
+
+  Only photos a browser can show and videos are accepted, judged by the
+  file's bytes and not its name or the type the browser claimed — a web
+  page named photo.jpg is refused, and so is a HEIC straight off an
+  iPhone, with a message saying what to do about it. One file can be up
+  to 50 MB, the same as the Files page. A video whose container Go's
+  content sniffer doesn't recognise (an MP4 with no "mp4" brand) is
+  still accepted when it opens as an ISO media file and the browser says
+  it is a video.
+
+  The server answers in JSON even when it refuses, and extends its own
+  write deadline for this one request: the server's 60-second write
+  timeout runs from when the request headers arrive, but the whole
+  upload has been read before the handler starts, so a video sent over an
+  ordinary home connection would otherwise be stored and then lose its
+  answer, and the page would report a failure for an upload that worked.
+
 ## [2.17.2] — 2026-09-30
 
 ### Added

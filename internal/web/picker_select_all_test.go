@@ -25,23 +25,17 @@ func pickerGroups() []files.EventFileGroup {
 	}}
 }
 
-// albumForm mirrors the anonymous struct AdminGalleryNew/Edit renders
-// admin-content-form.html with.
-func albumForm(eventPhotos []files.EventFileGroup) any {
-	return struct {
-		baseData
-		Kind                 contentKind
-		IsEdit               bool
-		Post                 content.Post
-		PhotoDateInput       string
-		PublicMediaGroups    []files.EventFileGroup
-		PublicMediaUngrouped []files.File
-		EventPhotoGroups     []files.EventFileGroup
-	}{
+// albumForm is what AdminGalleryNew/Edit renders admin-content-form.html
+// with. The real named type, not a copy of it: a copy is what stopped
+// matching the moment the form grew a field, and a test of a form that no
+// longer matches the page proves nothing about the page.
+func albumForm(eventPhotos []files.EventFileGroup) contentFormData {
+	return contentFormData{
 		baseData: testBase("Photo Album"), Kind: galleryKind, IsEdit: true,
 		Post:              content.Post{ID: "g1", Title: "Summer Camp", Status: "draft", Visibility: "members"},
 		PublicMediaGroups: eventPhotos,
 		EventPhotoGroups:  eventPhotos,
+		Upload:            newGalleryUploadView(true),
 	}
 }
 
