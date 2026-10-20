@@ -55,6 +55,9 @@ type fileRow struct {
 	files.File
 	SizeDisplay    string
 	LinkedEventIDs map[string]bool
+	// HasPoster is true for a video a browser has made a still picture for
+	// (see video_poster.go); the row shows it in place of a dark box.
+	HasPoster bool
 }
 
 func displaySize(n int64) string {
@@ -105,8 +108,24 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: listing events with files for file library: %v", err)
 	}
 
+	// Which videos have a poster, and (for a leader) which are still waiting
+	// for one: both from one query. A failure costs the pictures, not the page.
+	videos, err := files.VideoPosters(r.Context(), h.Pool, unit.ID)
+	if err != nil {
+		log.Printf("web: listing video posters for file library: %v", err)
+	}
+	hasPoster := make(map[string]bool, len(videos))
+	var posterBacklog []files.VideoPoster
+	for _, v := range videos {
+		if v.Has {
+			hasPoster[v.ID] = true
+		} else if canManage {
+			posterBacklog = append(posterBacklog, v)
+		}
+	}
+
 	decorate := func(f files.File) fileRow {
-		row := fileRow{File: f, SizeDisplay: displaySize(f.SizeBytes)}
+		row := fileRow{File: f, SizeDisplay: displaySize(f.SizeBytes), HasPoster: hasPoster[f.ID]}
 		if canManage {
 			linkedIDs, err := files.EventIDsForFile(r.Context(), h.Pool, f.ID)
 			if err != nil {
@@ -188,6 +207,7 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 		SelectedEventIDs:  selectedEventSet,
 		CanManage:         canManage,
 		StorageConfigured: h.Storage != nil,
+		PosterBacklog:     posterBacklog,
 	}
 	if msg := bulkResultMessage(r.URL.Query().Get("bulk"), r.URL.Query().Get("n")); msg != "" {
 		data.Flash = msg
@@ -227,6 +247,9 @@ type fileLibraryData struct {
 	SelectedEventIDs  map[string]bool
 	CanManage         bool
 	StorageConfigured bool
+	// PosterBacklog is the videos that have no poster yet, for a leader to
+	// make them from. Empty for everyone else, and once none are waiting.
+	PosterBacklog []files.VideoPoster
 }
 
 // uploadFolder picks the bucket folder for an upload.
@@ -462,45 +485,48 @@ func requiresLoginToDownload(f files.File, isUnitMember bool) bool {
 	return !f.Public && !isUnitMember
 }
 
-func (h *Handlers) FileDownload(w http.ResponseWriter, r *http.Request) {
+// servableFile is the front door of every route that serves a library file's
+// bytes, or something made from them: it answers the request itself — no
+// storage, no such file in this unit, or a members-only file for someone who
+// may not have it — and reports false, or returns the file to serve.
+//
+// One function for the access rule, because "the thumbnail checks it a little
+// differently from the download" is how a members-only photo ends up readable
+// through the one route nobody remembered. Every file is members-only EXCEPT
+// one a leader has explicitly marked public (see migration 0016) — that's how
+// a homepage image slot (see content-admin.html's "choose from library"
+// picker) can point at a library photo and still render for a logged-out
+// visitor.
+func (h *Handlers) servableFile(w http.ResponseWriter, r *http.Request) (files.File, bool) {
 	unit, _ := units.UnitFromContext(r.Context())
 	if h.Storage == nil {
 		http.Error(w, storageUnavailableMsg, http.StatusServiceUnavailable)
-		return
+		return files.File{}, false
 	}
 
 	f, found, err := files.Get(r.Context(), h.Pool, r.PathValue("id"), unit.ID)
 	if err != nil {
 		log.Printf("web: loading file: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+		return files.File{}, false
 	}
 	if !found {
 		http.NotFound(w, r)
-		return
+		return files.File{}, false
 	}
-
-	// Every file is members-only EXCEPT one a leader has explicitly marked
-	// public (see migration 0016) — that's how a homepage image slot (see
-	// content-admin.html's "choose from library" picker) can point at a
-	// library photo and still render for a logged-out visitor.
 	if requiresLoginToDownload(f, h.viewerIsUnitMember(r)) {
 		http.Redirect(w, r, "/login?next=/files", http.StatusSeeOther)
+		return files.File{}, false
+	}
+	return f, true
+}
+
+func (h *Handlers) FileDownload(w http.ResponseWriter, r *http.Request) {
+	f, ok := h.servableFile(w, r)
+	if !ok {
 		return
 	}
-
-	obj, err := h.Storage.Get(r.Context(), f.StorageKey)
-	if err != nil {
-		log.Printf("web: fetching file from storage: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	defer obj.Close()
-
-	writeUserFileHeaders(w, f.ContentType, f.Filename)
-	if _, err := io.Copy(w, obj); err != nil {
-		log.Printf("web: streaming file download: %v", err)
-	}
+	h.serveStoredFile(w, r, f)
 }
 
 // thumbStorageSuffix is appended to a file's own storage key to derive
@@ -562,35 +588,17 @@ func (h *Handlers) FileBanner(w http.ResponseWriter, r *http.Request) {
 // so they stay one implementation — a second copy is how the access
 // check on one of them ends up out of step with the other.
 func (h *Handlers) serveImageVariant(w http.ResponseWriter, r *http.Request, suffix string, maxDimension int) {
-	unit, _ := units.UnitFromContext(r.Context())
-	if h.Storage == nil {
-		http.Error(w, storageUnavailableMsg, http.StatusServiceUnavailable)
-		return
-	}
-
-	f, found, err := files.Get(r.Context(), h.Pool, r.PathValue("id"), unit.ID)
-	if err != nil {
-		log.Printf("web: loading file for thumbnail: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	if !found {
-		http.NotFound(w, r)
-		return
-	}
-	if requiresLoginToDownload(f, h.viewerIsUnitMember(r)) {
-		http.Redirect(w, r, "/login?next=/files", http.StatusSeeOther)
+	f, ok := h.servableFile(w, r)
+	if !ok {
 		return
 	}
 
 	variantKey := f.StorageKey + suffix
-	if cached, err := h.Storage.Get(r.Context(), variantKey); err == nil {
+	if cached, err := h.Storage.Open(r.Context(), variantKey); err == nil {
 		defer cached.Close()
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Header().Set("Cache-Control", "private, no-store")
-		if _, err := io.Copy(w, cached); err != nil {
-			log.Printf("web: streaming cached thumbnail: %v", err)
-		}
+		serveStoredContent(w, r, cached, cached.ModTime, cached.ETag)
 		return
 	}
 
@@ -611,7 +619,7 @@ func (h *Handlers) serveImageVariant(w http.ResponseWriter, r *http.Request, suf
 			// serving user-uploaded content and needs the same headers the
 			// download route gets — not just a bare Content-Type.
 			writeUserFileHeaders(w, f.ContentType, f.Filename)
-			w.Write(src)
+			serveStoredContent(w, r, bytes.NewReader(src), time.Time{}, "")
 			return
 		}
 		log.Printf("web: generating thumbnail on demand for %s: %v", f.ID, err)
@@ -621,7 +629,7 @@ func (h *Handlers) serveImageVariant(w http.ResponseWriter, r *http.Request, suf
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "private, no-store")
-	w.Write(thumb)
+	serveStoredContent(w, r, bytes.NewReader(thumb), time.Time{}, "")
 }
 
 // fetchAndCacheThumbnail fetches storageKey's bytes from store,
@@ -751,6 +759,12 @@ func (h *Handlers) FileDelete(w http.ResponseWriter, r *http.Request) {
 		// no-op, not an error (see storage.Store.Delete).
 		if err := h.Storage.Delete(r.Context(), f.StorageKey+thumbStorageSuffix); err != nil {
 			log.Printf("web: deleting cached thumbnail: %v", err)
+		}
+		// And a video's poster, if a browser ever made one. Keyed by the
+		// file's id (see files.PosterKey), so it is not found by the storage
+		// key above.
+		if err := h.Storage.Delete(r.Context(), files.PosterKey(unit.ID, f.ID)); err != nil {
+			log.Printf("web: deleting a poster: %v", err)
 		}
 	}
 

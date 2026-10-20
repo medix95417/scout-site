@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -99,8 +100,26 @@ func (s *Store) Put(ctx context.Context, key string, r io.Reader, size int64, co
 	return nil
 }
 
-// Get opens the object at key for reading. Callers must Close the result.
-func (s *Store) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+// Reader is an object opened for reading, with what a server needs to
+// answer a range request about it: its size, when it last changed and its
+// ETag. It is an io.ReadSeekCloser, which is what http.ServeContent takes.
+//
+// Seeking is lazy. Nothing is fetched until the next Read, and that Read
+// asks the bucket for the bytes from the new position on — so serving
+// bytes 1,000,000–1,000,999 of a 130 MB video reads about that much from
+// the bucket, not the first million bytes on the way there.
+type Reader struct {
+	io.ReadSeekCloser
+	Size    int64
+	ModTime time.Time
+	// ETag is the bucket's own, without quotes. It changes whenever the
+	// object's bytes do, which is what makes it safe to resume a partial
+	// download against.
+	ETag string
+}
+
+// Open opens the object at key for reading. Callers must Close the result.
+func (s *Store) Open(ctx context.Context, key string) (*Reader, error) {
 	obj, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("storage: opening %q: %w", key, err)
@@ -109,11 +128,23 @@ func (s *Store) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	// missing key — that only surfaces on the first read, so Stat here
 	// turns a missing object into an error at the call site that expects
 	// one, instead of a confusing empty/zero-length download.
-	if _, err := obj.Stat(); err != nil {
+	info, err := obj.Stat()
+	if err != nil {
 		obj.Close()
 		return nil, fmt.Errorf("storage: %q not found: %w", key, err)
 	}
-	return obj, nil
+	return &Reader{ReadSeekCloser: obj, Size: info.Size, ModTime: info.LastModified, ETag: info.ETag}, nil
+}
+
+// Get opens the object at key for reading. Callers must Close the result.
+// A caller that needs to serve part of an object, or to tell the client how
+// long it is, wants Open.
+func (s *Store) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+	r, err := s.Open(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 // Object is one stored object as List reports it.

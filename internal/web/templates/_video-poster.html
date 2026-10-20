@@ -1,0 +1,102 @@
+{{/* videoPosterScript defines window.ScoutPoster, which makes a video's poster
+     in the visitor's own browser: it opens the video, takes one frame, and
+     sends that up as a picture for /files/{id}/poster to file.
+
+     Why here and not on the server: the browser is the one place on this site
+     that can already decode whatever a leader's phone recorded (H.264, an
+     iPhone's HEVC, WebM). The server has no video decoder, and giving it one
+     would mean a much larger runtime image or parsing every upload with a
+     native library on the machine that holds the database credentials. See
+     internal/files/poster.go.
+
+     The price of that is honest: a browser that can't play a particular video
+     can't take a frame from it either, and then the video shows as the dark box
+     it always did. Nothing here ever blocks or fails an upload.
+
+     Include it once per page, before anything that calls it. */}}
+{{define "videoPosterScript"}}
+  <script nonce="{{.CSPNonce}}">
+    window.ScoutPoster = (function () {
+      // The server shrinks a poster to this anyway; drawing it smaller here
+      // only means less to send.
+      var LONGEST_SIDE = 640;
+      // A video this browser can't read tends to hang rather than fail, so
+      // there has to be an end to waiting.
+      var GIVE_UP_AFTER = 25000;
+
+      // capture(src) resolves with a JPEG Blob of one frame of the video at src
+      // — this site's own address for it — or with null if this browser can't
+      // read it. (Not a blob: URL: the site's Content-Security-Policy forbids
+      // one as media, and that is a policy worth keeping.)
+      function capture(src) {
+        return new Promise(function (resolve) {
+          var video = document.createElement('video');
+          var finished = false;
+          var timer = setTimeout(function () { finish(null); }, GIVE_UP_AFTER);
+
+          function finish(blob) {
+            if (finished) { return; }
+            finished = true;
+            clearTimeout(timer);
+            // Dropping the source ends any download still going: a browser
+            // told to preload a 130 MB video will otherwise keep reading it.
+            video.removeAttribute('src');
+            video.load();
+            resolve(blob);
+          }
+
+          video.muted = true;
+          video.playsInline = true;
+          video.preload = 'auto';
+          video.addEventListener('error', function () { finish(null); });
+          video.addEventListener('loadedmetadata', function () {
+            var seconds = video.duration;
+            // Not the very first frame: a clip that fades in from black, or
+            // opens on a blank frame, would make a poster no better than the
+            // dark box it replaces. Never exactly 0, either, because seeking
+            // to where the video already is does not fire "seeked".
+            var at = isFinite(seconds) && seconds > 0 ? Math.min(1, seconds / 4) : 0.1;
+            video.currentTime = Math.max(at, 0.05);
+          });
+          video.addEventListener('seeked', function () {
+            var width = video.videoWidth;
+            var height = video.videoHeight;
+            if (!width || !height) { finish(null); return; }
+            var scale = Math.min(1, LONGEST_SIDE / Math.max(width, height));
+            var canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(width * scale));
+            canvas.height = Math.max(1, Math.round(height * scale));
+            try {
+              canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+              canvas.toBlob(function (blob) { finish(blob); }, 'image/jpeg', 0.92);
+            } catch (err) {
+              finish(null);
+            }
+          }, { once: true });
+          video.src = src;
+        });
+      }
+
+      // send(id, blob, token) resolves true if the server filed the picture.
+      function send(fileId, blob, token) {
+        var data = new FormData();
+        data.append('csrf_token', token);
+        data.append('poster', blob, 'poster.jpg');
+        return fetch('/files/' + encodeURIComponent(fileId) + '/poster', {
+          method: 'POST',
+          body: data,
+          credentials: 'same-origin'
+        }).then(function (response) { return response.ok; }, function () { return false; });
+      }
+
+      // make(id, src, token) is capture then send: true if a poster was stored.
+      function make(fileId, src, token) {
+        return capture(src).then(function (blob) {
+          return blob ? send(fileId, blob, token) : false;
+        });
+      }
+
+      return { capture: capture, send: send, make: make };
+    })();
+  </script>
+{{end}}

@@ -656,6 +656,18 @@ docker compose run --rm app -backfill-thumbnails
 Either way it's safe to re-run (or to just leave running automatically
 forever) — an already-cached thumbnail is left alone.
 
+**Video preview pictures** — a video's preview picture (its "poster") is made
+by a leader's browser, not by the server: the album editor makes one as each
+video uploads, and videos uploaded before posters existed are handled from the
+Files page, where a leader sees a "Preview pictures for videos" panel and
+presses one button. Nothing to install and nothing to run on the server — the
+runtime image stays distroless, with no video tools in it — and nothing to do
+on deploy beyond the usual migration, which runs by itself. The pictures live
+in the bucket under `<unit-id>/posters/<file-id>.jpg`, so a bucket backup
+(`-backup-files`) includes them. A video this browser can't play can't be
+given one from it; those keep the dark box until someone opens the Files page
+in a browser that can.
+
 **Event reminder emails** — if you've configured `SMTP_HOST` (step 5),
 reminder emails don't send themselves; something needs to run the
 `-send-event-reminders` command periodically. It's safe to run as often

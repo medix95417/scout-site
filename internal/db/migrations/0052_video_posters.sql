@@ -1,0 +1,13 @@
+-- A video can have a poster: a still picture shown where the video would
+-- otherwise be a black box until someone presses play.
+--
+-- The picture itself lives in the bucket, under a key derived from the
+-- file's id (see files.PosterKey). This column only records whether one has
+-- been made, so asking is a lookup in a row the request already has to read
+-- rather than a round trip to the bucket — and so the Files page can list
+-- the videos still waiting for one.
+--
+-- Defaults to false for every existing file. Those videos are not left
+-- without: a leader makes their posters from the Files page, in their own
+-- browser, which is the only thing on this site that can decode a video.
+ALTER TABLE files ADD COLUMN has_poster boolean NOT NULL DEFAULT false;

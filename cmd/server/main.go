@@ -381,6 +381,12 @@ func main() {
 		// send before the handler ever got to render its own error page —
 		// the client just sees a dropped connection, not a friendly
 		// "couldn't send that email" message.
+		//
+		// A response that is mostly body is the exception, and sets its own
+		// deadline: an upload (extendWriteDeadline) and a file download
+		// (serveStoredContent, which moves the deadline forward as the client
+		// takes bytes). 60 seconds for a whole 130 MB video cut off anyone on
+		// an ordinary connection part-way through.
 		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}

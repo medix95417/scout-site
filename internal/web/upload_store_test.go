@@ -275,6 +275,15 @@ func TestAStorageFailureIsNotAReadFailure(t *testing.T) {
 // uploaded file must hand it to storeUpload and must not slurp it with
 // io.ReadAll. Found by what they do — opening a file header — rather than by a
 // list that would need remembering.
+//
+// One kind of handler is the exception, and is named: one that does not store
+// the upload at all but derives something small from it, which has to read it
+// whole to do that. It may do so only through an io.LimitReader, so the size
+// of what it reads is a number in the code rather than whatever was sent.
+var boundedUploadReaders = map[string]string{
+	"FilePosterUpload": "a poster is a still of at most maxPosterUploadBytes, decoded and written out again, never stored as sent",
+}
+
 func TestNoUploadHandlerReadsAWholeFileForItself(t *testing.T) {
 	entries, err := os.ReadDir(".")
 	if err != nil {
@@ -306,6 +315,12 @@ func TestNoUploadHandlerReadsAWholeFileForItself(t *testing.T) {
 				continue
 			}
 			found++
+			if _, bounded := boundedUploadReaders[fn.Name.Name]; bounded {
+				if !strings.Contains(body, "io.LimitReader(") {
+					t.Errorf("%s (in %s) is allowed to read an upload whole only through io.LimitReader, and does not", fn.Name.Name, name)
+				}
+				continue
+			}
 			if !strings.Contains(body, "storeUpload(") {
 				t.Errorf("%s (in %s) opens an uploaded file but never hands it to storeUpload", fn.Name.Name, name)
 			}

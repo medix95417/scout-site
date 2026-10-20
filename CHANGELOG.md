@@ -27,6 +27,67 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **Videos show a picture instead of a black box until they are played.**
+  When a leader uploads a video in the album editor, their browser takes a
+  frame from it and sends it up as a small picture, which the album, the
+  thumbnail strip and the Files page then show in place of the dark box. It is
+  made in the browser because the browser is the one place that can already
+  play whatever a phone recorded; the server has no video decoder, and the
+  runtime image is distroless, so adding one (ffmpeg) would have meant a much
+  larger image or a third-party binary that couldn't be tested here. The
+  server only checks that what arrives is really a picture, writes it out again
+  as a JPEG of at most 640 pixels, and files it under the video's id, so a
+  poster follows its video through the rekey pass and is deleted with it. A
+  poster is served under exactly the rule that serves its video, so a frame of
+  a members-only video is members-only.
+  Videos uploaded before this have none: a leader sees a "Preview pictures for
+  videos" panel at the top of the Files page and presses one button, and their
+  browser works through them one at a time (and says which, if any, it
+  couldn't read — a browser that can't play a video can't take a frame from
+  it, so a phone video in an unusual format may need Safari). Requires the new
+  `has_poster` column (migration 0052, applied automatically on startup).
+
+### Fixed
+
+- **Videos can be skipped through, resumed, and watched on a slow
+  connection.** The server answered every file request with the whole file
+  as a plain 200 and cut the response off after 60 seconds. A Range request
+  — what a browser sends to jump ahead in a video, or to carry on after a
+  dropped connection — got the file back from the start, so skipping ahead
+  landed at 0:00; and anyone whose download took longer than a minute was
+  cut off part-way (a 12 Mbit/s viewer got 73% of a 130 MB video). Downloads
+  now say how long they are, advertise `Accept-Ranges`, answer a range with
+  `206` and exactly those bytes (asking the bucket for only that range), and
+  carry the stored file's `ETag` and `Last-Modified` so a resumed download
+  can tell the file hasn't changed. The same applies to a resource's download
+  and to thumbnails. A download is no longer held to 60 seconds in total: it
+  may go on as long as the viewer keeps taking bytes (30 minutes at the
+  outside), while one that stops taking them is still dropped after about a
+  minute. The access checks, the safe headers and `Cache-Control: no-store`
+  are unchanged and apply to ranged requests too.
+
+### Changed
+
+- **A page of photo albums costs the server far less.** `/gallery` showed every
+  album's carousel at once, and every photo and video in it was a request to
+  this server. In a browser, 14 albums of 8 photos meant 112 thumbnail
+  requests plus 4 video-file requests on load, growing with every photo
+  ever uploaded. Now `/gallery` shows twelve albums at a time (newest first,
+  with "Older albums" / "Newer albums" links), carousel photos load lazily
+  (the slides next to the one showing load ahead of being needed, so a step
+  never lands on a blank slide), and a carousel that is off screen neither
+  loads nor turns over. The same page measures 48 thumbnails and no video
+  requests on load — and still 48 with two 40-photo albums added, where
+  before it was 192 — because what loads no longer depends on how many
+  photos an album holds.
+- **A video no longer fetches part of its file on every page view.** Videos in
+  albums, the thumbnail strip and the Files page were `preload="metadata"`,
+  which asks this server for a slice of every video on every visit. They are
+  now `preload="none"` and load when someone presses play, and show a
+  poster picture in the meantime (see Added).
+
 ## [2.18.1] — 2026-10-20
 
 ### Fixed
