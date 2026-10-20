@@ -64,9 +64,11 @@ const (
 	// hundreds of storage writes.
 	galleryUploadMaxParts = galleryUploadMaxPhotos + galleryUploadMaxVideos
 
-	// galleryUploadWriteWindow is how long the handler gets to finish and
+	// uploadWriteWindow is how long an upload handler gets to finish and
 	// answer once it starts. See extendWriteDeadline for why this exists.
-	galleryUploadWriteWindow = 5 * time.Minute
+	// Shared by every handler that takes a file, because the reason applies
+	// to each of them: the body has been read before any of them runs.
+	uploadWriteWindow = 5 * time.Minute
 )
 
 // galleryUploadView is what the album form needs to draw its uploader. A
@@ -134,7 +136,7 @@ type galleryUploader struct {
 	folder  string
 	public  bool
 	// maxBytes is one file's size cap. A field rather than the constant so
-	// a test can exercise the over-limit path without building a 50 MB body.
+	// a test can exercise the over-limit path without building a body the size of the real one.
 	maxBytes int64
 
 	put    func(ctx context.Context, key string, r io.Reader, size int64, contentType string) error
@@ -414,7 +416,7 @@ func (h *Handlers) requireGalleryUploader(w http.ResponseWriter, r *http.Request
 // already records who uploaded each file and when.
 func (h *Handlers) AdminGalleryUpload(w http.ResponseWriter, r *http.Request) {
 	// First, before anything that can take time. See extendWriteDeadline.
-	extendWriteDeadline(w, galleryUploadWriteWindow)
+	extendWriteDeadline(w, uploadWriteWindow)
 
 	unit, actor, ok := h.requireGalleryUploader(w, r)
 	if !ok {

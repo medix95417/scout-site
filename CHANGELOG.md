@@ -85,7 +85,7 @@ tagged commit with an accurate date.
   file's bytes and not its name or the type the browser claimed — a web
   page named photo.jpg is refused, and so is a HEIC straight off an
   iPhone, with a message saying what to do about it. One file can be up
-  to 50 MB, the same as the Files page. A video whose container Go's
+  to 150 MB, the same as the Files page. A video whose container Go's
   content sniffer doesn't recognise (an MP4 with no "mp4" brand) is
   still accepted when it opens as an ISO media file and the browser says
   it is a video.
@@ -96,6 +96,47 @@ tagged commit with an accurate date.
   upload has been read before the handler starts, so a video sent over an
   ordinary home connection would otherwise be stored and then lose its
   answer, and the page would report a failure for an upload that worked.
+
+### Changed
+
+- **The limit on one uploaded file is now 150 MB, up from 50 MB.** It
+  applies to the Files page and to the album uploader alike, and a minute
+  or two of phone video now fits. Photos were never the reason: they are
+  bounded by pixel count rather than bytes, and a real one is a few
+  megabytes.
+
+  What did not change is the cap on one submission, which stays at 250 MB.
+  One 150 MB file always fits in it, but two do not: several large videos
+  chosen together on the Files page can each pass the per-file limit and
+  still be refused as a whole, with the existing "try smaller batches"
+  message. The album uploader sends a video on its own, so it never meets
+  that.
+
+  The memory cost differs by page, and is worth knowing on a small server.
+  The album uploader streams a video through to storage: a 150 MB video
+  raised the server's memory by about 33 MB. The Files page reads each file
+  whole before storing it, so the same 150 MB file raised it by about
+  380 MB (about 125 MB for a 50 MB file before). Two leaders doing that at
+  once is the case to think about on a 1 GB server.
+
+  Every place that stated the old number now reads it from the one
+  constant, and two checks hold the numbers together: a file at the limit
+  must fit in one request, and the page's and the help's wording must name
+  the real limit.
+
+### Fixed
+
+- **A large upload on the Files page could be stored twice.** The server
+  gives a request 60 seconds to be answered, counted from when its headers
+  arrive, but an upload's body has been read before the page's own code
+  starts. A big file over an ordinary home connection outlasts that: the
+  file was stored, the answer was then lost, and the browser sent the whole
+  upload again, which stored it a second time. Measured on a throttled
+  link, a 1.8 MB file took 144 seconds and left two copies; it now answers
+  after 72 seconds and leaves one. The Files page now extends its own
+  deadline for the upload, as the album uploader does, and a check fails
+  any handler that reads an uploaded file without doing the same. A 150 MB
+  limit would have made this common rather than rare.
 
 ## [2.17.2] — 2026-09-30
 
