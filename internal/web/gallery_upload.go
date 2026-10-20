@@ -190,16 +190,15 @@ func (g galleryUploader) one(ctx context.Context, fh *multipart.FileHeader, phot
 	defer src.Close()
 
 	// Only the first bytes decide what a file is, so a document or an
-	// unsupported format is refused before the rest of it is read.
-	head := make([]byte, 512)
-	n, err := io.ReadFull(src, head)
-	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+	// unsupported format is refused before the rest of it is read. The helper
+	// also rewinds, ready for storeUpload below.
+	head, err := readUploadHead(src)
+	if err != nil {
 		log.Printf("web: reading an uploaded album file: %v", err)
 		res.Error = "That file couldn't be read. Try adding it again."
 		res.Retry = true
 		return res
 	}
-	head = head[:n]
 
 	contentType, video, problem := classifyGalleryMedia(head, fh.Header.Get("Content-Type"))
 	if problem != "" {
@@ -220,44 +219,19 @@ func (g galleryUploader) one(ctx context.Context, fh *multipart.FileHeader, phot
 		return res
 	}
 
-	if _, err := src.Seek(0, io.SeekStart); err != nil {
-		log.Printf("web: rewinding an uploaded album file: %v", err)
-		res.Error = "That file couldn't be read. Try adding it again."
+	// A video streams from the request's own temp file and a photo is read
+	// whole for its thumbnail — see storeUpload, which the Files page uses too.
+	key := files.NewStorageKey(g.unitID, g.folder, fh.Filename)
+	if err := storeUpload(ctx, g.put, g.thumb, src, fh.Size, key, contentType); err != nil {
+		if errors.Is(err, errReadingUpload) {
+			log.Printf("web: reading an uploaded album file: %v", err)
+			res.Error = "That file couldn't be read. Try adding it again."
+		} else {
+			log.Printf("web: storing an album upload: %v", err)
+			res.Error = "Couldn't save that one. Try adding it again."
+		}
 		res.Retry = true
 		return res
-	}
-
-	key := files.NewStorageKey(g.unitID, g.folder, fh.Filename)
-	if video {
-		// Streamed from the request's own temp file, not read into memory:
-		// a video is the big one, and there is nothing to derive from its
-		// bytes the way a photo's thumbnail is.
-		if err := g.put(ctx, key, src, fh.Size, contentType); err != nil {
-			log.Printf("web: storing an album video: %v", err)
-			res.Error = "Couldn't save that one. Try adding it again."
-			res.Retry = true
-			return res
-		}
-	} else {
-		// Read in full because the thumbnail needs the bytes a second time,
-		// and re-reading from storage right after writing to it would be a
-		// wasted round trip. Bounded by maxBytes, checked above.
-		data, err := io.ReadAll(src)
-		if err != nil {
-			log.Printf("web: reading an uploaded album photo: %v", err)
-			res.Error = "That file couldn't be read. Try adding it again."
-			res.Retry = true
-			return res
-		}
-		if err := g.put(ctx, key, bytes.NewReader(data), int64(len(data)), contentType); err != nil {
-			log.Printf("web: storing an album photo: %v", err)
-			res.Error = "Couldn't save that one. Try adding it again."
-			res.Retry = true
-			return res
-		}
-		if g.thumb != nil {
-			g.thumb(ctx, key, data)
-		}
 	}
 
 	// The object is stored before its row exists, the order files.Create
