@@ -91,6 +91,88 @@ tagged commit with an accurate date.
   the SQL, so an id from the other unit's site matches nothing rather
   than being moved.
 
+- **Photos and videos can be uploaded straight from the album editor.**
+  Adding a photo to an album used to be two trips — upload it on the
+  Files page, then come back and pick it from the library. The album's
+  page now has a box above the photo list: choose files (or drop them)
+  and they go up and are added to the list as they arrive. It works on a
+  new album as well as an existing one.
+
+  They are sent in small batches, one request at a time, in the order
+  they were chosen: up to five photos together, or a single video on its
+  own. A dropped connection costs the batch it was in rather than
+  everything, each batch lands in the list the moment it arrives, and
+  anything that didn't go in is listed by name with the reason and a
+  button to try just those again. After two dropped batches in a row it
+  stops instead of churning through the rest. The page won't save while
+  files are still going up, and asks before letting you leave with
+  uploaded files that haven't been saved into the album.
+
+  The files are saved as public or members-only to match the album's
+  visibility when they go up — a public album's photos have to be public
+  or a signed-out visitor sees an empty album, and a members-only album's
+  must not be, or anyone holding a link could open them. If the
+  visibility is changed afterwards the page says which files went up the
+  other way. They are filed as event photos and videos in the library
+  like any other, so they can be linked to an event or renamed there.
+
+  Only photos a browser can show and videos are accepted, judged by the
+  file's bytes and not its name or the type the browser claimed — a web
+  page named photo.jpg is refused, and so is a HEIC straight off an
+  iPhone, with a message saying what to do about it. One file can be up
+  to 150 MB, the same as the Files page. A video whose container Go's
+  content sniffer doesn't recognise (an MP4 with no "mp4" brand) is
+  still accepted when it opens as an ISO media file and the browser says
+  it is a video.
+
+  The server answers in JSON even when it refuses, and extends its own
+  write deadline for this one request: the server's 60-second write
+  timeout runs from when the request headers arrive, but the whole
+  upload has been read before the handler starts, so a video sent over an
+  ordinary home connection would otherwise be stored and then lose its
+  answer, and the page would report a failure for an upload that worked.
+
+### Changed
+
+- **The limit on one uploaded file is now 150 MB, up from 50 MB.** It
+  applies to the Files page and to the album uploader alike, and a minute
+  or two of phone video now fits. Photos were never the reason: they are
+  bounded by pixel count rather than bytes, and a real one is a few
+  megabytes.
+
+  What did not change is the cap on one submission, which stays at 250 MB.
+  One 150 MB file always fits in it, but two do not: several large videos
+  chosen together on the Files page can each pass the per-file limit and
+  still be refused as a whole, with the existing "try smaller batches"
+  message. The album uploader sends a video on its own, so it never meets
+  that.
+
+  The memory cost differs by page, and is worth knowing on a small server.
+  The album uploader streams a video through to storage: a 150 MB video
+  raised the server's memory by about 33 MB. The Files page reads each file
+  whole before storing it, so the same 150 MB file raised it by about
+  380 MB (about 125 MB for a 50 MB file before). Two leaders doing that at
+  once is the case to think about on a 1 GB server.
+
+  Every place that stated the old number now reads it from the one
+  constant, and two checks hold the numbers together: a file at the limit
+  must fit in one request, and the page's and the help's wording must name
+  the real limit.
+
+### Fixed
+
+- **A large upload on the Files page could be stored twice.** The server
+  gives a request 60 seconds to be answered, counted from when its headers
+  arrive, but an upload's body has been read before the page's own code
+  starts. A big file over an ordinary home connection outlasts that: the
+  file was stored, the answer was then lost, and the browser sent the whole
+  upload again, which stored it a second time. Measured on a throttled
+  link, a 1.8 MB file took 144 seconds and left two copies; it now answers
+  after 72 seconds and leaves one. The Files page now extends its own
+  deadline for the upload, as the album uploader does, and a check fails
+  any handler that reads an uploaded file without doing the same. A 150 MB
+  limit would have made this common rather than rare.
+
 ## [2.17.2] — 2026-09-30
 
 ### Added

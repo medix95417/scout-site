@@ -30,12 +30,24 @@ import (
 // CanEditUnitContent, the same gate /admin/home and the news/gallery admin
 // pages already use.
 
-// maxUploadFileSize caps a single uploaded file's size. Kept comfortably
-// under csrf.maxRequestBodySize (500 MB, the TOTAL size of one submission —
-// see that constant's own comment), so the error a leader sees for one
-// oversized file names the actual limit that tripped rather than a generic
-// "request too large."
-const maxUploadFileSize = 50 << 20 // 50 MB
+// maxUploadFileSize caps a single uploaded file's size.
+//
+// It has to stay below csrf.MaxRequestBodySize, the TOTAL size of one
+// submission (see that constant's own comment): a file the page accepts but
+// the server cannot take in one request is a limit nobody can reach, and the
+// error a leader sees for one oversized file should name the limit that
+// tripped, not a generic "request too large." TestAFileAtTheLimitFitsInOneRequest
+// holds the two together.
+//
+// Below it, not far below. At 150 MB one file fits, but two do not: a Files-
+// page submission of several large videos can pass this cap file by file and
+// still be refused as a whole, with that handler's own "try smaller batches"
+// message. The album uploader never meets that, since a video goes alone.
+//
+// Raised from 50 MB so a minute or two of phone video fits. Photos were never
+// the reason: they are bounded by pixel count, not bytes (see
+// thumbnail.MaxPixels), and a real one is a few megabytes.
+const maxUploadFileSize = 150 << 20 // 150 MB
 
 // fileRow is a files.File decorated with what the template needs to render
 // it and its "link to events" checkboxes.
@@ -185,9 +197,18 @@ func (h *Handlers) FileLibrary(w http.ResponseWriter, r *http.Request) {
 	// rest of the batch still succeeded, so this is a warning, not an error
 	// page.
 	if skipped := r.URL.Query()["skipped"]; len(skipped) > 0 {
-		data.Flash = strconv.Itoa(len(skipped)) + " file(s) were too large (50 MB max each) and were skipped: " + strings.Join(skipped, ", ")
+		data.Flash = skippedTooLargeMessage(skipped)
 	}
 	h.render(w, h.fileLibrary, data)
+}
+
+// skippedTooLargeMessage is what the file library says after an upload that
+// had to leave some files out for being over the size cap. A function of its
+// own so the limit it quotes is read from maxUploadFileSize rather than typed
+// out — the one place that said "50 MB" in prose was the first to go stale.
+func skippedTooLargeMessage(skipped []string) string {
+	return strconv.Itoa(len(skipped)) + " file(s) were too large (" + strconv.Itoa(maxUploadFileSize>>20) +
+		" MB max each) and were skipped: " + strings.Join(skipped, ", ")
 }
 
 // fileLibraryData is what files.html renders. Named rather than an
@@ -263,6 +284,15 @@ type eventFileGroupView struct {
 const storageUnavailableMsg = "File storage isn't configured for this site yet — an admin needs to set S3_ENDPOINT/S3_ACCESS_KEY/S3_SECRET_KEY (see DEPLOY.md)."
 
 func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
+	// First, before anything that can take time: the server's write timeout
+	// runs from the request headers, and the whole upload has been read by the
+	// time this runs. Without it, a large file over an ordinary connection was
+	// stored and its answer then lost — and the browser re-sent the lot, which
+	// stored it a second time. Measured on a throttled link; see
+	// extendWriteDeadline. The larger the permitted file, the more often that
+	// matters.
+	extendWriteDeadline(w, uploadWriteWindow)
+
 	unit, _ := units.UnitFromContext(r.Context())
 	user, loggedIn := auth.UserFromContext(r.Context())
 	if !loggedIn {

@@ -56,9 +56,10 @@ const maxUploadMemory = 10 << 20 // 10 MB
 // FileUpload, which accepts a batch via <input multiple>) needs enough
 // headroom for several files at once, e.g. a phone's whole camera roll for
 // a campout, not just one. 250 MB comfortably fits a few dozen photos
-// (each individually capped at 50 MB — see files.go's maxUploadFileSize)
-// while still bounding how much one request can make the server buffer/
-// spill to disk.
+// (each individually capped — see internal/web's maxUploadFileSize, which
+// must stay below this: a file the page accepts but one request cannot carry
+// is a limit nobody can reach) while still bounding how much one request can
+// make the server buffer/spill to disk.
 //
 // This number is quoted verbatim in the too-large error below and is what
 // http.Server's ReadTimeout has to be able to accommodate (see the timeout
@@ -67,6 +68,13 @@ const maxUploadMemory = 10 << 20 // 10 MB
 // — the constant said 500 MB while the message said 250 MB for a while,
 // so whichever a leader believed, one of them was lying.
 const maxRequestBodySize = 250 << 20 // 250 MB
+
+// MaxRequestBodySize is the signed-in cap on one POST body, exported so a
+// package that sets its own per-file limit can check that a file at that
+// limit still fits in one request. Nothing here reads it; it exists for that
+// check, since the two numbers are set in different packages and nothing
+// else would notice one being raised past the other.
+func MaxRequestBodySize() int64 { return maxRequestBodySize }
 
 // maxAnonymousRequestBodySize is the cap for a POST arriving without a
 // session.

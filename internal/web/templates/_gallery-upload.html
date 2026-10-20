@@ -1,0 +1,465 @@
+{{/* galleryUploader is the album editor's "add photos and videos from your
+     device" box — the one-step alternative to uploading on the Files page
+     and then coming back to pick from the library.
+
+     The box is script-driven and starts hidden: without JavaScript a file
+     input that does nothing would be worse than none, so a <noscript> note
+     points at the Files page instead, and the library picker below still
+     works as it always has.
+
+     Everything the script needs to know about limits arrives as data-
+     attributes written from the SAME Go constants the handler enforces
+     (see gallery_upload.go), so the page and the server cannot disagree
+     about what "a batch" is.
+
+     Takes a dict with:
+       Upload     galleryUploadView
+       CSRFToken  the page's token — the upload is a POST like any other
+       Target     id of the <textarea> the finished files are added to */}}
+{{define "galleryUploader"}}
+  {{if .Upload.Enabled}}
+    <noscript>
+      <p class="mb-3 text-xs text-gray-500">
+        Uploading from this page needs JavaScript. You can still add photos on the
+        <a href="/files" class="underline" style="color: var(--unit-color);">Files</a> page and pick them from the library below.
+      </p>
+    </noscript>
+    <div class="mb-3 rounded-md border-2 border-dashed border-gray-300 bg-gray-50 p-3" hidden
+         data-gallery-uploader
+         data-action="/admin/gallery-upload"
+         data-target="{{.Target}}"
+         data-csrf="{{.CSRFToken}}"
+         data-max-photos="{{.Upload.MaxPhotos}}"
+         data-max-videos="{{.Upload.MaxVideos}}"
+         data-max-bytes="{{.Upload.MaxBytes}}">
+      <div class="flex flex-wrap items-center gap-3">
+        <input type="file" multiple accept="image/*,video/*" class="text-sm" data-gu-input
+               aria-label="Choose photos and videos to upload">
+        <span class="text-xs text-gray-500">or drop them here</span>
+      </div>
+      <p class="mt-2 text-xs text-gray-600" data-gu-where></p>
+      <p class="mt-1 text-xs text-gray-500">
+        Photos go up {{.Upload.MaxPhotos}} at a time and a video on its own, up to {{.Upload.MaxMB}} MB each, so a dropped
+        connection only costs the batch it was in. Each batch is added to the list below as soon as it arrives.
+      </p>
+
+      <div class="mt-3" data-gu-progress hidden>
+        <div class="flex items-center justify-between gap-3 text-sm">
+          <span data-gu-status role="status" aria-live="polite"></span>
+          <button type="button" class="text-xs underline text-gray-600" data-gu-stop>Stop</button>
+        </div>
+        <progress class="mt-1 w-full" max="100" value="0" data-gu-bar aria-label="Upload progress"></progress>
+      </div>
+
+      <p class="mt-2 text-sm" data-gu-done hidden role="status"></p>
+
+      <div class="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900" data-gu-mismatch hidden></div>
+
+      <div class="mt-2" data-gu-problems hidden>
+        <p class="text-sm font-medium text-red-800" data-gu-problems-title></p>
+        <ul class="mt-1 list-disc pl-5 text-xs text-red-800" data-gu-problem-list></ul>
+        <button type="button" hidden data-gu-retry
+                class="mt-2 rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium hover:bg-gray-50">
+          Try the failed ones again
+        </button>
+      </div>
+    </div>
+  {{else}}
+    <p class="mb-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+      Uploading from this page isn't set up yet — file storage isn't configured for this site, so there is nowhere to
+      keep a photo. Once it is, a box to add photos and videos appears here. Photos already in your
+      <a href="/files" class="underline" style="color: var(--unit-color);">file library</a> can still be picked below.
+    </p>
+  {{end}}
+{{end}}
+
+{{/* galleryUploaderScript drives the box above. Include once per page,
+     after the album's <textarea> and after imagePickerScript, which
+     publishes window.mediaListAppend — the one place that knows how a line
+     of the photo list is written, so this does not repeat it. */}}
+{{define "galleryUploaderScript"}}
+  <script nonce="{{.CSPNonce}}">
+    (function () {
+      var box = document.querySelector('[data-gallery-uploader]');
+      if (!box) { return; }
+      var target = document.getElementById(box.getAttribute('data-target'));
+      var form = box.closest('form');
+      if (!target || !form) { return; }
+
+      var action = box.getAttribute('data-action');
+      var token = box.getAttribute('data-csrf');
+      var maxPhotos = parseInt(box.getAttribute('data-max-photos'), 10);
+      var maxBytes = parseInt(box.getAttribute('data-max-bytes'), 10);
+
+      var input = box.querySelector('[data-gu-input]');
+      var where = box.querySelector('[data-gu-where]');
+      var progress = box.querySelector('[data-gu-progress]');
+      var statusEl = box.querySelector('[data-gu-status]');
+      var bar = box.querySelector('[data-gu-bar]');
+      var stopBtn = box.querySelector('[data-gu-stop]');
+      var doneEl = box.querySelector('[data-gu-done]');
+      var mismatchEl = box.querySelector('[data-gu-mismatch]');
+      var problems = box.querySelector('[data-gu-problems]');
+      var problemsTitle = box.querySelector('[data-gu-problems-title]');
+      var problemList = box.querySelector('[data-gu-problem-list]');
+      var retryBtn = box.querySelector('[data-gu-retry]');
+
+      box.hidden = false;
+
+      // --- state ---------------------------------------------------------
+      var queue = [];       // items still to send, in the order they were chosen
+      var running = false;  // a run is in progress
+      var stopped = false;  // Stop was pressed, or the connection gave out
+      var current = null;   // the in-flight request, so Stop can end it
+      var unsaved = false;  // files were added to the list and the form wasn't saved
+      var total = 0;        // files taken on in this run
+      var settled = 0;      // of those, how many have a final outcome
+      var added = 0;
+      var retryable = [];   // failed, and worth sending again
+      var refused = [];     // failed, and sending again would fail the same way
+      var haltNote = '';    // why a run stopped early, if it did
+      var tally = { pub: 0, members: 0 };  // how the files were saved
+
+      // --- what a file is --------------------------------------------------
+      // The server decides from the bytes. This only decides how to GROUP
+      // them: photos together, a video on its own. A file with no type from
+      // the browser (it happens for some video containers) falls back to
+      // its extension.
+      function kindOf(file) {
+        var type = file.type || '';
+        if (type.indexOf('video/') === 0) { return 'video'; }
+        if (type.indexOf('image/') === 0) { return 'photo'; }
+        var name = file.name.toLowerCase();
+        if (/\.(mp4|mov|m4v|webm|ogv|avi|mkv)$/.test(name)) { return 'video'; }
+        if (/\.(jpe?g|png|gif|webp|bmp|avif|tiff?)$/.test(name)) { return 'photo'; }
+        return '';
+      }
+
+      function mb(bytes) { return (bytes / 1048576).toFixed(1) + ' MB'; }
+
+      // --- visibility ------------------------------------------------------
+      function visibility() {
+        var radio = document.querySelector('input[name="visibility"]:checked');
+        return radio && radio.value === 'public' ? 'public' : 'members';
+      }
+
+      function noteWhere() {
+        where.textContent = visibility() === 'public'
+          ? 'They’ll be saved as public — this album is public, so anyone can see them, signed in or not.'
+          : 'They’ll be saved as members-only — only signed-in families can see them. Set the album to Public below first if it should be.';
+      }
+
+      // The album's visibility can be changed after files went up under the
+      // other one. Both directions are worth saying out loud: a public album
+      // with members-only photos shows up empty to the public, and a
+      // members-only album with public photos leaves them open to anyone
+      // who has the link.
+      function checkMismatch() {
+        var now = visibility();
+        var text = '';
+        if (now === 'public' && tally.members > 0) {
+          text = tally.members + ' of the files you uploaded here were saved as members-only, but this album is now Public. ' +
+            'Signed-out visitors won’t see them until they’re made public on the Files page — or set the album back to “Members only”.';
+        } else if (now === 'members' && tally.pub > 0) {
+          text = tally.pub + ' of the files you uploaded here were saved as public, but this album is now Members only. ' +
+            'Anyone with a link to them can still open them. You can make them members-only on the Files page, or set the album back to “Public”.';
+        }
+        mismatchEl.textContent = text;
+        mismatchEl.hidden = text === '';
+      }
+
+      // --- messages --------------------------------------------------------
+      function tone(el, kind) {
+        el.className = 'mt-2 text-sm ' + (kind === 'bad' ? 'text-red-800' : kind === 'warn' ? 'text-amber-900' : 'text-green-800');
+      }
+
+      function say(text, kind) {
+        doneEl.textContent = text;
+        tone(doneEl, kind || 'good');
+        doneEl.hidden = text === '';
+      }
+
+      function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+      function renderProblems() {
+        var all = retryable.concat(refused);
+        problemList.textContent = '';
+        all.forEach(function (p) {
+          var li = document.createElement('li');
+          var name = document.createElement('strong');
+          name.textContent = p.name;
+          li.appendChild(name);
+          li.appendChild(document.createTextNode(' — ' + p.message));
+          problemList.appendChild(li);
+        });
+        problems.hidden = all.length === 0;
+        problemsTitle.textContent = all.length === 0 ? '' : plural(all.length, 'file wasn’t added', 'files weren’t added') + ':';
+        retryBtn.hidden = retryable.length === 0;
+      }
+
+      function paint(fraction, batch) {
+        var frac = fraction || 0;
+        var n = batch ? batch.length : 0;
+        var value = total === 0 ? 0 : ((settled + frac * n) / total) * 100;
+        bar.value = Math.min(100, Math.max(0, value));
+        if (!batch) { return; }
+        var first = settled + 1;
+        var span = n === 1 ? String(first) : first + '–' + (settled + n);
+        var what = batch[0].kind === 'video' ? 'video' : (n === 1 ? 'photo' : 'photos');
+        if (frac >= 1) {
+          statusEl.textContent = 'Saving ' + what + ' ' + span + ' of ' + total + '…';
+        } else {
+          statusEl.textContent = 'Uploading ' + what + ' ' + span + ' of ' + total +
+            (batch[0].kind === 'video' ? ' — ' + Math.round(frac * 100) + '% sent' : '') + '…';
+        }
+      }
+
+      // --- taking files on -------------------------------------------------
+      function enqueue(fileList) {
+        var chosen = Array.prototype.slice.call(fileList || []);
+        if (chosen.length === 0) { return; }
+        var accepted = 0;
+        chosen.forEach(function (file) {
+          var kind = kindOf(file);
+          if (kind === '') {
+            refused.push({ name: file.name, message: 'That isn\'t a photo or video, so it wasn\'t added. Documents go on the Files page.' });
+            return;
+          }
+          // Checked here too, so a 200 MB video isn't sent for the server to
+          // refuse at the end. The number is the server's own.
+          if (file.size > maxBytes) {
+            refused.push({ name: file.name, message: 'Too large: ' + mb(file.size) + ', and the limit is ' + mb(maxBytes).replace('.0', '') + ' for one file.' });
+            return;
+          }
+          queue.push({ file: file, name: file.name, kind: kind });
+          accepted++;
+        });
+        total += accepted;
+        renderProblems();
+        if (accepted > 0) { run(); }
+      }
+
+      // The next batch, built from the front of the queue: up to maxPhotos
+      // photos in a row, or exactly one video. Built lazily so files chosen
+      // while a run is going join it, and so the order they were chosen in
+      // is the order they end up in the album.
+      function nextBatch() {
+        if (queue.length === 0) { return null; }
+        if (queue[0].kind === 'video') { return [queue.shift()]; }
+        var batch = [];
+        while (queue.length > 0 && queue[0].kind === 'photo' && batch.length < maxPhotos) {
+          batch.push(queue.shift());
+        }
+        return batch;
+      }
+
+      // --- sending one batch -------------------------------------------------
+      function send(batch) {
+        return new Promise(function (resolve) {
+          var data = new FormData();
+          data.append('csrf_token', token);
+          data.append('visibility', visibility());
+          batch.forEach(function (item) { data.append('file', item.file, item.file.name); });
+
+          var xhr = new XMLHttpRequest();
+          current = xhr;
+          xhr.open('POST', action);
+          xhr.setRequestHeader('Accept', 'application/json');
+          xhr.upload.addEventListener('progress', function (e) {
+            if (e.lengthComputable && e.total > 0) { paint(e.loaded / e.total, batch); }
+          });
+          xhr.addEventListener('load', function () {
+            current = null;
+            var body = null;
+            try { body = JSON.parse(xhr.responseText); } catch (err) { body = null; }
+            if (xhr.status === 200 && body && Array.isArray(body.results)) {
+              resolve({ kind: 'ok', results: body.results, isPublic: !!body.public });
+            } else if (xhr.status === 200) {
+              // A 200 that isn't ours: the request was sent on to the login
+              // page, which means the session is gone.
+              resolve({ kind: 'session' });
+            } else {
+              var message = body && body.error ? body.error : (xhr.responseText || '').trim().slice(0, 300);
+              resolve({ kind: 'http', status: xhr.status, message: message || ('The server answered ' + xhr.status + '.') });
+            }
+          });
+          xhr.addEventListener('error', function () { current = null; resolve({ kind: 'network' }); });
+          xhr.addEventListener('abort', function () { current = null; resolve({ kind: 'aborted' }); });
+          xhr.send(data);
+        });
+      }
+
+      function failBatch(batch, message, canRetry) {
+        batch.forEach(function (item) {
+          (canRetry ? retryable : refused).push({ item: item, name: item.name, message: message });
+          settled++;
+        });
+      }
+
+      // --- the run -----------------------------------------------------------
+      async function run() {
+        if (running) { return; }
+        running = true;
+        stopped = false;
+        haltNote = '';
+        var networkFailures = 0;
+        progress.hidden = false;
+        say('', 'good');
+
+        try {
+          var batch;
+          while (!stopped && (batch = nextBatch()) !== null) {
+            paint(0, batch);
+            var outcome = await send(batch);
+
+            if (outcome.kind === 'ok') {
+              networkFailures = 0;
+              batch.forEach(function (item, i) {
+                var res = outcome.results[i];
+                if (res && res.url) {
+                  window.mediaListAppend(target, res.url, !!res.video);
+                  added++;
+                  unsaved = true;
+                  if (outcome.isPublic) { tally.pub++; } else { tally.members++; }
+                } else {
+                  var why = res && res.error ? res.error : 'The server sent no answer for this file.';
+                  (res && res.retry ? retryable : refused).push({ item: item, name: item.name, message: why });
+                }
+                settled++;
+              });
+              // One input event for the batch, so anything watching the list
+              // (the picker's "already added" ringing) updates once.
+              target.dispatchEvent(new Event('input', { bubbles: true }));
+              checkMismatch();
+            } else if (outcome.kind === 'network') {
+              // Nothing from this batch reached the album, whatever the server
+              // managed before the connection went. Two in a row means the
+              // connection is the problem, and the rest would fail the same
+              // way, so stop rather than churn through them.
+              networkFailures++;
+              failBatch(batch, 'The connection dropped, so this wasn\'t added to the album.', true);
+              if (networkFailures >= 2) {
+                stopped = true;
+                haltNote = 'The connection keeps dropping, so the upload stopped.';
+              }
+            } else if (outcome.kind === 'aborted') {
+              failBatch(batch, 'Stopped before it finished, so it wasn\'t added to the album.', true);
+            } else if (outcome.kind === 'session' || outcome.status === 401) {
+              // Sending the rest would only be refused the same way. Worth
+              // retrying once signed in again, which can be done in another
+              // tab without losing the list below.
+              failBatch(batch, 'Your sign-in has ended.', true);
+              stopped = true;
+              haltNote = 'Your sign-in has ended. Sign in again in another tab, then press “Try the failed ones again” — what is already in the list below is kept.';
+            } else if (outcome.status === 403) {
+              failBatch(batch, outcome.message, false);
+              stopped = true;
+              haltNote = 'Your account can’t add photos to this site.';
+            } else if (outcome.status === 413) {
+              // Too big for the server to take in one go; sending the same
+              // thing again will say the same. The message names the limit.
+              failBatch(batch, outcome.message, false);
+            } else {
+              failBatch(batch, outcome.message, true);
+            }
+            paint(0, null);
+            renderProblems();
+          }
+        } finally {
+          running = false;
+          current = null;
+          // Anything still queued when a run stops early was never tried.
+          queue.forEach(function (item) {
+            retryable.push({ item: item, name: item.name, message: 'Not tried — the upload stopped first.' });
+            settled++;
+          });
+          queue = [];
+          finish();
+        }
+      }
+
+      // What the run did, in one place: how many went in, whether anything
+      // didn't, and — if it stopped early — why.
+      function finish() {
+        progress.hidden = true;
+        renderProblems();
+        var failedCount = retryable.length + refused.length;
+        var parts = [];
+        if (haltNote !== '') { parts.push(haltNote); }
+        if (added > 0) {
+          parts.push(plural(added, 'file', 'files') + ' uploaded and added to the list below. Press Save to put ' +
+            (added === 1 ? 'it' : 'them') + ' in the album.');
+        } else if (failedCount > 0) {
+          parts.push('Nothing was added.');
+        }
+        var kind = failedCount === 0 && haltNote === '' ? 'good' : (added > 0 ? 'warn' : 'bad');
+        say(parts.join(' '), kind);
+        // The counters describe one run; the next starts clean.
+        total = 0; settled = 0; added = 0;
+      }
+
+      // --- wiring ------------------------------------------------------------
+      input.addEventListener('change', function () {
+        enqueue(input.files);
+        // So choosing the same files again is a change, not a no-op.
+        input.value = '';
+      });
+
+      stopBtn.addEventListener('click', function () {
+        stopped = true;
+        if (current) { current.abort(); }
+      });
+
+      retryBtn.addEventListener('click', function () {
+        var again = retryable.map(function (p) { return p.item; });
+        retryable = [];
+        queue = queue.concat(again);
+        total += again.length;
+        renderProblems();
+        run();
+      });
+
+      ['dragenter', 'dragover'].forEach(function (name) {
+        box.addEventListener(name, function (e) {
+          e.preventDefault();
+          box.classList.remove('border-gray-300');
+          box.classList.add('border-blue-500');
+        });
+      });
+      ['dragleave', 'drop'].forEach(function (name) {
+        box.addEventListener(name, function () {
+          box.classList.remove('border-blue-500');
+          box.classList.add('border-gray-300');
+        });
+      });
+      box.addEventListener('drop', function (e) {
+        e.preventDefault();
+        if (e.dataTransfer && e.dataTransfer.files) { enqueue(e.dataTransfer.files); }
+      });
+
+      Array.prototype.forEach.call(document.querySelectorAll('input[name="visibility"]'), function (radio) {
+        radio.addEventListener('change', function () { noteWhere(); checkMismatch(); });
+      });
+
+      // Saving while files are still going up would save a list missing the
+      // rest of them, and then add them to a page that has been left.
+      form.addEventListener('submit', function (e) {
+        if (running) {
+          e.preventDefault();
+          say('Wait for the upload to finish, or press Stop, before saving — otherwise the rest wouldn’t be in the album.', 'warn');
+          return;
+        }
+        unsaved = false;
+      });
+
+      window.addEventListener('beforeunload', function (e) {
+        if (running || unsaved) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
+      });
+
+      noteWhere();
+    })();
+  </script>
+{{end}}

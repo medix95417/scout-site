@@ -421,7 +421,7 @@ func redirectTo(path string) http.HandlerFunc {
 // assembled, so that TestEveryTemplateParses exercises the same path New
 // does rather than a copy of it that could drift.
 func parsePageTemplate(page string) (*template.Template, error) {
-	return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/_image-picker.html", "templates/_file-link-picker.html", "templates/_webauthn.html", "templates/"+page)
+	return template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS, "templates/base.html", "templates/_image-picker.html", "templates/_gallery-upload.html", "templates/_file-link-picker.html", "templates/_webauthn.html", "templates/"+page)
 }
 
 func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *mailer.Mailer, store *storage.Store) (*Handlers, error) {
@@ -883,6 +883,11 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/gallery/{id}/edit", h.AdminGalleryEdit)
 	mux.HandleFunc("POST /admin/gallery/{id}", h.AdminGalleryUpdate)
 	mux.HandleFunc("POST /admin/gallery/{id}/publish", h.AdminGalleryPublishToggle)
+	// Its own top-level path rather than /admin/gallery/upload, which would
+	// sit beside /admin/gallery/{id}/… — the nesting pattern this file warns
+	// about for /admin/prospects. Not an id, and not tied to one album: the
+	// uploader works on the New form too, before any album exists.
+	mux.HandleFunc("POST /admin/gallery-upload", h.AdminGalleryUpload)
 
 	// Public "Our Leaders" page and its admin CRUD (internal/web/leaders.go).
 	mux.HandleFunc("GET /leaders", h.LeadersList)
