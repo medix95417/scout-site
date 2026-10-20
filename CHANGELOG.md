@@ -27,6 +27,34 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Uploading a large file on the Files page no longer costs the server
+  memory in proportion to its size.** The Files page read every file whole
+  into memory before storing it, so a 150 MB video raised the server's
+  memory by about 376 MB, and two people uploading 130 MB videos at the same
+  moment took it from 51 MB to about 608 MB — most of a 1 GB server. 2.18.0
+  raised the file limit to 150 MB and said so; this closes it.
+
+  Anything that isn't an image now goes from the request's own temporary file
+  straight to storage, as the album uploader already did. Measured on the
+  real upload form: the 150 MB video now raises memory by about 40 MB, and
+  the two simultaneous 130 MB videos by about 66 MB, peaking at 118 MB.
+
+  Images are the exception, and still are read whole, because the thumbnail
+  is made from the same bytes that are stored. They now read into a buffer
+  allocated once at the right size rather than one that grows by copying,
+  which is why a large image costs less than it did (a 69 MB, 24-megapixel
+  PNG: about 273 MB, down from about 341 MB). What remains is the decode, not
+  the upload, and a real photo is a few megabytes. That cost is bounded by
+  the thumbnail's pixel cap, not by the file limit.
+
+  The Files page and the album uploader now share one routine for this, so
+  they cannot drift apart again, and a check fails any handler that opens an
+  uploaded file and reads it whole for itself. Nothing visible changes:
+  names, types, categories, thumbnails and downloads came out identical,
+  byte for byte, before and after.
+
 ## [2.18.0] — 2026-10-20
 
 ### Security

@@ -365,14 +365,15 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		// Read fully into memory (capped at maxUploadFileSize, so bounded)
-		// rather than streaming straight from src to storage — an image
-		// needs its bytes a second time right below, to generate its
-		// thumbnail eagerly, and re-reading from storage right after
-		// writing to it would be a wasted round trip for no reason.
-		data, err := io.ReadAll(src)
-		src.Close()
+
+		// Only the first bytes decide what a file is, so only those are read
+		// here. The rest goes to storage by storeUpload: streamed for anything
+		// but an image, read whole for an image because its thumbnail needs the
+		// same bytes. See upload_store.go for why — reading every file whole is
+		// what made a 150 MB video cost the server about 378 MB.
+		head, err := readUploadHead(src)
 		if err != nil {
+			src.Close()
 			log.Printf("web: reading uploaded file: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -381,28 +382,19 @@ func (h *Handlers) FileUpload(w http.ResponseWriter, r *http.Request) {
 		// Derived from the bytes, not from what the uploader claimed — see
 		// sniffContentType (file_serving.go) for why the multipart part
 		// header can't be trusted here.
-		contentType := sniffContentType(data, fh.Header.Get("Content-Type"))
+		contentType := sniffContentType(head, fh.Header.Get("Content-Type"))
 		key := files.NewStorageKey(unit.ID, folder, fh.Filename)
-		if err := h.Storage.Put(r.Context(), key, bytes.NewReader(data), int64(len(data)), contentType); err != nil {
-			log.Printf("web: uploading file to storage: %v", err)
+		err = storeUpload(r.Context(), h.Storage.Put, h.cacheUploadThumbnail, src, fh.Size, key, contentType)
+		src.Close()
+		if err != nil {
+			if errors.Is(err, errReadingUpload) {
+				log.Printf("web: reading uploaded file %q: %v", fh.Filename, err)
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+			log.Printf("web: uploading file %q to storage: %v", fh.Filename, err)
 			http.Error(w, "internal error saving the file", http.StatusInternalServerError)
 			return
-		}
-
-		// Generated now, while the leader is already waiting on the
-		// upload to finish, rather than the first time anyone views this
-		// photo's thumbnail — see FileThumbnail's doc comment for why
-		// that used to mean a visitor's page load could trigger a
-		// real-time image resize. Not fatal on its own: a failure here
-		// just leaves FileThumbnail's on-demand fallback to cover it
-		// later, the same as it does for every photo uploaded before
-		// this existed.
-		if strings.HasPrefix(contentType, "image/") {
-			if thumb, err := thumbnail.Generate(data); err != nil {
-				log.Printf("web: generating thumbnail for uploaded file %q: %v", fh.Filename, err)
-			} else if err := h.Storage.Put(r.Context(), key+thumbStorageSuffix, bytes.NewReader(thumb), int64(len(thumb)), "image/jpeg"); err != nil {
-				log.Printf("web: caching thumbnail for uploaded file %q: %v", fh.Filename, err)
-			}
 		}
 
 		displayName := baseName
