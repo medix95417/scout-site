@@ -50,7 +50,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.27"
           cache: true
 
       - name: Build
@@ -79,30 +79,43 @@ jobs:
       # before changing one without the other.
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.27"
           cache: true
 
       # Pinned rather than @latest — which is what golang/govulncheck-action
-      # installs, and why this job no longer uses it. x/vuln v1.8.0 raised
-      # its own floor to Go 1.26, so @latest stopped building under the Go
-      # pinned above and the job went red on every branch at once, failing
-      # while installing the scanner, before it read a line of this repo. A
-      # security check that breaks on a date rather than on a finding
-      # teaches people to ignore it.
+      # installs, and why this job no longer uses it. A new x/vuln can raise
+      # its own Go floor above the Go pinned here (v1.8.0 did, to 1.26, while
+      # this was on 1.25), and then @latest stops building and the job goes
+      # red on every branch at once, failing while installing the scanner,
+      # before it read a line of this repo. A security check that breaks on
+      # a date rather than on a finding teaches people to ignore it.
       #
       # Pin the scanner, not the toolchain. Chasing @latest by bumping this
-      # job to Go 1.26 looks like the smaller fix and is the wrong one:
+      # job's Go alone looks like the smaller fix and is the wrong one:
       # govulncheck reports standard-library vulnerabilities for the Go it
       # runs under, so scanning on a Go we do not build with would hide real
       # findings against the binary we ship and invent ones we are not
-      # exposed to.
+      # exposed to. The build job, release.yml, the Dockerfile and go.mod all
+      # name the same Go line for that reason.
+      #
+      # The scanner moves WITH Go, not after it. v1.7.0 was released before
+      # Go 1.27 and v1.9.0 after it, and that matters: a scanner built
+      # against an older x/tools can fail to read what a newer compiler
+      # produces, which is a red job that is not a finding.
       #
       # The cost is a scanner that goes stale quietly, which is the failure
       # this pin can have and the red job could not. Bump it on purpose, and
       # together with the Go version above if that moves.
+      #
+      # The Go line itself has a shelf life, and this job is how you find
+      # out. Go patches only its two newest releases, so when Go 1.29 ships
+      # (about August 2027) 1.27 stops receiving security fixes and this job
+      # goes red with standard-library findings that only a newer Go can
+      # clear. That is the signal to move Go, as it was for 1.25 — not a
+      # fault in the job, and not something to silence.
       - name: Install govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: govulncheck
