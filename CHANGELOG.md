@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.18.0] — 2026-10-20
+
 ### Security
 
 - **Built and tested on Go 1.27, up from 1.25, which no longer receives
