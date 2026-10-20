@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.19.0] — 2026-10-20
+
 ### Added
 
 - **Videos show a picture instead of a black box until they are played.**
