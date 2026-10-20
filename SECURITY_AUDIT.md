@@ -770,7 +770,7 @@ A login can register one or more security keys — a YubiKey or any FIDO2
 authenticator, or a platform passkey — and use one at the second step of
 login instead of, or alongside, an authenticator app. The ceremony is
 `github.com/go-webauthn/webauthn` (v0.18.0, the newest that builds on
-the Go 1.25 this project pins); `internal/auth/securitykey.go` owns what
+Go 1.25, which this project pinned when the dependency was added); `internal/auth/securitykey.go` owns what
 is stored and the rules, `internal/web/securitykey.go` the HTTP wiring.
 
 - **Challenge stored server-side, answered once.** Each begin writes the

@@ -17,7 +17,7 @@ writeup, `PHASE2_TREASURY.md` for the fund-accounting design, and
 ## Commands
 
 You do not need Go installed to run the app (Docker Compose builds it in
-a container), but Go 1.25+ is needed for local build/test/vet.
+a container), but Go 1.27+ is needed for local build/test/vet.
 
 ```bash
 go build ./...              # compile everything
