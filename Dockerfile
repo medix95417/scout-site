@@ -14,7 +14,10 @@ COPY scripts/vendor-assets.cjs ./scripts/vendor-assets.cjs
 COPY internal/web ./internal/web
 RUN npm run build:assets
 
-FROM golang:1.25-bookworm AS build
+# The Go line is the one go.mod, CI and the release workflow name: CI scans
+# this exact line for vulnerabilities, so building with a different one
+# would make that scan say nothing about the binary that ships.
+FROM golang:1.27-bookworm AS build
 WORKDIR /src
 
 # go.sum is checked into the repo, so `go mod download` resolves exactly

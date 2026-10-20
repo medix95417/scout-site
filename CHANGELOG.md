@@ -27,6 +27,41 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Security
+
+- **Built and tested on Go 1.27, up from 1.25, which no longer receives
+  security fixes.** Go patches only its two newest releases, and Go 1.27
+  shipped in August, so 1.25's last release (1.25.14) is the last it will
+  get. CI's vulnerability scan reported twelve findings against it, and
+  each one is fixed only from Go 1.26.9 or in `golang.org/x/net` v0.60.0,
+  which itself requires Go 1.26. Nothing short of moving Go clears them.
+  `main` was red on that check too, so it was found, not introduced.
+
+  Seven are in the standard library: `net/http` (GO-2026-6613, -6609,
+  -6605), `mime/multipart` (-6608), `crypto/tls` (-6607) and
+  `html/template` (-6600, -6599). Five are in `golang.org/x/net`
+  (GO-2026-6617, -6612, -6611, -6610, -6603), all HTTP/2. Whether each can
+  be reached on this site depends on the path — Caddy terminates TLS and
+  HTTP/2 in front of the app, while the template and multipart code run in
+  the app itself — and none was assessed individually. The point of the
+  upgrade is that nobody has to.
+
+  What changed: `go.mod` now requires Go 1.27.0, with `golang.org/x/net`
+  v0.60.0 and the four `golang.org/x` modules that came with it; CI, the
+  release workflow and the Docker build image all name the same Go line,
+  because the scan reports the standard library of the Go it runs under and
+  only means something for the Go that builds what ships. The vulnerability
+  scanner moved with it, from v1.7.0 to v1.9.0 — the old one predates Go
+  1.27, and a scanner built against an older `x/tools` can fail to read what
+  a newer compiler produces, which would be a red check that is not a
+  finding.
+
+  A site already running 2.17.x keeps the old Go until its image is rebuilt,
+  so deploying this means rebuilding, not just restarting. The Go line has a
+  shelf life: when Go 1.29 ships (about August 2027) 1.27 stops getting
+  fixes, and the same check will go red again with findings only a newer Go
+  can clear. That is the signal to move, not a fault in the check.
+
 ### Added
 
 - **Prospects can be moved between statuses in bulk.** Tick the families
