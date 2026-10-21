@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.20.1] — 2026-10-21
+
 ### Added
 
 - **Each unit can send its email from its own address.** The mail server and
