@@ -203,6 +203,15 @@ logs). No architecture change is needed for this move — see
       DEPLOY.md "Ongoing operations") — each member is only ever emailed
       once per event no matter how many times the command runs, so
       running it hourly (or even more often) is safe.
+    - **News posts and den/patrol updates.** A leader can email a published
+      news post to the whole unit or to chosen dens/patrols (never
+      automatically — publishing emails nobody), and anyone holding the
+      `email_group` capability can email the den or patrol they hold a role
+      in, from "Email this den/patrol" on its page, or by ticking "also email
+      it" when posting an update there. A Patrol Leader holds `email_group` by
+      default, so can email their own patrol without being able to edit the
+      site. These ride the same paced sender and record as newsletters and
+      show up on the Newsletters page.
 
   If `SMTP_HOST` is left blank, the site works exactly as before: "forgot
   password" quietly no-ops (with a note in the server log pointing at the
@@ -447,7 +456,10 @@ Added since Phase 2, backing the features described above:
   by prospect campaigns and newsletters (`kind` distinguishes the two).
 - `internal/newsletter` — newsletter drafting, HTML sanitizing (a strict
   allowlist mode for the WYSIWYG editor, plus an opt-in permissive mode
-  for a designed template an Admin has reviewed), and sending.
+  for a designed template an Admin has reviewed), and sending. The same
+  records and sender carry an emailed news post and a den/patrol update
+  (`kind`), to the whole unit or to chosen groups (`audience`) —
+  `post_email.go` is where the audience is resolved.
 - `internal/icalendar` — parses the `.ics` feeds a unit can subscribe an
   external calendar from.
 - `internal/reminders` — the event-reminder email logic behind

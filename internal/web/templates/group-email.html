@@ -1,0 +1,72 @@
+{{define "content"}}
+  <p class="mb-4"><a href="/groups/{{.Group.ID}}" class="text-sm underline" style="color: var(--unit-color);">&larr; {{.Group.Name}}</a></p>
+  <h1 class="text-2xl font-bold mb-1">Email {{.Group.Name}}</h1>
+  <p class="text-sm text-gray-600 mb-6 max-w-2xl">
+    {{if .Addresses}}
+      This sends one email to each family with a Scout or leader in {{.Group.Name}} —
+      {{.Addresses}} address{{if ne .Addresses 1}}es{{end}} at the moment. Each family gets its own copy;
+      nobody sees who else it went to.
+    {{else}}
+      Nobody is in {{.Group.Name}} yet, so there is nobody to email. Once a leader adds families to it from the
+      roster, you can write to them from here.
+    {{end}}
+  </p>
+
+  {{if .JustSent}}
+    <div class="mb-6 max-w-2xl rounded-md bg-green-100 text-green-800 px-4 py-3 text-sm">
+      Your email is on its way. It goes out over the next few minutes — it's in the list below, where it will show how many people it reached.
+    </div>
+  {{end}}
+
+  {{if not .MailReady}}
+    <div class="mb-6 max-w-2xl rounded-md bg-amber-50 border border-amber-300 px-4 py-3 text-sm text-amber-900">
+      Email isn't set up for this site yet, so nothing can be sent from here. An Admin can set it up from Settings.
+    </div>
+  {{else if .Addresses}}
+    <form method="post" action="/groups/{{.Group.ID}}/email" class="space-y-4 max-w-2xl"
+          data-confirm="Email {{.Group.Name}} now? Once it's sent it can't be taken back.">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div>
+        <label class="block text-sm font-medium mb-1" for="subject">Subject</label>
+        <input id="subject" name="subject" type="text" required maxlength="200"
+               class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+        <p class="text-xs text-gray-500 mt-1">It goes out as &ldquo;{{.Group.Name}}: &hellip;&rdquo;, so families can tell which {{.SubGroupNoun}} it is for.</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="body">Message</label>
+        <textarea id="body" name="body" rows="8" required
+                  class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"></textarea>
+        <p class="text-xs text-gray-500 mt-1">
+          Plain text — line breaks are kept, and a web address becomes a link on its own. Replies go to the address this
+          site sends from, not to you, so say in the message how to reach you.
+        </p>
+      </div>
+      {{if .CanPost}}
+        <label class="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="post_to_page" value="1" class="mt-1">
+          <span>Also post it as an update on {{.Group.Name}}'s page, where families can look back at it.</span>
+        </label>
+      {{end}}
+      <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Send email</button>
+    </form>
+  {{end}}
+
+  <section class="mt-10 max-w-2xl">
+    <h2 class="text-lg font-semibold mb-2">Sent to {{.Group.Name}}</h2>
+    {{if .Sent}}
+      <ul class="space-y-2 text-sm">
+        {{range .Sent}}
+          <li class="rounded-md bg-gray-50 px-3 py-2">
+            <div class="font-medium">{{.Subject}}</div>
+            <div class="text-xs text-gray-500">
+              {{.When}} —
+              {{if eq .Status "sent"}}reached {{.Count}} {{if eq .Count 1}}person{{else}}people{{end}}{{else}}sending now{{end}}
+            </div>
+          </li>
+        {{end}}
+      </ul>
+    {{else}}
+      <p class="text-sm text-gray-500">Nothing has been emailed to {{.Group.Name}} yet.</p>
+    {{end}}
+  </section>
+{{end}}

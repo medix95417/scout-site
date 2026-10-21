@@ -399,6 +399,34 @@ var Topics = []Topic{
 			"Once a newsletter has gone out, opening it from the list shows what was sent and every address it reached, with anything that failed marked as failed. The list is the addresses as they were on the roster that day, so a family who has since left still appears — because they did receive it.",
 		},
 	},
+	{
+		ID:                 "email-a-news-post",
+		Title:              "Emailing a news post",
+		Audience:           AudienceLeader,
+		RequiredCapability: units.CapEditContent,
+		RequiresSettings:   []string{settings.NewsletterEnabled},
+		Body: []string{
+			"Publishing a news post never emails anyone. If you want families to get one in their inbox as well, open the post from the News list and use \"Email this post\" at the bottom of its page. It only appears once the post is published, because the email tells people to read it on the site.",
+			"You choose who gets it: everyone in the unit, or only the dens or patrols you tick. The email carries the whole post and says who sent it, with a link to read it on the site. A members-only post stays members-only — families are asked to sign in to open the link.",
+			"Each post is only emailed when you choose to, and the page keeps a list of every time you have. Sending a post that has already gone out needs you to tick \"Send it again\" — so a second click, or a second leader, doesn't send everyone the same email twice. A posted-and-emailed news item appears on the Newsletters list too, so every email the site has sent is in one place.",
+			"Replies go to the address the site sends from, not to you. If you want families to answer you, say how in the post.",
+		},
+	},
+	{
+		ID:                 "email-a-den-or-patrol",
+		Title:              "Emailing a den or patrol",
+		Audience:           AudienceLeader,
+		RequiredCapability: units.CapEmailGroup,
+		RequiresSettings:   []string{settings.NewsletterEnabled},
+		Body: []string{
+			"A den or patrol's page has an \"Email this den\" or \"Email this patrol\" link if you are allowed to email it. It opens a page where you write a subject and a message, and it goes to the families of everyone in that group. Each family gets its own copy, and nobody sees who else it went to.",
+			"Who can email which group: a Den Leader or Patrol Leader can email the one they are assigned to, and nobody else's. A unit-wide leader — the Cubmaster, Scoutmaster, their assistants and Admins — can email any. A unit can switch this on or off for any role, including for the Senior Patrol Leader, on the Roles page.",
+			"You are shown how many addresses it will reach, not the addresses. It reaches every family with a Scout or leader in the group, through the family's shared login and any adult's own login. A Scout's own login is only included if that Scout is in the group, so a message to one patrol doesn't land in the inbox of a younger brother in another.",
+			"If you can also edit the group's page, you will see \"Also post it as an update on the page\" and a tick box on the page's own \"Post an update\" form that says \"Also email it\". Posting an update never emails anyone unless you tick it. A Patrol Leader can email their patrol without being able to post to its page.",
+			"What you send is kept — the subject, the message, who sent it and who it reached — under Newsletters, and a short list of recent ones is on the group's email page. An email can't be taken back once it is sent. Sending the same subject to the same group twice within a minute is refused, in case of a double click.",
+			"Replies go to the address the site sends from, not to you, so say in the message how to reach you. There is no way yet for a family to opt out of these emails, so keep them to things the group needs to know.",
+		},
+	},
 
 	// --- For Treasurers ---------------------------------------------
 	{

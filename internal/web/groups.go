@@ -126,6 +126,20 @@ func (h *Handlers) GroupView(w http.ResponseWriter, r *http.Request) {
 		log.Printf("web: computing roster scope: %v", err)
 	}
 
+	// Whether to offer "email this group": the viewer may email it, and the
+	// unit has email switched on. A separate question from managing the page —
+	// a Patrol Leader can email their patrol and cannot post to its page.
+	canEmail := false
+	if on, err := h.emailFeatureOn(r.Context(), unit.ID); err != nil {
+		log.Printf("web: checking the email setting: %v", err)
+	} else if on {
+		if acc, err := h.groupEmailAccess(r.Context(), user, unit.ID); err != nil {
+			log.Printf("web: working out who may email groups: %v", err)
+		} else {
+			canEmail = acc.can(group.ID)
+		}
+	}
+
 	data := struct {
 		baseData
 		SubGroupNoun string
@@ -135,6 +149,11 @@ func (h *Handlers) GroupView(w http.ResponseWriter, r *http.Request) {
 		Events       []calendar.Event
 		News         []publicPostView
 		Scope        roster.Scope
+		CanEmail     bool
+		// Emailed is what happened to the email that was asked for along with
+		// an update just posted: "" (nothing asked), "1" (on its way), or
+		// "failed" (the update is posted but the email could not be started).
+		Emailed string
 	}{
 		baseData:     h.base(r, group.Name),
 		SubGroupNoun: subGroupNoun(unit.UnitType),
@@ -144,6 +163,8 @@ func (h *Handlers) GroupView(w http.ResponseWriter, r *http.Request) {
 		Events:       events,
 		News:         newsViews,
 		Scope:        scope,
+		CanEmail:     canEmail,
+		Emailed:      emailedFlag(r.URL.Query().Get("emailed")),
 	}
 	h.render(w, h.groupView, data)
 }
@@ -289,18 +310,53 @@ func (h *Handlers) AdminGroupCreateNews(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	p, err := content.CreatePost(r.Context(), h.Pool, unit.ID, "post", title, body, "members", subGroupID, actor.ID)
+	// Posting an update has never emailed anyone, and still doesn't unless the
+	// box is ticked. When it is, everything that could refuse is checked before
+	// the post exists, so a refusal never leaves an update posted that was
+	// meant to go out too.
+	var door groupEmailDoor
+	alsoEmail := r.PostFormValue("also_email") == "1"
+	if alsoEmail {
+		var ok bool
+		if door, ok = h.groupEmailDoorFor(w, r, unit, actor, subGroupID); !ok {
+			return
+		}
+		if !h.mailReady(r.Context()) {
+			http.Error(w, "email isn't set up for this site yet — an Admin can configure it from /admin/settings, or post without ticking \"also email\"", http.StatusServiceUnavailable)
+			return
+		}
+		if msg, status, refused := h.groupEmailPrecheck(r.Context(), door, title); refused {
+			http.Error(w, msg, status)
+			return
+		}
+	}
+
+	p, err := h.publishGroupPost(r.Context(), unit.ID, subGroupID, actor.ID, title, body)
 	if err != nil {
-		log.Printf("web: creating sub-group news post: %v", err)
+		log.Printf("web: posting sub-group news: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if err := content.SetPublished(r.Context(), h.Pool, p.ID, unit.ID, true, actor.ID); err != nil {
-		log.Printf("web: publishing sub-group news post: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+
+	redirectTo := "/groups/" + subGroupID
+	if alsoEmail {
+		redirectTo += "?emailed=1"
+		if _, err := h.startPostEmail(r.Context(), h.groupUpdateEmail(r, door, title, body, &p.ID)); err != nil {
+			// The update is posted; only the email did not start. Said so on the
+			// page rather than failing a request whose real work succeeded.
+			log.Printf("web: emailing group update %s: %v", p.ID, err)
+			redirectTo = "/groups/" + subGroupID + "?emailed=failed"
+		}
 	}
-	http.Redirect(w, r, "/groups/"+subGroupID, http.StatusSeeOther)
+	http.Redirect(w, r, redirectTo, http.StatusSeeOther)
+}
+
+// emailedFlag admits only the two values the page knows how to show.
+func emailedFlag(v string) string {
+	if v == "1" || v == "failed" {
+		return v
+	}
+	return ""
 }
 
 // AdminGroupDeleteNews removes one of this sub-group's own news posts —

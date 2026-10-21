@@ -21,6 +21,15 @@ func assign(t *testing.T, f fixture, memberID, role string) {
 	}
 }
 
+// roleCaps is what a built-in role grants by default — the acting leader in
+// these tests. Taken from the code rather than written out, because a
+// hand-written "Assistant Scoutmaster" goes stale the day a capability is
+// added to the real one, and the test then measures a leader who does not
+// exist: it asserts the ceiling against someone short of what the role now is.
+func roleCaps(role string) units.Capabilities {
+	return units.CapabilitiesOf(units.DefaultCapabilitiesForRole(role)...)
+}
+
 func allowed(t *testing.T, f fixture, actor units.Capabilities, role string) bool {
 	t.Helper()
 	ok, err := IsAllowedRole(context.Background(), f.pool, f.unitType, f.unitID, Scope{UnitWide: true}, actor, role)
@@ -35,7 +44,7 @@ func allowed(t *testing.T, f fixture, actor units.Capabilities, role string) boo
 // used to mean the whole fixed set including Treasurer.
 func TestIsAllowedRole_UnitWideLeaderCannotHandOutMoreThanTheyHold(t *testing.T) {
 	f := newFixture(t, "troop")
-	asm := units.CapabilitiesOf(units.CapEditContent, units.CapApproveSubmissions)
+	asm := roleCaps("assistant_scoutmaster")
 
 	for _, role := range []string{"treasurer", "scoutmaster"} {
 		if allowed(t, f, asm, role) {
@@ -48,7 +57,7 @@ func TestIsAllowedRole_UnitWideLeaderCannotHandOutMoreThanTheyHold(t *testing.T)
 		}
 	}
 
-	scoutmaster := units.CapabilitiesOf(units.CapEditContent, units.CapApproveSubmissions, units.CapApproveExpenses)
+	scoutmaster := roleCaps("scoutmaster")
 	if !allowed(t, f, scoutmaster, "scoutmaster") {
 		t.Error("a Scoutmaster should be able to appoint another Scoutmaster")
 	}
@@ -84,7 +93,7 @@ func TestIsAllowedRole_CustomRoleGrantingSuperAdminNeedsSuperAdmin(t *testing.T)
 		t.Fatalf("creating custom role: %v", err)
 	}
 
-	cubmaster := units.CapabilitiesOf(units.CapEditContent, units.CapApproveExpenses)
+	cubmaster := roleCaps("cubmaster")
 	if allowed(t, f, cubmaster, top.Slug) {
 		t.Error("a Cubmaster must not be able to hand out a custom role that grants super_admin")
 	}
@@ -117,7 +126,7 @@ func TestIsAllowedRole_CustomRoleGrantingSuperAdminNeedsSuperAdmin(t *testing.T)
 func TestIsAllowedRole_MeasuresARoleByWhatItGrantsHere(t *testing.T) {
 	f := newFixture(t, "pack")
 	ctx := context.Background()
-	cubmaster := units.CapabilitiesOf(units.CapEditContent, units.CapApproveExpenses)
+	cubmaster := roleCaps("cubmaster")
 
 	if !allowed(t, f, cubmaster, "den_leader") {
 		t.Fatal("by default a Cubmaster can appoint a Den Leader")
@@ -164,7 +173,7 @@ func TestCapabilitiesAcrossUnits(t *testing.T) {
 	}
 
 	// And the ceiling then refuses a Troop Scoutmaster.
-	scoutmaster := units.CapabilitiesOf(units.CapEditContent, units.CapApproveSubmissions, units.CapApproveExpenses)
+	scoutmaster := roleCaps("scoutmaster")
 	if scoutmaster.Covers(fam) {
 		t.Error("a Troop Scoutmaster must not cover a family whose parent is the Pack's Admin")
 	}
@@ -176,7 +185,7 @@ func TestCapabilitiesAcrossUnits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !units.CapabilitiesOf(units.CapEditContent).Covers(held) {
+	if !roleCaps("den_leader").Covers(held) {
 		t.Errorf("a plain family should be within a Den Leader's ceiling, got %v", held)
 	}
 }

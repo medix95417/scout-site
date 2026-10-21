@@ -168,6 +168,7 @@ type Handlers struct {
 
 	groupsList *template.Template
 	groupView  *template.Template
+	groupEmail *template.Template // a den's or patrol's "email this group" page — group_email.go
 	groupAdmin *template.Template
 
 	resourcesList *template.Template
@@ -577,6 +578,9 @@ func New(pool *pgxpool.Pool, cookieDomain string, secureCookie bool, mail *maile
 	if h.groupView, err = parse("group-view.html"); err != nil {
 		return nil, err
 	}
+	if h.groupEmail, err = parse("group-email.html"); err != nil {
+		return nil, err
+	}
 	if h.groupAdmin, err = parse("admin-group.html"); err != nil {
 		return nil, err
 	}
@@ -877,6 +881,8 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/news/{id}", h.AdminNewsUpdate)
 	mux.HandleFunc("POST /admin/news/{id}/publish", h.AdminNewsPublishToggle)
 	mux.HandleFunc("POST /admin/news/{id}/delete", h.AdminNewsDelete)
+	// Opt-in, per post: publishing never emails anyone (post_email.go).
+	mux.HandleFunc("POST /admin/news/{id}/email", h.AdminNewsEmail)
 
 	mux.HandleFunc("GET /admin/gallery", h.AdminGalleryList)
 	mux.HandleFunc("GET /admin/gallery/new", h.AdminGalleryNew)
@@ -956,6 +962,10 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	// Members-only patrol/den pages (internal/web/groups.go).
 	mux.HandleFunc("GET /groups", h.GroupsList)
 	mux.HandleFunc("GET /groups/{id}", h.GroupView)
+	// Emailing one den/patrol (group_email.go): allowed by the email_group
+	// capability for that group, not by being able to edit its page.
+	mux.HandleFunc("GET /groups/{id}/email", h.GroupEmailForm)
+	mux.HandleFunc("POST /groups/{id}/email", h.GroupEmailSend)
 	mux.HandleFunc("GET /admin/groups/{id}", h.AdminGroupEdit)
 	mux.HandleFunc("POST /admin/groups/{id}", h.AdminGroupUpdate)
 	mux.HandleFunc("POST /admin/groups/{id}/photos", h.AdminGroupSetPhotos)

@@ -26,7 +26,7 @@ import (
 // Transactional mail — password resets, event reminders, the welcome
 // email — deliberately does NOT go through this. Those are one message,
 // sent while somebody waits, and making a password reset queue behind a
-// newsletter would be a bad trade. Only the two bulk senders pace.
+// newsletter would be a bad trade. Only the bulk senders pace.
 
 // defaultBulkPerMinute is the send rate used when nothing is configured.
 //

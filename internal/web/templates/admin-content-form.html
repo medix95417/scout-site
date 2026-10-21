@@ -98,6 +98,91 @@
     <a href="{{.Kind.BasePath}}" class="text-sm underline ml-2">Cancel</a>
   </form>
 
+  {{/* Emailing a news post. Outside the form above for the same reason the
+       delete button is: a nested <form> is dropped by the browser. Only shown
+       for a published post (see newsEmailPanel) — an email says "read it on the
+       site", and a draft isn't there to read.
+
+       Opt-in, per post, and never automatic: publishing a post does not email
+       anyone. The leader chooses to, and chooses who. */}}
+  {{if .Email.Show}}
+    <section id="email" class="mt-8 border-t border-gray-200 pt-4 max-w-2xl">
+      <h2 class="text-lg font-semibold mb-1">Email this post</h2>
+      <p class="text-sm text-gray-600 mb-3">
+        Publishing a post doesn't email anyone. If you want families to get this one in their inbox as well,
+        send it from here — now, or any time later. Each post is only ever emailed when you choose to.
+      </p>
+
+      {{if .Email.StartedID}}
+        <div class="mb-3 rounded-md bg-green-100 text-green-800 px-4 py-3 text-sm">
+          Email started. It goes out over the next few minutes —
+          <a href="/admin/newsletters/{{.Email.StartedID}}" class="underline">see who it's going to</a>.
+        </div>
+      {{end}}
+      {{if .Email.NeedsConfirm}}
+        <div class="mb-3 rounded-md bg-amber-50 border border-amber-300 px-4 py-3 text-sm text-amber-900">
+          You've already emailed this post (see below). Nothing was sent this time — tick
+          &ldquo;Send it again&rdquo; if you really mean to send another copy.
+        </div>
+      {{end}}
+
+      {{if not .Email.MailReady}}
+        <div class="rounded-md bg-amber-50 border border-amber-300 px-4 py-3 text-sm text-amber-900">
+          Email isn't set up for this site yet, so nothing can be sent. An Admin can set it up from
+          <a href="/admin/settings" class="underline">Settings</a> (see DEPLOY.md).
+        </div>
+      {{else}}
+        <form method="post" action="{{.Kind.BasePath}}/{{.Post.ID}}/email" class="space-y-3"
+              data-confirm="Email &quot;{{.Post.Title}}&quot; now? Once it's sent it can't be taken back.">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <fieldset>
+            <legend class="text-sm font-medium mb-1">Send it to</legend>
+            <label class="flex items-center gap-2 text-sm">
+              <input type="radio" name="audience" value="unit" checked>
+              Everyone in {{.Unit.Name}}
+            </label>
+            {{if .Email.Groups}}
+              <label class="flex items-center gap-2 text-sm mt-1">
+                <input type="radio" name="audience" value="groups">
+                Only these {{.Email.GroupNoun}}s:
+              </label>
+              <div class="ml-6 mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                {{range .Email.Groups}}
+                  <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="group_ids" value="{{.ID}}"> {{.Name}}
+                  </label>
+                {{end}}
+              </div>
+            {{end}}
+          </fieldset>
+          {{if .Email.Sent}}
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="again" value="1">
+              Send it again — I know this post has already been emailed
+            </label>
+          {{end}}
+          <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Email this post</button>
+          <p class="text-xs text-gray-500">
+            The email carries the whole post and says who sent it, with a link to read it on the site.
+            A members-only post is still members-only there — families are asked to sign in to open the link.
+          </p>
+        </form>
+      {{end}}
+
+      {{if .Email.Sent}}
+        <h3 class="text-sm font-semibold mt-5 mb-1">Already emailed</h3>
+        <ul class="text-sm space-y-1">
+          {{range .Email.Sent}}
+            <li>
+              {{.When}} — to {{.Audience}}{{if eq .Status "sent"}}, {{.Count}} {{if eq .Count 1}}person{{else}}people{{end}}{{else}} (sending now){{end}}
+              — <a href="/admin/newsletters/{{.ID}}" class="underline" style="color: var(--unit-color);">what was sent</a>
+            </li>
+          {{end}}
+        </ul>
+      {{end}}
+    </section>
+  {{end}}
+
   {{/* Outside the form above, not inside it — a nested <form> is invalid
        and the browser drops it, so the button would silently do nothing.
        Only on an existing item: there is nothing to delete while

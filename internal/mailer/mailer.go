@@ -54,9 +54,10 @@ type Config struct {
 	Provider string
 	APIToken string // Fastmail API token — only used when Provider == ProviderFastmailJMAP
 
-	// BulkPerMinute caps how fast the two bulk senders (newsletters and
-	// prospect campaigns) send. 0 uses defaultBulkPerMinute; negative
-	// turns pacing off. Transactional mail is never paced — see pace.go.
+	// BulkPerMinute caps how fast the bulk senders (newsletters, emailed news
+	// posts and group updates, and prospect campaigns) send. 0 uses
+	// defaultBulkPerMinute; negative turns pacing off. Transactional mail is
+	// never paced — see pace.go.
 	BulkPerMinute int
 }
 
