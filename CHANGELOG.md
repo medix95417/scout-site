@@ -27,6 +27,46 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **Each unit can send its email from its own address.** The mail server and
+  login are still shared by the Troop and the Pack, but the From address is now
+  per unit: on a unit's own Settings page, under Email (SMTP) Server, there is a
+  box headed with the unit's name for the address its email goes out as, with a
+  line saying which address that is right now. Everything a unit sends uses it —
+  newsletters, emailed news posts, den and patrol emails, enquiry notifications
+  and automatic replies, campaigns, password resets, event reminders and welcome
+  emails — and "Send a test email to myself" sends as the unit and says which
+  address it used. A unit that sets none sends as the site-wide From address, as
+  every unit did before, so nothing changes until someone fills it in. It takes a
+  bare address or one with a name (`Pack 47 <pack@example.org>`), and anything
+  that isn't an address, or that would carry a second header, is refused with the
+  reason rather than stored.
+  Each unit's Admin sets their own: roles are per unit, so being Admin of the
+  Troop doesn't let someone choose the address the Pack writes from, even by
+  naming the Pack's site.
+
+### Changed
+
+- **Emailing a news post is easier to find.** It was only a section at the
+  bottom of a published post's own edit page, and nothing on the News list or
+  on a draft pointed there, so a leader looking for it from the list saw
+  nothing. Now each published post on the News list has an "Email this post"
+  link to it, the list says that publishing doesn't email anyone and where to
+  email from, and a draft or new post says that the section appears once it is
+  published. None of this is shown where email is switched off.
+- The From field in the first form on the Settings page is now labelled the
+  default (site-wide) address: it is what a unit that sets none sends as.
+- The Fastmail JMAP identity lookup is now remembered per From address rather
+  than for one address in all. With several units' addresses in use at once the
+  old single entry would have been thrown out and re-fetched every time two
+  units' mail alternated, and a message must go out under the identity of the
+  address it is from, never another unit's.
+- Reminders now check whether mail is set up for each unit's own events rather
+  than once for the whole site, since a unit's own From address can be what
+  makes it configured. A run with nothing configured reports that and sends
+  nothing, as before, and a reminder that wasn't sent is not recorded as sent.
+
 ## [2.20.0] — 2026-10-21
 
 ### Added

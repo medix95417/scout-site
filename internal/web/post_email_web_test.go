@@ -73,7 +73,8 @@ func newEmailSite(t *testing.T, withMail bool) *emailSite {
 	var mail *mailer.Mailer
 	if withMail {
 		s.sink = mailertest.New(t)
-		mail = mailer.New(s.sink.Config(), nil)
+		// With the pool, as in production, so a unit's own From address applies.
+		mail = mailer.New(s.sink.Config(), pool)
 	}
 	h, err := New(pool, "", false, mail, nil)
 	if err != nil {
@@ -92,6 +93,23 @@ func newEmailSite(t *testing.T, withMail bool) *emailSite {
 	})
 	_ = ctx
 	return s
+}
+
+// sibling is a second unit on the same install: the same database, mail server
+// and web server, told apart only by the Host a request names — the way the
+// Troop and the Pack are one binary. groupType is "patrol" or "den".
+func (s *emailSite) sibling(unitType, groupType string) *emailSite {
+	s.t.Helper()
+	o := &emailSite{t: s.t, pool: s.pool, sink: s.sink, srv: s.srv,
+		sfx: fmt.Sprintf("%d-%d", time.Now().UnixNano(), siteCounter.Add(1))}
+	o.name = strings.ToUpper(unitType[:1]) + unitType[1:] + " " + o.sfx
+	o.host = "pe-" + o.sfx + ".test.invalid"
+	o.unitID = o.one(`INSERT INTO units (slug, name, unit_type, hostname) VALUES ($1, $2, $3, $4) RETURNING id::text`,
+		"pe-"+o.sfx, o.name, unitType, o.host)
+	o.t.Cleanup(func() { _, _ = o.pool.Exec(context.Background(), `DELETE FROM units WHERE id = $1`, o.unitID) })
+	o.eagle = o.one(`INSERT INTO sub_groups (unit_id, name, sub_group_type) VALUES ($1, 'First '||$2::text, $2::sub_group_type) RETURNING id::text`, o.unitID, groupType)
+	o.wolf = o.one(`INSERT INTO sub_groups (unit_id, name, sub_group_type) VALUES ($1, 'Second '||$2::text, $2::sub_group_type) RETURNING id::text`, o.unitID, groupType)
+	return o
 }
 
 func (s *emailSite) exec(q string, args ...any) {
@@ -212,6 +230,13 @@ type reply struct {
 
 func (s *emailSite) do(p person, method, path string, form url.Values) reply {
 	s.t.Helper()
+	return s.doOn(s.host, p, method, path, form)
+}
+
+// doOn is do against another unit's host — what a person does by typing the
+// other site's address.
+func (s *emailSite) doOn(host string, p person, method, path string, form url.Values) reply {
+	s.t.Helper()
 	var body io.Reader
 	if form != nil {
 		body = strings.NewReader(form.Encode())
@@ -220,7 +245,7 @@ func (s *emailSite) do(p person, method, path string, form url.Values) reply {
 	if err != nil {
 		s.t.Fatal(err)
 	}
-	req.Host = s.host
+	req.Host = host
 	if form != nil {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
@@ -481,6 +506,14 @@ func TestNewsEmailFollowsTheEmailSwitchAndTheMailServer(t *testing.T) {
 	if r := s.get(editor, "/admin/news/"+id+"/edit"); strings.Contains(r.body, "Email this post") {
 		t.Errorf("the panel is offered while email is switched off")
 	}
+	// Nor the hint that it is coming, nor a pointer to it on the list.
+	draft := s.newsPost("Draft", "x", false)
+	if r := s.get(editor, "/admin/news/"+draft+"/edit"); strings.Contains(r.body, "Email this post") {
+		t.Errorf("a draft hints at emailing while email is switched off")
+	}
+	if r := s.get(editor, "/admin/news"); strings.Contains(r.body, "Email this post") {
+		t.Errorf("the news list points at emailing while email is switched off")
+	}
 	s.nothingSent("email switched off")
 
 	// No mail server: refused with a reason, and the panel says so rather than
@@ -506,11 +539,24 @@ func TestTheEmailPanelIsOnlyOnAPublishedPost(t *testing.T) {
 	s.household("Fam", &s.eagle)
 
 	draft := s.newsPost("Draft", "x", false)
-	if r := s.get(editor, "/admin/news/"+draft+"/edit"); r.status != http.StatusOK || strings.Contains(r.body, "Email this post") {
-		t.Errorf("a draft offers the panel (status %d)", r.status)
+	r := s.get(editor, "/admin/news/"+draft+"/edit")
+	if r.status != http.StatusOK || strings.Contains(r.body, `id="email"`) || strings.Contains(r.body, "Send it to") {
+		t.Errorf("a draft offers the panel itself (status %d)", r.status)
+	}
+	// What it does show is where the section will be, so a leader looking for
+	// it is told when it appears rather than left to wonder.
+	if !strings.Contains(r.body, "Once this post is published") {
+		t.Errorf("a draft doesn't say when the email section appears")
+	}
+	// A new post, too.
+	if r := s.get(editor, "/admin/news/new"); !strings.Contains(r.body, "Once this post is published") {
+		t.Errorf("the new-post form doesn't say when the email section appears")
 	}
 	live := s.newsPost("Live", "x", true)
-	r := s.get(editor, "/admin/news/"+live+"/edit")
+	r = s.get(editor, "/admin/news/"+live+"/edit")
+	if strings.Contains(r.body, "Once this post is published") {
+		t.Errorf("a published post still carries the 'once published' hint")
+	}
 	for _, want := range []string{"Email this post", "Eagle Patrol", "Wolf Patrol", "Publishing a post doesn't email anyone"} {
 		if !strings.Contains(r.body, want) {
 			t.Errorf("a published post's panel lacks %q", want)
@@ -814,5 +860,32 @@ func TestEmailsAreListedWithTheNewslettersAndOnTheGroupPage(t *testing.T) {
 	}
 	if page := s.get(sm, "/admin/news/"+id+"/edit"); !strings.Contains(page.body, "Already emailed") || !strings.Contains(page.body, `name="again"`) {
 		t.Errorf("the post's page doesn't show it was emailed or offer a confirmed resend")
+	}
+}
+
+// Where a leader looks first is the News list, and the section is on a post's
+// own page — so the list has to point there, for published posts only.
+func TestTheNewsListPointsAtEmailingAPublishedPost(t *testing.T) {
+	s := newEmailSite(t, true)
+	editor := s.leader("Sam", "scoutmaster", nil)
+	live := s.newsPost("Live post", "x", true)
+	draft := s.newsPost("Draft post", "x", false)
+
+	r := s.get(editor, "/admin/news")
+	if r.status != http.StatusOK {
+		t.Fatalf("the news list: %d", r.status)
+	}
+	if !strings.Contains(r.body, "Publishing doesn&#39;t email anyone") && !strings.Contains(r.body, "Publishing doesn't email anyone") {
+		t.Errorf("the list doesn't say that publishing emails nobody, or where to email a post from")
+	}
+	if !strings.Contains(r.body, `href="/admin/news/`+live+`/edit#email"`) {
+		t.Errorf("a published post has no link to its email section")
+	}
+	if strings.Contains(r.body, `href="/admin/news/`+draft+`/edit#email"`) {
+		t.Errorf("a draft is linked to an email section it doesn't have")
+	}
+	// Albums have nothing to email.
+	if r := s.get(editor, "/admin/gallery"); strings.Contains(r.body, "#email") {
+		t.Errorf("the albums list points at emailing")
 	}
 }

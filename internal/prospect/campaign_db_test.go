@@ -5,8 +5,13 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/47-yonkers/scout-site/internal/mailer"
+	"github.com/47-yonkers/scout-site/internal/mailer/mailertest"
+	"github.com/47-yonkers/scout-site/internal/settings"
 )
 
 // Campaign and consent behaviour against a real database.
@@ -359,4 +364,40 @@ func labelByValue(t *testing.T, pool *pgxpool.Pool, unitID, kind, value string) 
 	}
 	t.Fatalf("no %s label %q in this unit", kind, value)
 	return Label{}
+}
+
+// A recruiting campaign goes out as the unit that runs it. These reach members
+// of the public who have never heard from the unit, so a Pack campaign that
+// arrived from the Troop's address would be a stranger writing under the wrong
+// name.
+func TestACampaignGoesOutFromItsOwnUnitsAddress(t *testing.T) {
+	e := newEnv(t, "campfrom")
+	ctx := context.Background()
+	sink := mailertest.New(t)
+	m := mailer.New(sink.Config(), e.pool)
+
+	if err := settings.SetUnitText(ctx, e.pool, e.unitID, settings.MailFrom, "Pack 47 <pack@example.org>", e.actor); err != nil {
+		t.Fatal(err)
+	}
+	e.prospect(t, "visitor@test.invalid", StatusNew)
+	c, err := CreateCampaign(ctx, e.pool, e.unitID, "Come and visit", "<p>Hello</p>", []string{StatusNew}, e.actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, recipients, err := BeginSendCampaign(ctx, e.pool, m, c.ID, e.unitID)
+	if err != nil {
+		t.Fatalf("BeginSendCampaign: %v", err)
+	}
+	personalize := func(body string, _ Recipient) string { return body + "<p>unsubscribe</p>" }
+	// A detached context, as the real send runs on: nothing from a request.
+	sent, failed := SendCampaign(context.Background(), e.pool, m, c, recipients, personalize, e.actor)
+	if sent != 1 || failed != 0 {
+		t.Fatalf("sent %d, failed %d", sent, failed)
+	}
+	if !sink.WaitFor(1, 5*time.Second) {
+		t.Fatal("nothing arrived")
+	}
+	if got := sink.Messages()[0].HeaderFrom(); got != "Pack 47 <pack@example.org>" {
+		t.Errorf("the campaign went out as %q, want the unit's own address", got)
+	}
 }

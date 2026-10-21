@@ -149,7 +149,7 @@ func textToHTML(body string) string {
 // credentials on-screen (see renderCredentials) so a leader can hand
 // them off manually if the email didn't go out.
 func (h *Handlers) sendWelcomeEmail(r *http.Request, name, email, password string, familyAccount bool) bool {
-	if !h.Mailer.Enabled(r.Context()) {
+	if !h.Mailer.Enabled(mailCtx(r.Context())) {
 		log.Printf("web: welcome email requested for %s but email isn't configured", email)
 		return false
 	}
@@ -190,7 +190,7 @@ func (h *Handlers) sendWelcomeEmail(r *http.Request, name, email, password strin
 		body += "\n" + familyCrossUnitNoteHTML
 	}
 
-	if err := h.Mailer.SendHTML(r.Context(), email, subject, body); err != nil {
+	if err := h.Mailer.SendHTML(mailCtx(r.Context()), email, subject, body); err != nil {
 		log.Printf("web: sending welcome email to %s: %v", email, err)
 		return false
 	}

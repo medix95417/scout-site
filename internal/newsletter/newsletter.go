@@ -264,7 +264,9 @@ const abandonedSendAge = 40 * time.Minute
 // internal/web/newsletter.go) so a browser disconnect or reverse-proxy
 // timeout can never cut a send short.
 func BeginSend(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, id, unitID string) (Newsletter, error) {
-	if !m.Enabled(ctx) {
+	// Whether mail can go out depends on the unit it goes out as — see
+	// mailer.WithUnit.
+	if !m.Enabled(mailer.WithUnit(ctx, unitID)) {
 		return Newsletter{}, fmt.Errorf("newsletter: mailer not configured — set SMTP_HOST etc. to enable email")
 	}
 
@@ -317,6 +319,11 @@ func BeginSend(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, id, un
 // than a count that overstates delivery.
 func SendNow(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, n Newsletter, actorID string) Result {
 	var res Result
+
+	// Sent as this newsletter's own unit, whatever context the caller has —
+	// a detached background one carries nothing from the request. See
+	// mailer.WithUnit.
+	ctx = mailer.WithUnit(ctx, n.UnitID)
 
 	emails, err := RecipientEmailsFor(ctx, pool, n)
 	if err != nil {

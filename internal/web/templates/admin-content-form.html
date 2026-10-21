@@ -105,6 +105,16 @@
 
        Opt-in, per post, and never automatic: publishing a post does not email
        anyone. The leader chooses to, and chooses who. */}}
+  {{if .Email.Hint}}
+    <section class="mt-8 border-t border-gray-200 pt-4 max-w-2xl">
+      <h2 class="text-lg font-semibold mb-1">Email this post</h2>
+      <p class="text-sm text-gray-600">
+        Once this post is published, an <strong>Email this post</strong> section appears here, so you can send it to
+        families' inboxes as well — to everyone, or to chosen dens or patrols. Publishing doesn't email anyone
+        by itself.
+      </p>
+    </section>
+  {{end}}
   {{if .Email.Show}}
     <section id="email" class="mt-8 border-t border-gray-200 pt-4 max-w-2xl">
       <h2 class="text-lg font-semibold mb-1">Email this post</h2>

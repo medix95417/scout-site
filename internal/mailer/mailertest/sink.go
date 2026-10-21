@@ -33,6 +33,18 @@ type Message struct {
 	Raw string
 }
 
+// HeaderFrom is the From header — the address and name a recipient sees, as
+// opposed to From, the envelope sender the server was told. The mailer sets
+// both from the same configured address, and a test of "which address did this
+// go out as" should look at the one a family would actually read.
+func (m Message) HeaderFrom() string {
+	parsed, err := mail.ReadMessage(strings.NewReader(m.Raw))
+	if err != nil {
+		return ""
+	}
+	return parsed.Header.Get("From")
+}
+
 // Subject is the decoded Subject header.
 func (m Message) Subject() string {
 	parsed, err := mail.ReadMessage(strings.NewReader(m.Raw))

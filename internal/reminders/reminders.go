@@ -10,6 +10,7 @@ package reminders
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -23,6 +24,7 @@ import (
 // candidate is one (event, RSVP'd member) pair that's due a reminder.
 type candidate struct {
 	EventID     string
+	UnitID      string
 	Title       string
 	Location    string
 	StartsAt    time.Time
@@ -49,16 +51,37 @@ type Result struct {
 // reminder.
 func Send(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, window time.Duration) (Result, error) {
 	var res Result
-	if !m.Enabled(ctx) {
-		return res, fmt.Errorf("reminders: mailer not configured — set SMTP_HOST etc. to enable email")
-	}
 
 	candidates, err := dueCandidates(ctx, pool, window)
 	if err != nil {
 		return res, fmt.Errorf("reminders: finding due reminders: %w", err)
 	}
 
+	// Each reminder is sent as the unit its event belongs to, so whether mail
+	// can go out is a per-unit question too — a site whose only configured From
+	// addresses are per unit is configured for those units. Asked once per
+	// unit, not once per reminder.
+	notConfigured := errors.New("reminders: mailer not configured — set SMTP_HOST etc. to enable email")
+	if len(candidates) == 0 && !m.Enabled(ctx) {
+		return res, notConfigured
+	}
+	canSend := map[string]bool{}
+	skipped := 0
+
 	for _, c := range candidates {
+		unitCtx := mailer.WithUnit(ctx, c.UnitID)
+		ok, asked := canSend[c.UnitID]
+		if !asked {
+			ok = m.Enabled(unitCtx)
+			canSend[c.UnitID] = ok
+		}
+		if !ok {
+			// Not recorded as sent, so it goes out on the first run after mail
+			// is set up for this unit.
+			skipped++
+			continue
+		}
+
 		body := fmt.Sprintf(
 			"Hi %s,\n\n"+
 				"This is a reminder that you're signed up (%s) for an upcoming %s event:\n\n"+
@@ -73,7 +96,7 @@ func Send(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, window time
 		)
 		subject := fmt.Sprintf("Reminder: %s — %s", c.Title, c.StartsAt.Format("Mon Jan 2"))
 
-		if err := m.Send(ctx, c.Email, subject, body); err != nil {
+		if err := m.Send(unitCtx, c.Email, subject, body); err != nil {
 			log.Printf("reminders: sending to %s for event %s: %v", c.Email, c.EventID, err)
 			res.Failed++
 			continue
@@ -91,6 +114,12 @@ func Send(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, window time
 		res.Sent++
 	}
 
+	if skipped > 0 {
+		log.Printf("reminders: %d reminder(s) not sent because email isn't configured for their unit — they will go out once it is", skipped)
+		if res.Sent == 0 {
+			return res, notConfigured
+		}
+	}
 	return res, nil
 }
 
@@ -104,7 +133,7 @@ func locationSuffix(location string) string {
 func dueCandidates(ctx context.Context, pool *pgxpool.Pool, window time.Duration) ([]candidate, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT
-			events.id, events.title, COALESCE(events.location, ''), events.starts_at, events.ends_at,
+			events.id, events.unit_id::text, events.title, COALESCE(events.location, ''), events.starts_at, events.ends_at,
 			units.name, units.hostname,
 			members.id, members.first_name,
 			rsvps.response::text,
@@ -130,7 +159,7 @@ func dueCandidates(ctx context.Context, pool *pgxpool.Pool, window time.Duration
 	for rows.Next() {
 		var c candidate
 		if err := rows.Scan(
-			&c.EventID, &c.Title, &c.Location, &c.StartsAt, &c.EndsAt,
+			&c.EventID, &c.UnitID, &c.Title, &c.Location, &c.StartsAt, &c.EndsAt,
 			&c.UnitName, &c.UnitHost,
 			&c.MemberID, &c.MemberFirst,
 			&c.Response,

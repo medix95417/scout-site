@@ -204,7 +204,7 @@ func (h *Handlers) notifyProspect(r *http.Request, unit units.Unit, p prospect.P
 	if len(recipients) == 0 {
 		return // nobody configured; the Prospects page is the record
 	}
-	if !h.Mailer.Enabled(r.Context()) {
+	if !h.Mailer.Enabled(mailCtx(r.Context())) {
 		log.Printf("web: prospect enquiry recorded but email isn't configured, so nobody was notified")
 		return
 	}
@@ -237,7 +237,7 @@ func (h *Handlers) notifyProspect(r *http.Request, unit units.Unit, p prospect.P
 	// typed, and plain text is the one format where that can't render as
 	// anything but the characters they wrote.
 	for _, to := range recipients {
-		if err := h.Mailer.Send(r.Context(), to, subject, b.String()); err != nil {
+		if err := h.Mailer.Send(mailCtx(r.Context()), to, subject, b.String()); err != nil {
 			log.Printf("web: notifying %s of a new prospect: %v", to, err)
 		}
 	}

@@ -135,7 +135,7 @@ func (h *Handlers) sendProspectAutoReply(r *http.Request, unit units.Unit, p pro
 	if p.EmailOptOut || strings.TrimSpace(p.ParentEmail) == "" {
 		return
 	}
-	if !h.Mailer.Enabled(r.Context()) {
+	if !h.Mailer.Enabled(mailCtx(r.Context())) {
 		log.Printf("web: prospect auto-reply is on but email isn't configured, so nothing was sent")
 		return
 	}
@@ -155,7 +155,7 @@ func (h *Handlers) sendProspectAutoReply(r *http.Request, unit units.Unit, p pro
 		ProspectID: p.ID, Name: p.ParentName, Email: p.ParentEmail,
 	}, h.UnsubscribeSecret)
 
-	if err := h.Mailer.SendHTML(r.Context(), p.ParentEmail, subject, body); err != nil {
+	if err := h.Mailer.SendHTML(mailCtx(r.Context()), p.ParentEmail, subject, body); err != nil {
 		log.Printf("web: sending the automatic reply to a new enquiry: %v", err)
 	}
 }
@@ -204,7 +204,7 @@ func (h *Handlers) ProspectAutoReplyUpdate(w http.ResponseWriter, r *http.Reques
 // than failing the whole page: the enquiry list is what a leader came
 // for, and one unreadable setting shouldn't take it away.
 func (h *Handlers) autoReplyView(r *http.Request, unitID string) autoReplyView {
-	v := autoReplyView{MailerReady: h.Mailer.Enabled(r.Context())}
+	v := autoReplyView{MailerReady: h.Mailer.Enabled(mailCtx(r.Context()))}
 
 	on, err := settings.GetForUnit(r.Context(), h.Pool, unitID, settings.ProspectAutoReplyEnabled)
 	if err != nil {

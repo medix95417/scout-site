@@ -147,7 +147,7 @@ func (h *Handlers) sendResetEmail(r *http.Request, user auth.User) {
 		return
 	}
 
-	if !h.Mailer.Enabled(r.Context()) {
+	if !h.Mailer.Enabled(mailCtx(r.Context())) {
 		log.Printf("web: password reset requested for %s but email isn't configured (SMTP_HOST is empty) — no email sent; a leader can reset this family's password from /admin/roster instead", user.Email)
 		return
 	}
@@ -159,7 +159,7 @@ func (h *Handlers) sendResetEmail(r *http.Request, user auth.User) {
 		"This link expires in about an hour. If you didn't request this, you can ignore this email — " +
 		"your password won't change unless you click the link above and set a new one."
 
-	if err := h.Mailer.Send(r.Context(), user.Email, "Reset your "+unit.Name+" password", body); err != nil {
+	if err := h.Mailer.Send(mailCtx(r.Context()), user.Email, "Reset your "+unit.Name+" password", body); err != nil {
 		log.Printf("web: sending reset email to %s: %v", user.Email, err)
 	}
 }

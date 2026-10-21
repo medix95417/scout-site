@@ -42,7 +42,7 @@ type jmapRoute struct {
 	draftsMailboxID string
 }
 
-// jmapRouteCache holds one resolved route, so a batch send resolves it
+// jmapRouteCache holds resolved routes, so a batch send resolves its route
 // once instead of once per recipient.
 //
 // This used to be resolved on every single call, deliberately, and the
@@ -56,22 +56,39 @@ type jmapRoute struct {
 // per recipient where it needed one — slower than necessary and closer to
 // Fastmail's rate limits than necessary.
 //
-// The second half is kept rather than traded away: the cache is keyed on
+// The second half is kept rather than traded away: a route is keyed on
 // the token and From address it was resolved with, so changing either
 // misses the cache and re-resolves immediately. Nothing needs restarting,
 // and a stale route can never be used against new credentials.
+//
+// There is one entry per (token, From) rather than one in all, because the
+// From is per unit: with a single entry, the Troop's newsletter and a Pack
+// password reset arriving at the same time would each throw out the other's
+// route and re-resolve it, and a route resolved for the Troop's address
+// would be the wrong identity for the Pack's. Keyed, they simply coexist.
 type jmapRouteCache struct {
 	mu sync.Mutex
 
-	// The key: what this route was resolved for. A change in either
-	// invalidates it.
+	routes map[jmapRouteKey]jmapCacheEntry
+}
+
+// jmapRouteKey is what a route was resolved for. A change in either part is
+// a different key.
+type jmapRouteKey struct {
 	token string
 	from  string
+}
 
-	cached     jmapRoute
-	resolved   bool
+type jmapCacheEntry struct {
+	route      jmapRoute
 	resolvedAt time.Time
 }
+
+// jmapMaxCachedRoutes bounds the cache. A site has a handful of units, so
+// this is never reached in practice; it exists so a rotated token or a run of
+// edited From addresses, each a new key, cannot grow it for the life of the
+// process.
+const jmapMaxCachedRoutes = 16
 
 // jmapRouteTTL bounds how long a resolved route is reused. Fastmail does
 // not document a session lifetime, and the session object can change
@@ -94,12 +111,9 @@ func (c *jmapRouteCache) route(ctx context.Context, cfg Config, fromAddr string,
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	fresh := c.resolved &&
-		c.token == cfg.APIToken &&
-		c.from == fromAddr &&
-		time.Since(c.resolvedAt) < jmapRouteTTL
-	if fresh && !refresh {
-		return c.cached, nil
+	key := jmapRouteKey{token: cfg.APIToken, from: fromAddr}
+	if entry, ok := c.routes[key]; ok && !refresh && time.Since(entry.resolvedAt) < jmapRouteTTL {
+		return entry.route, nil
 	}
 
 	session, err := fetchJMAPSession(ctx, cfg.APIToken)
@@ -113,28 +127,32 @@ func (c *jmapRouteCache) route(ctx context.Context, cfg Config, fromAddr string,
 
 	identityID, draftsMailboxID, err := fetchIdentityAndDrafts(ctx, session.APIURL, cfg.APIToken, accountID, fromAddr)
 	if err != nil {
-		// Leave any previous entry invalidated rather than serving a
-		// route the server has just disagreed with.
-		c.resolved = false
+		// Leave any previous entry for this key dropped rather than serving
+		// a route the server has just disagreed with.
+		delete(c.routes, key)
 		return jmapRoute{}, err
 	}
 
-	c.token, c.from = cfg.APIToken, fromAddr
-	c.cached = jmapRoute{
+	route := jmapRoute{
 		apiURL:          session.APIURL,
 		accountID:       accountID,
 		identityID:      identityID,
 		draftsMailboxID: draftsMailboxID,
 	}
-	c.resolved, c.resolvedAt = true, time.Now()
-	return c.cached, nil
+	if c.routes == nil || len(c.routes) >= jmapMaxCachedRoutes {
+		// Over the bound: start again rather than choosing a victim. Every
+		// entry is cheap to re-resolve and this is not a path that is reached.
+		c.routes = make(map[jmapRouteKey]jmapCacheEntry)
+	}
+	c.routes[key] = jmapCacheEntry{route: route, resolvedAt: time.Now()}
+	return route, nil
 }
 
-// invalidate drops the cached route, so the next send re-resolves.
+// invalidate drops every cached route, so the next send re-resolves.
 func (c *jmapRouteCache) invalidate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.resolved = false
+	c.routes = nil
 }
 
 // sendViaFastmailJMAP sends one email through Fastmail's JMAP API

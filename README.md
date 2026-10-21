@@ -203,6 +203,13 @@ logs). No architecture change is needed for this move — see
       DEPLOY.md "Ongoing operations") — each member is only ever emailed
       once per event no matter how many times the command runs, so
       running it hourly (or even more often) is safe.
+    - **A From address per unit.** The mail server and login are shared, but
+      each unit sends from its own address — set by that unit's Admin on its
+      own `/admin/settings` page under Email (SMTP) Server — so the Troop's
+      mail comes from the Troop and the Pack's from the Pack. A unit that sets
+      none sends as the site-wide `SMTP_FROM`, as before. The unit reaches the
+      mailer on the context (`mailer.WithUnit`), and `TestEverySendNamesItsUnit`
+      fails a send that doesn't name its unit.
     - **News posts and den/patrol updates.** A leader can email a published
       news post to the whole unit or to chosen dens/patrols (never
       automatically — publishing emails nobody), and anyone holding the

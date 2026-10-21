@@ -26,6 +26,7 @@ import (
 
 	"github.com/47-yonkers/scout-site/internal/content"
 	"github.com/47-yonkers/scout-site/internal/family"
+	"github.com/47-yonkers/scout-site/internal/mailer"
 	"github.com/47-yonkers/scout-site/internal/newsletter"
 	"github.com/47-yonkers/scout-site/internal/roster"
 	"github.com/47-yonkers/scout-site/internal/settings"
@@ -113,7 +114,19 @@ func renderPostEmail(l postEmailLetter) string {
 // configured is a normal state, not an error: the screens say so and offer
 // nothing that cannot work.
 func (h *Handlers) mailReady(ctx context.Context) bool {
-	return h.Mailer != nil && h.Mailer.Enabled(ctx)
+	return h.Mailer != nil && h.Mailer.Enabled(mailCtx(ctx))
+}
+
+// mailCtx marks a send — or the question "can mail go out?" — as being for the
+// unit this request is on, so it is sent from that unit's own From address
+// rather than the site-wide one (see mailer.WithUnit). Every send from a
+// handler goes through it; TestEverySendNamesItsUnit fails one that doesn't,
+// since the mistake is silent — the mail still goes, from the wrong address.
+func mailCtx(ctx context.Context) context.Context {
+	if unit, ok := units.UnitFromContext(ctx); ok {
+		return mailer.WithUnit(ctx, unit.ID)
+	}
+	return ctx
 }
 
 // emailFeatureOn reports whether this unit has email broadcasts switched on.
@@ -224,6 +237,10 @@ type postEmailPanel struct {
 	// Show is false for everything that cannot be emailed: a new post, a draft,
 	// or a unit that has email switched off.
 	Show bool
+	// Hint is set instead of Show for a new post or a draft, in a unit that has
+	// email on: the section is not there yet, and a leader looking for it should
+	// be told when it will be rather than left to wonder where it went.
+	Hint bool
 	// MailReady is false when the site has no mail configured.
 	MailReady bool
 	// Groups are the dens/patrols the post can be addressed to.
@@ -244,7 +261,7 @@ func (h *Handlers) newsEmailPanel(r *http.Request, unit units.Unit, post content
 	ctx := r.Context()
 	// Only a published, unit-wide post can be emailed from here. A group's own
 	// update is sent from that group's page, to that group.
-	if post.Status != "published" || post.SubGroupID != "" {
+	if post.SubGroupID != "" {
 		return postEmailPanel{}
 	}
 	on, err := h.emailFeatureOn(ctx, unit.ID)
@@ -254,6 +271,9 @@ func (h *Handlers) newsEmailPanel(r *http.Request, unit units.Unit, post content
 	}
 	if !on {
 		return postEmailPanel{}
+	}
+	if post.Status != "published" {
+		return postEmailPanel{Hint: true}
 	}
 
 	panel := postEmailPanel{Show: true, MailReady: h.mailReady(ctx), GroupNoun: subGroupNoun(unit.UnitType)}

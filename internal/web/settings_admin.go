@@ -165,7 +165,7 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		settings.SocialTikTokURL:    "home-tiktok",
 	}
 
-	var paymentTextViews, socialTextViews, welcomeEmailTextViews, treasuryControlViews, prospectTextViews []unitTextSettingView
+	var paymentTextViews, socialTextViews, welcomeEmailTextViews, treasuryControlViews, prospectTextViews, mailFromViews []unitTextSettingView
 	for _, t := range settings.UnitTextSettings {
 		v := unitTextSettingView{UnitTextSetting: t}
 		if t.Secret {
@@ -191,6 +191,10 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 			treasuryControlViews = append(treasuryControlViews, v)
 		case "prospects":
 			prospectTextViews = append(prospectTextViews, v)
+		case "mail_from":
+			// Shown inside the Email (SMTP) Server section, not under
+			// Payments, which is where an unrecognised section would land.
+			mailFromViews = append(mailFromViews, v)
 		case "prospect_auto_email":
 			// Same reasoning as the toggle above: it lives on
 			// /admin/prospects.
@@ -249,12 +253,16 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		SocialTextSettings  []unitTextSettingView
 		WelcomeEmailText    []unitTextSettingView
 		ProspectText        []unitTextSettingView
+		MailFromText        []unitTextSettingView
+		MailFromInUse       string // the From address mail for this unit goes out as right now
+		MailFromSiteWide    string // what a unit that sets none sends as
 		TreasuryControls    []unitTextSettingView
 		Fundraisers         []ledger.Fundraiser
 		ActiveStorefrontID  string
 		StorageByCategory   []categorySummaryView
 		StorageTotal        categorySummaryView
 		MailTestOK          string
+		MailTestFrom        string
 		MailTestError       string
 	}{
 		baseData:            settingsBase(h.base(r, "Site Settings"), r.URL.Query().Get("save_error")),
@@ -267,12 +275,16 @@ func (h *Handlers) SystemSettingsView(w http.ResponseWriter, r *http.Request) {
 		SocialTextSettings:  socialTextViews,
 		WelcomeEmailText:    welcomeEmailTextViews,
 		ProspectText:        prospectTextViews,
+		MailFromText:        mailFromViews,
+		MailFromInUse:       h.mailFromFor(r, true),
+		MailFromSiteWide:    h.mailFromFor(r, false),
 		TreasuryControls:    treasuryControlViews,
 		Fundraisers:         fundraisers,
 		ActiveStorefrontID:  activeStorefrontID,
 		StorageByCategory:   storageByCategory,
 		StorageTotal:        storageTotal,
 		MailTestOK:          r.URL.Query().Get("mail_test_ok"),
+		MailTestFrom:        r.URL.Query().Get("mail_test_from"),
 		MailTestError:       r.URL.Query().Get("mail_test_error"),
 	}
 	h.render(w, h.systemSettings, data)
@@ -495,6 +507,52 @@ func (h *Handlers) ProspectSettingsUpdateText(w http.ResponseWriter, r *http.Req
 	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
 }
 
+// MailFromSettingsUpdateText saves this unit's From address (Section ==
+// "mail_from") from its own form inside the Email (SMTP) Server section.
+//
+// Scoped to the unit on whose site the Settings page is open, and gated on
+// being a super admin of that unit: roles are per unit, so being Admin of the
+// Troop does not let someone choose the address the Pack writes to its
+// families from. Each unit's Admin sets their own, on their own Settings page.
+func (h *Handlers) MailFromSettingsUpdateText(w http.ResponseWriter, r *http.Request) {
+	unit, _ := units.UnitFromContext(r.Context())
+	actor, ok := h.requireSuperAdmin(w, r, "/admin/settings")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	for _, t := range settings.UnitTextSettings {
+		if t.Section != "mail_from" {
+			continue
+		}
+		if err := settings.SetUnitText(r.Context(), h.Pool, unit.ID, t.Key, r.FormValue(t.Key), actor.ID); err != nil {
+			log.Printf("web: updating mail-from setting %q: %v", t.Key, err)
+			settingsSaveError(w, r, err)
+			return
+		}
+	}
+
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
+}
+
+// mailFromFor is the From address mail goes out as: with forThisUnit, the
+// address for the unit this request is on (its own, else the site-wide one);
+// without, the site-wide one alone — what a unit that sets none sends as.
+func (h *Handlers) mailFromFor(r *http.Request, forThisUnit bool) string {
+	if h.Mailer == nil {
+		return ""
+	}
+	ctx := r.Context()
+	if forThisUnit {
+		ctx = mailCtx(ctx)
+	}
+	return h.Mailer.From(ctx)
+}
+
 // WelcomeEmailSettingsUpdateText is UnitSettingsUpdateText's Welcome
 // Email-section sibling — saves only the subject/body template fields
 // (Section == "welcome_email") from their own form. See
@@ -566,12 +624,17 @@ func (h *Handlers) SystemSettingsSendTestEmail(w http.ResponseWriter, r *http.Re
 		"welcome emails and newsletters will reach people the same way.\n\n" +
 		"Nobody else was sent a copy."
 
-	if err := h.Mailer.Send(r.Context(), to, subject, body); err != nil {
+	// Sent as this unit, so the test shows what this unit's families will see —
+	// and says which address that was, since a test that works from an address
+	// other than the one you meant to check has not told you much.
+	ctx := mailCtx(r.Context())
+	if err := h.Mailer.Send(ctx, to, subject, body); err != nil {
 		log.Printf("web: test email to %s: %v", to, err)
 		http.Redirect(w, r, "/admin/settings?mail_test_error="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/admin/settings?mail_test_ok="+url.QueryEscape(to), http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/settings?mail_test_ok="+url.QueryEscape(to)+
+		"&mail_test_from="+url.QueryEscape(h.Mailer.From(ctx)), http.StatusSeeOther)
 }
 
 // settingsBase carries a save failure back onto the settings page.
@@ -600,6 +663,7 @@ func settingsSaveError(w http.ResponseWriter, r *http.Request, err error) {
 		settings.ErrWelcomeEmailNeedsPassword,
 		settings.ErrTemplateTooLarge,
 		settings.ErrInvalidThreshold,
+		settings.ErrInvalidMailFrom,
 		settings.ErrLiveKeyNotAccepted,
 	} {
 		if errors.Is(err, known) {
