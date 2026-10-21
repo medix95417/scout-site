@@ -11,6 +11,7 @@
   </div>
 
   <h1 class="text-2xl font-bold mb-1">{{.Newsletter.Subject}}</h1>
+  {{if .Describes}}<p class="text-sm font-medium text-gray-700 mb-1">{{.Describes}}</p>{{end}}
   <p class="text-sm text-gray-600 mb-6">
     {{if eq .Newsletter.Status "sending"}}
       Sending now — this page updates on its own.

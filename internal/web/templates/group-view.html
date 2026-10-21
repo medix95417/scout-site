@@ -8,9 +8,17 @@
   <p class="mb-4"><a href="/groups" class="text-sm underline" style="color: var(--unit-color);">&larr; All {{.SubGroupNoun}}s</a></p>
   <div class="flex items-center justify-between gap-2 mb-1">
     <h1 class="text-2xl font-bold">{{.Group.Name}}</h1>
-    {{if .Scope.CanManageSubGroup .Group.ID}}
-      <a href="/admin/groups/{{.Group.ID}}" class="text-sm underline flex-shrink-0" style="color: var(--unit-color);">Edit</a>
-    {{end}}
+    <div class="flex items-center gap-4 flex-shrink-0">
+      {{/* Its own permission, not the one beside it: a Patrol Leader can email
+           their patrol without being able to edit its page, and a leader who
+           can edit a page may not be allowed to email it. */}}
+      {{if .CanEmail}}
+        <a href="/groups/{{.Group.ID}}/email" class="text-sm underline" style="color: var(--unit-color);">Email this {{.SubGroupNoun}}</a>
+      {{end}}
+      {{if .Scope.CanManageSubGroup .Group.ID}}
+        <a href="/admin/groups/{{.Group.ID}}" class="text-sm underline" style="color: var(--unit-color);">Edit</a>
+      {{end}}
+    </div>
   </div>
 
   {{if .Group.Description}}
@@ -62,6 +70,16 @@
 
   <section class="mb-8">
     <h2 class="text-lg font-semibold mb-3">News</h2>
+    {{if eq .Emailed "1"}}
+      <div class="mb-3 max-w-lg rounded-md bg-green-100 text-green-800 px-4 py-3 text-sm">
+        Posted, and emailed to {{.Group.Name}} — it goes out over the next few minutes.
+      </div>
+    {{else if eq .Emailed "failed"}}
+      <div class="mb-3 max-w-lg rounded-md bg-amber-50 border border-amber-300 px-4 py-3 text-sm text-amber-900">
+        Your update is posted, but the email could not be started, so nobody was emailed.
+        {{if .CanEmail}}You can send it from <a href="/groups/{{.Group.ID}}/email" class="underline">Email this {{.SubGroupNoun}}</a>.{{end}}
+      </div>
+    {{end}}
     {{if .Scope.CanManageSubGroup .Group.ID}}
       <details class="mb-3 rounded-lg border border-gray-200 bg-white p-4 max-w-lg">
         <summary class="cursor-pointer select-none text-sm font-semibold">Post an update</summary>
@@ -69,6 +87,14 @@
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <input aria-label="News post title" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" type="text" name="title" placeholder="Title" required>
           <textarea class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" name="body" rows="3" placeholder="What's new?"></textarea>
+          {{/* Never ticked for you: posting an update has never emailed
+               anyone, and still doesn't unless you say so. */}}
+          {{if .CanEmail}}
+            <label class="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="also_email" value="1" class="mt-1">
+              <span>Also email it to the families in {{.Group.Name}}</span>
+            </label>
+          {{end}}
           <button type="submit" class="rounded-md px-4 py-2 text-sm btn-accent">Post</button>
         </form>
       </details>

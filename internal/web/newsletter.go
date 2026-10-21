@@ -60,6 +60,34 @@ type newsletterRow struct {
 	Status         string
 	SentOn         string
 	RecipientCount int
+	// Describes is "" for a newsletter. For a news email or an update to a
+	// den/patrol it says what the row is and who it went to, in words — those
+	// rows are never edited, so the list links them straight to their record.
+	Describes string
+}
+
+// describeEmail says what a non-newsletter record is and who it was addressed
+// to: "News post emailed to everyone", "Update to Eagle Patrol". "" for a
+// newsletter, which needs no description beyond its subject.
+func (h *Handlers) describeEmail(ctx context.Context, n newsletter.Newsletter) string {
+	if n.Kind == newsletter.KindNewsletter || n.Kind == "" {
+		return ""
+	}
+	who := "everyone"
+	if n.Audience == newsletter.AudienceGroups {
+		names, err := newsletter.GroupNamesFor(ctx, h.Pool, n.ID)
+		if err != nil {
+			log.Printf("web: naming the audience of %s: %v", n.ID, err)
+		}
+		who = strings.Join(names, " and ")
+		if who == "" {
+			who = "a group that no longer exists"
+		}
+	}
+	if n.Kind == newsletter.KindGroupUpdate {
+		return "Update to " + who
+	}
+	return "News post emailed to " + who
 }
 
 func (h *Handlers) AdminNewsletterList(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +108,7 @@ func (h *Handlers) AdminNewsletterList(w http.ResponseWriter, r *http.Request) {
 
 	rows := make([]newsletterRow, 0, len(items))
 	for _, n := range items {
-		row := newsletterRow{ID: n.ID, Subject: n.Subject, Status: n.Status, SentOn: newsletterSentOn(n.SentAt)}
+		row := newsletterRow{ID: n.ID, Subject: n.Subject, Status: n.Status, SentOn: newsletterSentOn(n.SentAt), Describes: h.describeEmail(r.Context(), n)}
 		if n.RecipientCount != nil {
 			row.RecipientCount = *n.RecipientCount
 		}
@@ -148,6 +176,13 @@ func (h *Handlers) AdminNewsletterEdit(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("web: loading newsletter for edit: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// A news email or a group update is made and claimed in one step and has
+	// nothing to edit; its record is the page for it.
+	if n.Kind != newsletter.KindNewsletter {
+		http.Redirect(w, r, "/admin/newsletters/"+n.ID, http.StatusSeeOther)
 		return
 	}
 
@@ -301,26 +336,9 @@ func (h *Handlers) AdminNewsletterSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The actual per-recipient sending happens here, detached from this
-	// request: context.Background() (bounded by its own generous timeout),
-	// never r.Context() — so a browser disconnect or reverse-proxy
-	// timeout can no longer cut a send short or lose track of what
-	// actually went out, which is exactly what used to happen (see
-	// newsletter.BeginSend/SendNow's comments). A panic here would
-	// otherwise crash the whole process — this goroutine runs outside any
-	// request's callstack, so it isn't covered by net/http's own
-	// per-request recovery.
-	go func() {
-		defer func() {
-			if rec := recover(); rec != nil {
-				log.Printf("web: newsletter send %s panicked: %v", id, rec)
-			}
-		}()
-		ctx, cancel := context.WithTimeout(context.Background(), newsletterSendTimeout)
-		defer cancel()
-		result := newsletter.SendNow(ctx, h.Pool, h.Mailer, n, actor.ID)
-		log.Printf("web: newsletter %s sent: %d succeeded, %d failed", id, result.Sent, result.Failed)
-	}()
+	// The per-recipient sending happens detached from this request — see
+	// sendInBackground for why it must not run on r.Context().
+	h.sendInBackground(n, actor.ID)
 
 	http.Redirect(w, r, "/admin/newsletters/"+id+"/edit", http.StatusSeeOther)
 }
@@ -392,23 +410,10 @@ func (h *Handlers) AdminNewsletterView(w http.ResponseWriter, r *http.Request) {
 	// reads as "it reached nobody".
 	legacy := len(rows) == 0 && n.RecipientCount != nil && *n.RecipientCount > 0
 
-	data := struct {
-		baseData
-		Newsletter newsletter.Newsletter
-		// Body is shown in a sandboxed iframe (see the template) rather
-		// than rendered into this page. A plain string, not
-		// template.HTML: it goes into a srcdoc attribute, where
-		// html/template's attribute escaping is exactly what is wanted.
-		Body           string
-		Recipients     []newsletterRecipientRow
-		Delivered      int
-		Failed         int
-		SentOn         string
-		RecipientCount int
-		LegacySend     bool
-	}{
+	data := newsletterViewData{
 		baseData:   h.base(r, "Newsletter"),
 		Newsletter: n,
+		Describes:  h.describeEmail(r.Context(), n),
 		Body:       n.Body,
 		Recipients: rows,
 		Delivered:  delivered,
@@ -420,6 +425,29 @@ func (h *Handlers) AdminNewsletterView(w http.ResponseWriter, r *http.Request) {
 		data.RecipientCount = *n.RecipientCount
 	}
 	h.render(w, h.newsletterView, data)
+}
+
+// newsletterViewData is what admin-newsletter-view.html renders. Named rather
+// than an anonymous literal so the tests can build one: three of them did, each
+// with its own copy of the field list, and a copy is what drifts the first time
+// the page grows a field.
+type newsletterViewData struct {
+	baseData
+	Newsletter newsletter.Newsletter
+	// Body is shown in a sandboxed iframe (see the template) rather
+	// than rendered into this page. A plain string, not
+	// template.HTML: it goes into a srcdoc attribute, where
+	// html/template's attribute escaping is exactly what is wanted.
+	Body           string
+	Recipients     []newsletterRecipientRow
+	Delivered      int
+	Failed         int
+	SentOn         string
+	RecipientCount int
+	LegacySend     bool
+	// Describes says what this is and who it was for, when it is not a
+	// newsletter; "" for one.
+	Describes string
 }
 
 type newsletterRecipientRow struct {

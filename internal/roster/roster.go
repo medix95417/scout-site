@@ -1676,6 +1676,76 @@ func MembersWithCapability(ctx context.Context, pool *pgxpool.Pool, unitID, capa
 	return out, rows.Err()
 }
 
+// SubGroupIDsWithCapability returns the dens/patrols in which the acting
+// login holds a role that grants capability — the groups a role assignment
+// itself is tied to, not every group the unit has.
+//
+// This is the "where" half of a capability that means "this, but only for
+// your own group" (units.CapEmailGroup). A Patrol Leader holds the
+// capability through a role assigned to one patrol, so it is that patrol
+// that comes back, and no other. A role assigned to the unit as a whole
+// (no group) contributes nothing here: a unit-wide leader's reach over every
+// group is decided by Scope.UnitWide, the way it is for everything else a
+// leader manages, and counting an unassigned role as "every group" would turn
+// a Patrol Leader whose assignment was left without a patrol into someone who
+// can write to all of them.
+//
+// Follows the same shared-family versus individual split as ScopeForFamily
+// and ScopeForMember: an individual login (memberID set) is judged on that
+// member's own roles and nothing else, so a parent's authority is never
+// lent to a child's own login; a family-wide login carries the household's
+// roles. Unit-aware in the way MembersWithCapability is — this unit's
+// overrides of what a built-in role grants, and its custom roles, are what
+// decide, not the code's defaults.
+//
+// Only active groups and active members count, so a den that has been folded
+// stops being somewhere a leader can send from.
+func SubGroupIDsWithCapability(ctx context.Context, pool *pgxpool.Pool, familyID string, memberID *string, unitID, capability string) ([]string, error) {
+	systemRoles, err := units.SystemRolesWithCapabilityForUnit(ctx, pool, unitID, capability)
+	if err != nil {
+		return nil, err
+	}
+
+	// Which login this is, by the one column that tells them apart. A
+	// constant choice between two fragments, never built from input.
+	who, whoArg := "members.family_id = $1", familyID
+	if memberID != nil {
+		who, whoArg = "members.id = $1", *memberID
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT DISTINCT role_assignments.sub_group_id::text
+		FROM role_assignments
+		JOIN members ON members.id = role_assignments.member_id
+		JOIN sub_groups ON sub_groups.id = role_assignments.sub_group_id
+			AND sub_groups.unit_id = $2 AND sub_groups.active
+		LEFT JOIN custom_roles
+			ON custom_roles.unit_id = role_assignments.unit_id
+			AND custom_roles.slug = role_assignments.role::text
+		WHERE `+who+`
+			AND role_assignments.unit_id = $2
+			AND members.active
+			AND (
+				role_assignments.role::text = ANY($3)
+				OR $4 = ANY(COALESCE(custom_roles.capabilities, ARRAY[]::text[]))
+			)
+	`, whoArg, unitID, systemRoles, capability)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // --- Deleting a member -----------------------------------------------------
 
 // MemberHasHistoryError is returned by DeleteMember when a member can't be

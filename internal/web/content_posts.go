@@ -111,6 +111,9 @@ type contentFormData struct {
 	// Upload is the album editor's own uploader — see gallery_upload.go.
 	// Zero for the news editor, which has no use for it.
 	Upload galleryUploadView
+	// Email is the news editor's "email this post" panel — see post_email.go.
+	// Zero (Show false) for a new post, a draft, or an album.
+	Email postEmailPanel
 }
 
 // contentKind describes the fixed differences between "post" (news) and
@@ -527,6 +530,9 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 		PublicMediaGroups: publicMediaGroups, PublicMediaUngrouped: publicMediaUngrouped, EventPhotoGroups: eventPhotoGroups,
 		DocumentGroups: documentGroups, DocumentsUngrouped: documentsUngrouped,
 		Upload: newGalleryUploadView(h.Storage != nil),
+	}
+	if isEdit && kind.PageType == newsKind.PageType {
+		data.Email = h.newsEmailPanel(r, unit, post)
 	}
 	h.render(w, h.adminContentFormTmpl, data)
 }

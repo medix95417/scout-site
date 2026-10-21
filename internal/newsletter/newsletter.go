@@ -43,7 +43,33 @@ type Newsletter struct {
 	// markup it arrived with — see SanitizeFullHTML. Off by default and
 	// settable only by an Admin.
 	FullHTML bool
+
+	// Kind is what this record is: a newsletter (everything that existed
+	// before), a news post that was emailed, or an update to a den/patrol.
+	// All three go through the same pipeline and leave the same record, so
+	// "did it reach the Okonkwos" has one place to be answered.
+	Kind string
+	// PostID is the post an email was made from, if it was made from one.
+	PostID *string
+	// Audience is who it is addressed to: AudienceUnit (every family on the
+	// roster) or AudienceGroups (only the families of the dens/patrols
+	// listed for it — see GroupIDsFor).
+	Audience string
 }
+
+// What a record is. KindNewsletter is the default and is what every row
+// written before posts could be emailed already is.
+const (
+	KindNewsletter  = "newsletter"
+	KindNews        = "news"
+	KindGroupUpdate = "group_update"
+)
+
+// Who a record is addressed to.
+const (
+	AudienceUnit   = "unit"
+	AudienceGroups = "groups"
+)
 
 var (
 	// ErrNotFound covers "no such newsletter" and "exists but belongs to
@@ -66,11 +92,11 @@ var (
 	ErrNoRecipients = errors.New("newsletter: no recipients found for this unit")
 )
 
-const columns = `id, unit_id, subject, body, status::text, created_by, sent_at, recipient_count, created_at, updated_at, full_html`
+const columns = `id, unit_id, subject, body, status::text, created_by, sent_at, recipient_count, created_at, updated_at, full_html, kind, post_id::text, audience`
 
 func scan(row interface{ Scan(dest ...any) error }) (Newsletter, error) {
 	var n Newsletter
-	err := row.Scan(&n.ID, &n.UnitID, &n.Subject, &n.Body, &n.Status, &n.CreatedBy, &n.SentAt, &n.RecipientCount, &n.CreatedAt, &n.UpdatedAt, &n.FullHTML)
+	err := row.Scan(&n.ID, &n.UnitID, &n.Subject, &n.Body, &n.Status, &n.CreatedBy, &n.SentAt, &n.RecipientCount, &n.CreatedAt, &n.UpdatedAt, &n.FullHTML, &n.Kind, &n.PostID, &n.Audience)
 	return n, err
 }
 
@@ -253,7 +279,7 @@ func BeginSend(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, id, un
 		return Newsletter{}, ErrAlreadySent
 	}
 
-	emails, err := RecipientEmailsForUnit(ctx, pool, unitID)
+	emails, err := RecipientEmailsFor(ctx, pool, n)
 	if err != nil {
 		return Newsletter{}, fmt.Errorf("newsletter: resolving recipients: %w", err)
 	}
@@ -292,7 +318,7 @@ func BeginSend(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, id, un
 func SendNow(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, n Newsletter, actorID string) Result {
 	var res Result
 
-	emails, err := RecipientEmailsForUnit(ctx, pool, n.UnitID)
+	emails, err := RecipientEmailsFor(ctx, pool, n)
 	if err != nil {
 		// The roster resolved fine moments ago in BeginSend — a failure
 		// here is a transient DB hiccup, not "there are no recipients."

@@ -134,6 +134,22 @@ themselves Treasurer, or reset the Admin's password — see
 affecting roster code should call `requireCeiling` (`internal/web/
 admin_roster.go`) the same way the existing handlers do.
 
+**`email_group` is "this, but only for your own group" — the capability alone
+is half the answer.** Holding it (`units.CanEmailGroup`) does not say *which*
+dens/patrols a login may email. That is `groupEmailAccess`
+(`internal/web/group_email.go`): a unit-wide leader who holds it (`CanEmailGroup`
+AND `roster.Scope.UnitWide`) may email any group, and otherwise only the groups
+a role assignment ties the capability to (`roster.SubGroupIDsWithCapability`).
+A role assigned to no group contributes no group, so a Patrol Leader left
+without a patrol can email nobody. It is deliberately not "can edit the group's
+page" — a Patrol Leader emails their patrol without being able to edit
+anything. Emails to a group, and emailed news posts, go through
+`newsletter.StartPostEmail`, which validates everything and inserts the record
+already in 'sending' in one transaction (a refusal leaves no orphan row), and a
+`groups` audience whose group rows vanish reaches nobody rather than falling
+back to the whole unit. Nothing emails automatically: publishing a post or
+posting a group update sends nothing unless the leader asked.
+
 **One `template.HTML` for user content, and it is `renderPostBody`.**
 `html/template`'s contextual escaping is the XSS defence, so nothing
 user-typed is ever cast to `template.HTML` — except news-post bodies,

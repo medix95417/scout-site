@@ -184,6 +184,7 @@ func TestEveryTopicIsReachable(t *testing.T) {
 		allFeaturesOn(units.Capabilities{}, false),
 		allFeaturesOn(units.Capabilities{}, true),
 		allFeaturesOn(units.Capabilities{units.CapEditContent: true}, false),
+		allFeaturesOn(units.Capabilities{units.CapEmailGroup: true}, false),
 		allFeaturesOn(units.Capabilities{units.CapManageLedger: true}, false),
 		allFeaturesOn(units.Capabilities{units.CapApproveExpenses: true}, false),
 		allFeaturesOn(units.Capabilities{units.CapSuperAdmin: true}, false),
@@ -227,4 +228,40 @@ func topicRequires(t Topic, key string) bool {
 		}
 	}
 	return false
+}
+
+// The two email topics are for different people. A Patrol Leader holds only
+// email_group — they can email their patrol and cannot edit the site — so
+// they should be told about the first and not the second; a news editor the
+// other way round. Both are for a unit that has email switched on.
+func TestEmailTopicsAreShownToTheRightPeople(t *testing.T) {
+	const news, group = "Emailing a news post", "Emailing a den or patrol"
+	has := func(v Viewer, title string) bool {
+		for _, got := range titles(For(v)) {
+			if got == title {
+				return true
+			}
+		}
+		return false
+	}
+
+	patrolLeader := allFeaturesOn(units.Capabilities{units.CapEmailGroup: true, units.CapSubmitForApproval: true}, true)
+	if !has(patrolLeader, group) || has(patrolLeader, news) {
+		t.Errorf("a Patrol Leader should see the den/patrol topic and not the news one; got %v", titles(For(patrolLeader)))
+	}
+	editor := allFeaturesOn(units.Capabilities{units.CapEditContent: true}, false)
+	if !has(editor, news) || has(editor, group) {
+		t.Errorf("a news editor without email_group should see the news topic and not the den/patrol one; got %v", titles(For(editor)))
+	}
+	everyone := allFeaturesOn(units.Capabilities{}, false)
+	if has(everyone, news) || has(everyone, group) {
+		t.Errorf("a family with no leadership role was told about emailing")
+	}
+
+	// Switched off, neither is described.
+	both := allFeaturesOn(units.Capabilities{units.CapEditContent: true, units.CapEmailGroup: true}, false)
+	both.Enabled[settings.NewsletterEnabled] = false
+	if has(both, news) || has(both, group) {
+		t.Errorf("email topics are shown to a unit that has switched email off")
+	}
 }

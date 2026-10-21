@@ -27,6 +27,77 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Added
+
+- **A news post can be emailed — only when a leader chooses to.** Publishing a
+  post still emails nobody. On a published post's edit page there is now an
+  "Email this post" section: pick everyone in the unit, or only the dens or
+  patrols you tick, and it goes out. The email carries the whole post, says who
+  sent it, and links to it on the site (a members-only post stays members-only —
+  families are asked to sign in). Each post keeps a list of the times it was
+  emailed, and sending one that has already gone out needs a "Send it again" tick,
+  so a double click or a second leader can't send everyone the same email twice.
+  Drafts and a den's or patrol's own updates can't be emailed from here — a draft
+  isn't there to read, and a patrol's update would otherwise go to the whole unit.
+- **Dens and patrols can email their own families.** A den or patrol's page has an
+  "Email this den/patrol" link for anyone allowed to, which opens a page to write a
+  subject and a message to everyone in that group. It reaches every family with an
+  active Scout or leader in the group — the family's shared login and any adult's
+  own login — and a Scout's own login only if that Scout is in the group, so a
+  message to one patrol doesn't land in a younger sibling's inbox in another. The
+  page shows how many addresses it will reach, never the addresses themselves. The
+  same subject sent to the same group twice within a minute is refused, and a group
+  with nobody in it can't be emailed.
+- **"Also email it" on a group's "Post an update" form.** Posting an update never
+  emails anyone unless that box is ticked. When it is, everything that could refuse
+  — email switched off or not set up, the group empty, the poster not allowed to
+  email it — is checked before the update is posted, so a refusal never leaves an
+  update on the page that was meant to go out too.
+- **A new capability, `email_group`, and who has it.** It means "email the dens or
+  patrols you hold a role in" — a Den Leader's own den, a Patrol Leader's own
+  patrol — or any group for a unit-wide leader. Cubmaster, Scoutmaster, Assistant
+  Scoutmaster, Den Leader, Admin and Patrol Leader have it by default; the Senior
+  Patrol Leader, Treasurer, parents and Scouts do not. It is separate from editing
+  the site on purpose: a Patrol Leader can email their patrol without being able to
+  edit the homepage, news or the patrol's page. A unit can switch it on or off per
+  role on the Roles page like any other capability, and custom roles can be given
+  it. Because appointing someone to a role now requires holding every capability
+  that role carries, appointing a Patrol Leader requires `email_group` too — which
+  the Scoutmaster, Assistant Scoutmaster and Admin have.
+- Emailed news posts and group updates are listed on the Newsletters page next to
+  newsletters ("News post emailed to …", "Update to …"), opening to the same record
+  of what was sent and who it reached, and are written to the Activity Log. Help
+  topics describe both features, shown only to the people who can use them and only
+  while email is switched on.
+
+### Changed
+
+- The "Newsletters" setting is now "Newsletters and email to families", and covers
+  emailing posts and group updates as well: switch it off and the pages and buttons
+  for sending anything new close, everything already sent stays. They send through
+  the same paced sender as newsletters, so `MAIL_BULK_PER_MINUTE` applies to them.
+- A unit that had customised a role's capabilities before this release keeps the
+  behaviour it had: migration 0053 adds `email_group` to an overridden Cubmaster,
+  Den Leader, Scoutmaster, Assistant Scoutmaster or Admin that still holds editing,
+  and to an overridden Patrol Leader that still holds submitting for approval, so a
+  unit that customised its roles gets the same defaults as everyone else instead of
+  quietly having nobody able to email a group.
+
+### Worth knowing
+
+- Replies go to the address the site sends from; there is no reply-to the sender.
+  The email says who sent it and the composer says so, but a reply is not routed to
+  them.
+- There is no way yet for a family to opt out of these emails.
+- A shared family login can't say which person in the household signed in, so the
+  record shows the household's acting member; it is the same limit the activity log
+  already has for everything done from a shared login.
+- If the server stops while a send is in progress, that record stays "sending" —
+  the same as a newsletter does today.
+- Requires migration 0053 (applied automatically on startup): the `email_group`
+  capability, and `kind`/`post_id`/`audience` on the newsletters table with
+  `newsletter_audience_groups` for emails to selected groups.
+
 ## [2.19.0] — 2026-10-20
 
 ### Added

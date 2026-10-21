@@ -113,17 +113,7 @@ func TestCampaignViewRenders(t *testing.T) {
 func TestNewsletterViewRenders(t *testing.T) {
 	sent := time.Date(2026, 3, 4, 10, 0, 0, 0, time.UTC)
 	count := 2
-	out := renderPage(t, "admin-newsletter-view.html", struct {
-		baseData
-		Newsletter     newsletter.Newsletter
-		Body           string
-		Recipients     []newsletterRecipientRow
-		Delivered      int
-		Failed         int
-		SentOn         string
-		RecipientCount int
-		LegacySend     bool
-	}{
+	out := renderPage(t, "admin-newsletter-view.html", newsletterViewData{
 		baseData: testBase("Newsletter"),
 		Newsletter: newsletter.Newsletter{
 			ID: "n-1", Subject: "March update", Status: "sent", SentAt: &sent, RecipientCount: &count,
@@ -146,17 +136,7 @@ func TestNewsletterViewRenders(t *testing.T) {
 // reached nobody".
 func TestNewsletterViewExplainsAnOlderSend(t *testing.T) {
 	count := 11
-	out := renderPage(t, "admin-newsletter-view.html", struct {
-		baseData
-		Newsletter     newsletter.Newsletter
-		Body           string
-		Recipients     []newsletterRecipientRow
-		Delivered      int
-		Failed         int
-		SentOn         string
-		RecipientCount int
-		LegacySend     bool
-	}{
+	out := renderPage(t, "admin-newsletter-view.html", newsletterViewData{
 		baseData:       testBase("Newsletter"),
 		Newsletter:     newsletter.Newsletter{ID: "n-0", Subject: "Old one", Status: "sent", RecipientCount: &count},
 		Body:           "<p>x</p>",
@@ -260,17 +240,7 @@ func TestSentMessageIsShownInASandboxedFrame(t *testing.T) {
 			Campaign: prospect.Campaign{ID: "c1", Subject: "S", Status: "sent"},
 			Body:     hostile,
 		}},
-		{"admin-newsletter-view.html", struct {
-			baseData
-			Newsletter     newsletter.Newsletter
-			Body           string
-			Recipients     []newsletterRecipientRow
-			Delivered      int
-			Failed         int
-			SentOn         string
-			RecipientCount int
-			LegacySend     bool
-		}{
+		{"admin-newsletter-view.html", newsletterViewData{
 			baseData:   testBase("Newsletter"),
 			Newsletter: newsletter.Newsletter{ID: "n1", Subject: "S", Status: "sent"},
 			Body:       hostile,

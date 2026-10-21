@@ -191,12 +191,15 @@ const (
 	CapManageLedger       = "manage_ledger"       // fund accounting — ledger, trip funds, fundraisers
 	CapApproveExpenses    = "approve_expenses"    // authorize a large expense a Treasurer entered — see CanApproveExpenses
 	CapSuperAdmin         = "super_admin"         // site-wide settings; minting/granting other capabilities
+	// CapEmailGroup is the right to email a den or patrol — see CanEmailGroup
+	// for what it covers and, importantly, where.
+	CapEmailGroup = "email_group"
 )
 
 // AllCapabilities lists every capability a custom role can be granted —
 // the checkbox list on the "create a custom role" admin form iterates
 // this, and custom_roles' CHECK constraint mirrors it.
-var AllCapabilities = []string{CapEditContent, CapApproveSubmissions, CapSubmitForApproval, CapManageLedger, CapApproveExpenses, CapSuperAdmin}
+var AllCapabilities = []string{CapEditContent, CapApproveSubmissions, CapSubmitForApproval, CapManageLedger, CapApproveExpenses, CapSuperAdmin, CapEmailGroup}
 
 // systemRoleCapabilities maps each of the 9 fixed, code-defined role
 // slugs (see migration 0001_init.sql's original member_role enum — the
@@ -206,18 +209,27 @@ var AllCapabilities = []string{CapEditContent, CapApproveSubmissions, CapSubmitF
 // TreasuryRoles maps — consolidated so there's one place to look up "what
 // can this role do," matching how a custom role's capabilities are looked
 // up (see custom_roles.capabilities).
+//
+// email_group is granted to the adult leaders who already run a den or the
+// whole unit, and to a Patrol Leader — who gets nothing else that touches the
+// site's content. It is the one capability here that means "this, but only
+// for the group you hold the role in": see CanEmailGroup.
 var systemRoleCapabilities = map[string][]string{
-	"cubmaster":   {CapEditContent, CapApproveExpenses},
-	"den_leader":  {CapEditContent},
-	"scoutmaster": {CapEditContent, CapApproveSubmissions, CapApproveExpenses},
+	"cubmaster":   {CapEditContent, CapApproveExpenses, CapEmailGroup},
+	"den_leader":  {CapEditContent, CapEmailGroup},
+	"scoutmaster": {CapEditContent, CapApproveSubmissions, CapApproveExpenses, CapEmailGroup},
 	// Deliberately NOT CapApproveExpenses: the unit's top leader signs off
 	// on spending. A unit that wants an ASM to cover can grant the
 	// capability through a custom role (see custom_roles.capabilities).
-	"assistant_scoutmaster": {CapEditContent, CapApproveSubmissions},
-	"senior_patrol_leader":  {CapSubmitForApproval},
-	"patrol_leader":         {CapSubmitForApproval},
-	"treasurer":             {CapManageLedger},
-	"super_admin":           {CapEditContent, CapApproveSubmissions, CapManageLedger, CapApproveExpenses, CapSuperAdmin},
+	"assistant_scoutmaster": {CapEditContent, CapApproveSubmissions, CapEmailGroup},
+	// The Senior Patrol Leader is not given email_group: the role is
+	// assigned to the unit rather than to one patrol, so there is no "own
+	// patrol" to confine it to. A unit that wants it can grant it from the
+	// roles screen; the Patrol Leader below is the one that is.
+	"senior_patrol_leader": {CapSubmitForApproval},
+	"patrol_leader":        {CapSubmitForApproval, CapEmailGroup},
+	"treasurer":            {CapManageLedger},
+	"super_admin":          {CapEditContent, CapApproveSubmissions, CapManageLedger, CapApproveExpenses, CapSuperAdmin, CapEmailGroup},
 	// "parent" and "scout" intentionally grant nothing extra.
 }
 
@@ -418,6 +430,18 @@ func CanManageLedger(caps Capabilities) bool { return caps.has(CapManageLedger) 
 // super_admin, which needs to be able to unblock a unit whose leader is
 // unavailable.
 func CanApproveExpenses(caps Capabilities) bool { return caps.has(CapApproveExpenses) }
+
+// CanEmailGroup reports whether caps includes the right to email a den or
+// patrol.
+//
+// Holding it is not, on its own, permission to email any particular group,
+// and that is what makes it different from the capabilities around it. It
+// says what a role may do; WHERE is decided by the role assignment: a Patrol
+// Leader holds it only for the patrol they are assigned to, a Den Leader for
+// their den, a unit-wide leader for every group. The check that answers "may
+// this person email this group" is internal/web's groupEmailAccess, and a
+// caller that tests CanEmailGroup alone has only answered half of it.
+func CanEmailGroup(caps Capabilities) bool { return caps.has(CapEmailGroup) }
 
 // IsSuperAdmin reports whether caps includes the super_admin capability —
 // the gate for the site-wide settings page (internal/web/settings_admin.go)

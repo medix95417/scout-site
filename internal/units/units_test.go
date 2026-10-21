@@ -133,3 +133,63 @@ func TestAccentTextColor(t *testing.T) {
 		}
 	}
 }
+
+// email_group is the one capability whose meaning is "this, but only for the
+// group you hold the role in". What each built-in role is given decides who
+// can email at all, so it is pinned here rather than left to be discovered.
+func TestWhoIsGivenEmailGroupByDefault(t *testing.T) {
+	want := map[string]bool{
+		"cubmaster": true, "den_leader": true, "scoutmaster": true,
+		"assistant_scoutmaster": true, "super_admin": true,
+		// A Patrol Leader emails their own patrol — and gets nothing else that
+		// touches the site's content.
+		"patrol_leader": true,
+		// The SPL is assigned to the unit, not a patrol, so there is no own
+		// patrol to confine it to. A unit can grant it from the roles screen.
+		"senior_patrol_leader": false,
+		"treasurer":            false, "parent": false, "scout": false,
+	}
+	for role, grants := range want {
+		got := CapabilitiesOf(DefaultCapabilitiesForRole(role)...).has(CapEmailGroup)
+		if got != grants {
+			t.Errorf("%s: email_group = %v, want %v", role, got, grants)
+		}
+	}
+}
+
+func TestAPatrolLeaderCannotEditTheSite(t *testing.T) {
+	pl := CapabilitiesOf(DefaultCapabilitiesForRole("patrol_leader")...)
+	if CanEditUnitContent(pl) {
+		t.Error("giving a Patrol Leader email_group must not give them edit_content, which is the whole site")
+	}
+	if !CanEmailGroup(pl) {
+		t.Error("a Patrol Leader should be able to email (their own patrol)")
+	}
+}
+
+// Appointing a Patrol Leader now means granting email_group, so whoever
+// appoints one has to hold it too (the ceiling on the roster pages). The
+// leaders who appoint them by default do.
+func TestTheLeadersWhoAppointPatrolLeadersStillCan(t *testing.T) {
+	needed := CapabilitiesOf(DefaultCapabilitiesForRole("patrol_leader")...)
+	for _, role := range []string{"scoutmaster", "assistant_scoutmaster", "super_admin"} {
+		if !CapabilitiesOf(DefaultCapabilitiesForRole(role)...).Covers(needed) {
+			t.Errorf("a %s can no longer appoint a Patrol Leader", role)
+		}
+	}
+}
+
+func TestEmailGroupIsOnTheRolesScreen(t *testing.T) {
+	found := false
+	for _, c := range AllCapabilities {
+		if c == CapEmailGroup {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("email_group is not in AllCapabilities, so a custom role could not be given it")
+	}
+	if CapabilityLabel(CapEmailGroup) == CapEmailGroup {
+		t.Error("email_group has no sentence on the roles screen, only its internal name")
+	}
+}

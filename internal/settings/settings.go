@@ -243,7 +243,11 @@ const ProspectFormEnabled = "prospect_form_enabled"
 const TreasuryEnabled = "treasury_enabled"
 
 // NewsletterEnabled controls whether /admin/newsletters (and sending) is
-// reachable for a unit. Defaults to true (newsletters are part of the
+// reachable for a unit. It is also the one switch for the other things this
+// site emails to a group of families — a news post, an update to a den or
+// patrol — because a unit that turns it off does so since it sends its mail
+// some other way, and does not want a second way appearing under news and
+// group pages. Defaults to true (newsletters are part of the
 // normal feature set) so existing units see no behavior change until an
 // admin explicitly turns it off — e.g. because a unit sends its
 // newsletter through some other system and doesn't want this one
@@ -316,8 +320,8 @@ var UnitToggles = []UnitToggle{
 	},
 	{
 		Key:         NewsletterEnabled,
-		Label:       "Newsletters",
-		Description: "Shows /admin/newsletters for this unit, including sending new ones. Turn off if this unit sends its newsletter some other way — already-sent newsletters and their history aren't deleted, just the admin UI for managing new ones is hidden.",
+		Label:       "Newsletters and email to families",
+		Description: "Shows /admin/newsletters for this unit, including sending new ones, and the buttons for emailing a news post or a den or patrol's update. Turn off if this unit emails its families some other way — everything already sent and its history isn't deleted, just the pages and buttons for sending anything new are closed.",
 		Default:     true,
 	},
 	{

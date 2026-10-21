@@ -95,6 +95,8 @@ func CapabilityLabel(capability string) string {
 		return "Authorize spending — sign off on a large expense the Treasurer entered"
 	case CapSuperAdmin:
 		return "Site settings — the highest tier; also lets this role create and edit other roles"
+	case CapEmailGroup:
+		return "Email a den or patrol — send an update to the families of the group this role is assigned to (every group, for a unit-wide leader)"
 	}
 	return capability
 }
