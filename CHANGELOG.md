@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.20.0] — 2026-10-21
+
 ### Added
 
 - **A news post can be emailed — only when a leader chooses to.** Publishing a
