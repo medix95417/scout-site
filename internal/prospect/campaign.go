@@ -322,7 +322,7 @@ const abandonedSendAge = 40 * time.Minute
 //
 // Returns the campaign and the recipients resolved at claim time.
 func BeginSendCampaign(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, id, unitID string) (Campaign, []Recipient, error) {
-	if !m.Enabled(ctx) {
+	if !m.Enabled(mailer.WithUnit(ctx, unitID)) {
 		return Campaign{}, nil, ErrMailerDisabled
 	}
 
@@ -396,6 +396,9 @@ func SendCampaign(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, c C
 	// with, so a burst that trips a receiving provider's spam heuristics
 	// costs the campaign its whole point. See internal/mailer/pace.go.
 	pacer := m.BulkPacer()
+
+	// Sent as this campaign's own unit — see mailer.WithUnit.
+	ctx = mailer.WithUnit(ctx, c.UnitID)
 
 	for _, r := range recipients {
 		body := personalize(c.Body, r)

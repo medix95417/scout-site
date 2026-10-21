@@ -188,6 +188,17 @@ Set these for production:
   `SMTP_PASSWORD` is the one exception: it's only ever read from this
   file, never from the database, so it still needs a restart to change
   (see README.md's "Also added post-Phase-2" section on why).
+
+  **Each unit can send from its own address.** `SMTP_FROM` (and the From
+  field in the first form on `/admin/settings`) is the site-wide
+  default. Under it, `/admin/settings` has a From address for the unit
+  whose site you're on — the Troop's Admin sets the Troop's, the Pack's
+  Admin the Pack's, each on their own site's Settings page — and that
+  unit's newsletters, news and den/patrol emails, enquiry mail, password
+  resets, reminders and welcome emails go out as it. A unit that sets
+  none sends as the site-wide address, exactly as before, so nothing
+  changes until someone fills it in. The server, port and login are still
+  shared: your provider has to allow sending as each address you set.
 - `MAIL_PROVIDER=fastmail-jmap` — an alternative to all of the above for
   a host whose network blocks outbound SMTP entirely (some shared
   hosts/ISPs do, even on 465/587): sends mail over Fastmail's JMAP HTTPS

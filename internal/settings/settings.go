@@ -13,6 +13,7 @@ package settings
 import (
 	"context"
 	"errors"
+	"net/mail"
 	"regexp"
 	"strconv"
 	"strings"
@@ -559,8 +560,8 @@ var TextSettings = []TextSetting{
 	},
 	{
 		Key:         SMTPFrom,
-		Label:       "From address",
-		Description: `The address (and optional display name) outgoing mail is sent from — e.g. "Troop 47 <noreply@47-yonkers.org>". Leave blank to fall back to SMTP_FROM.`,
+		Label:       "Default From address (site-wide)",
+		Description: `The default address (and optional display name) outgoing mail is sent from — e.g. "Troop 47 <noreply@47-yonkers.org>". Used by any unit that hasn't set its own From address (below). Leave blank to fall back to SMTP_FROM.`,
 		Placeholder: "Troop 47 <noreply@example.org>",
 	},
 }
@@ -730,7 +731,24 @@ const (
 	WelcomeEmailBody    = "welcome_email_body"
 
 	ExpenseApprovalThreshold = "expense_approval_threshold"
+
+	// MailFrom is the From address a unit's outgoing mail is sent as — the
+	// Troop's own address on the Troop's mail, the Pack's on the Pack's. It is
+	// the one part of the SMTP configuration that is per unit: the server, port
+	// and login are shared by the whole install, but a family at the Pack
+	// should not be told that the Troop wrote to them. Blank falls back to the
+	// site-wide From (SMTPFrom, then the SMTP_FROM environment variable), which
+	// is what every unit used before this existed. See mailer.WithUnit for how
+	// it reaches a send.
+	MailFrom = "mail_from"
 )
+
+// ErrInvalidMailFrom is returned by SetUnitText for a From address that
+// isn't one. Its message is written to be shown straight to the admin who
+// typed it.
+var ErrInvalidMailFrom = errors.New(
+	"that isn't an email address the site can send from. Use an address like troop@example.org, " +
+		"or one with a name like  Troop 47 <troop@example.org>")
 
 // DefaultExpenseApprovalThresholdCents is what an expense has to exceed
 // before it needs a second person's authorization, when a unit hasn't set
@@ -867,6 +885,14 @@ func validateUnitTextValue(key, trimmed string) error {
 		}
 		return nil
 	}
+	if key == MailFrom {
+		// net/mail refuses a line break, so a value that parses cannot carry
+		// a second header into the messages it is used in.
+		if _, err := mail.ParseAddress(trimmed); err != nil {
+			return ErrInvalidMailFrom
+		}
+		return nil
+	}
 	if PaymentsIntegrationLive {
 		return nil
 	}
@@ -882,6 +908,17 @@ func validateUnitTextValue(key, trimmed string) error {
 // UnitTextSettings is every per-unit text/credential setting the
 // "Payments" section of /admin/settings shows, in display order.
 var UnitTextSettings = []UnitTextSetting{
+	{
+		Key:   MailFrom,
+		Label: "From address for this unit's email",
+		Description: "The address (and optional display name) this unit's email is sent from — newsletters, news and " +
+			"den/patrol emails, enquiry notifications, password resets, event reminders and welcome emails. " +
+			"For example  Name Shown <address@example.org>. Each unit sets its own on its own Settings page, so " +
+			"the Troop and the Pack can send from different addresses. Leave blank to use the site-wide From " +
+			"above. With Fastmail's JMAP API it must be an address the account can send as.",
+		Placeholder: "Name Shown <address@example.org>",
+		Section:     "mail_from",
+	},
 	{
 		Key:         StripePublishableKey,
 		Label:       "Stripe publishable key",

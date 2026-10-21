@@ -14,6 +14,8 @@
   </div>
   <p class="text-sm text-gray-600 mb-6">
     New {{.Kind.LabelPlural}} start as a draft — nothing families see until you publish it.
+    {{if .EmailOn}}Publishing doesn't email anyone: to email a published post to families, expand it below and choose
+    <strong>Email this post</strong>.{{end}}
     <a href="{{.Kind.PublicPath}}" class="underline" style="color: var(--unit-color);">View the public {{.Kind.LabelPlural}} page &rarr;</a>
   </p>
 
@@ -44,6 +46,11 @@
           </summary>
           <div class="border-t border-gray-100 bg-gray-50 p-4 flex items-center gap-3">
             <a href="{{$.Kind.BasePath}}/{{.ID}}/edit" class="text-sm underline" style="color: var(--unit-color);">Edit</a>
+            {{/* Emailing is a decision about a published post, made from its edit
+                 page (the section at the bottom) — this just gets a leader there. */}}
+            {{if and $.EmailOn (eq .Status "published")}}
+              <a href="{{$.Kind.BasePath}}/{{.ID}}/edit#email" class="text-sm underline" style="color: var(--unit-color);">Email this post</a>
+            {{end}}
             <form method="post" action="{{$.Kind.BasePath}}/{{.ID}}/publish">
               <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
               {{if eq .Status "published"}}

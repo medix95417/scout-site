@@ -860,6 +860,8 @@ func (h *Handlers) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/settings/unit/text", h.UnitSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/social", h.SocialSettingsUpdateText)
 	mux.HandleFunc("POST /admin/settings/unit/welcome-email", h.WelcomeEmailSettingsUpdateText)
+	mux.HandleFunc("POST /admin/settings/unit/mail-from", h.MailFromSettingsUpdateText)
+	mux.HandleFunc("GET /admin/settings/unit/mail-from", redirectTo("/admin/settings"))
 	// Same reasoning as the roster form targets above: a POST-only URL
 	// answers 405 to the reload that inevitably follows an error page.
 	mux.HandleFunc("GET /admin/settings/unit/welcome-email", redirectTo("/admin/settings"))

@@ -181,7 +181,7 @@ func (h *Handlers) renderCampaignForm(w http.ResponseWriter, r *http.Request, un
 		OverlapCount:     overlap,
 		SavedTemplates:   saved,
 		StarterTemplates: prospectStarterTemplatesJSON(unit),
-		MailerReady:      h.Mailer.Enabled(r.Context()),
+		MailerReady:      h.Mailer.Enabled(mailCtx(r.Context())),
 	})
 }
 

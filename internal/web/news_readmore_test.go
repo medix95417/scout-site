@@ -109,11 +109,7 @@ func TestOnlyTheTruncatedCardsAreMarked(t *testing.T) {
 func adminNewsList(superAdmin bool) any {
 	base := testBase("Manage News")
 	base.IsSuperAdmin = superAdmin
-	return struct {
-		baseData
-		Kind  contentKind
-		Items []adminContentRow
-	}{base, newsKind, []adminContentRow{
+	return adminContentListData{baseData: base, Kind: newsKind, Items: []adminContentRow{
 		{ID: "p1", Title: "Pack meeting", Status: "published", Visibility: "public", UpdatedOn: "6 Sep 2026"},
 	}}
 }

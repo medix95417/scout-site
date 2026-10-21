@@ -150,6 +150,23 @@ already in 'sending' in one transaction (a refusal leaves no orphan row), and a
 back to the whole unit. Nothing emails automatically: publishing a post or
 posting a group update sends nothing unless the leader asked.
 
+**A message is sent as its unit, and the unit rides on the context.** The mail
+server and login are install-wide, but the From address is per unit
+(`settings.MailFrom`, set on that unit's own `/admin/settings` page): the Troop's
+mail comes from the Troop, the Pack's from the Pack. `mailer.WithUnit(ctx,
+unitID)` is how a send says which, and `Mailer.effective` then lets the unit's
+address win over the site-wide `smtp_from`, which wins over `SMTP_FROM`. A
+handler wraps its context with `mailCtx(r.Context())`; code that sends from a
+record (a newsletter, a campaign, a reminder) names that record's own unit
+inside the sender, because a detached background context carries nothing from
+the request. Leave it off and nothing breaks — the mail goes, from the
+site-wide address — which is why `TestEverySendNamesItsUnit` fails any function
+in `internal/web`, `newsletter`, `prospect` or `reminders` that sends mail, or
+asks `Enabled`, without it. "Can mail go out?" is per unit too: with Fastmail's
+JMAP a unit's own From can be the only one a site has. The unit's address is
+never taken from another unit's page — `MailFromSettingsUpdateText` saves for the
+unit whose site the request is on, behind that unit's super-admin check.
+
 **One `template.HTML` for user content, and it is `renderPostBody`.**
 `html/template`'s contextual escaping is the XSS defence, so nothing
 user-typed is ever cast to `template.HTML` — except news-post bodies,

@@ -434,6 +434,17 @@ type adminContentRow struct {
 	UpdatedOn  string
 }
 
+// adminContentListData is what the news and albums lists render. A named type
+// rather than an inline struct so the render tests build the very same thing —
+// the page that is tested is the page that is served, and a field added here
+// can't be missing from a test's hand-built copy.
+type adminContentListData struct {
+	baseData
+	Kind    contentKind
+	Items   []adminContentRow
+	EmailOn bool // news only: point at emailing a published post
+}
+
 func (h *Handlers) adminContentList(w http.ResponseWriter, r *http.Request, kind contentKind) {
 	unit, _, ok := h.requireContentEditor(w, r, kind.BasePath)
 	if !ok {
@@ -452,12 +463,20 @@ func (h *Handlers) adminContentList(w http.ResponseWriter, r *http.Request, kind
 		rows = append(rows, adminContentRow{ID: p.ID, Title: p.Title, Status: p.Status, Visibility: p.Visibility, UpdatedOn: postedOn(p.UpdatedAt)})
 	}
 
-	data := struct {
-		baseData
-		Kind  contentKind
-		Items []adminContentRow
-	}{baseData: h.base(r, "Manage "+kind.LabelPlural), Kind: kind, Items: rows}
-	h.render(w, h.adminContentListTmpl, data)
+	// Whether to point at emailing a post: news only, and only where the unit has
+	// email on. The link is per row, on published posts, in the template.
+	emailOn := false
+	if kind.PageType == newsKind.PageType {
+		if on, err := h.emailFeatureOn(r.Context(), unit.ID); err != nil {
+			log.Printf("web: checking the email setting: %v", err)
+		} else {
+			emailOn = on
+		}
+	}
+
+	h.render(w, h.adminContentListTmpl, adminContentListData{
+		baseData: h.base(r, "Manage "+kind.LabelPlural), Kind: kind, Items: rows, EmailOn: emailOn,
+	})
 }
 
 // adminContentForm renders the create form (id == "") or the edit form
@@ -531,8 +550,14 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 		DocumentGroups: documentGroups, DocumentsUngrouped: documentsUngrouped,
 		Upload: newGalleryUploadView(h.Storage != nil),
 	}
-	if isEdit && kind.PageType == newsKind.PageType {
-		data.Email = h.newsEmailPanel(r, unit, post)
+	if kind.PageType == newsKind.PageType {
+		if isEdit {
+			data.Email = h.newsEmailPanel(r, unit, post)
+		} else if on, err := h.emailFeatureOn(r.Context(), unit.ID); err != nil {
+			log.Printf("web: checking the email setting: %v", err)
+		} else if on {
+			data.Email = postEmailPanel{Hint: true}
+		}
 	}
 	h.render(w, h.adminContentFormTmpl, data)
 }

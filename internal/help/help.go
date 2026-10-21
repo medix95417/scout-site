@@ -502,6 +502,18 @@ var Topics = []Topic{
 		},
 	},
 	{
+		ID:                 "email-from-address",
+		Title:              "Choosing the address your unit's email comes from",
+		Audience:           AudienceAdmin,
+		RequiredCapability: units.CapSuperAdmin,
+		Body: []string{
+			"Everything the site emails — newsletters, news posts, den and patrol emails, enquiry notifications and replies, password resets, event reminders and welcome emails — is sent from one From address, and each unit has its own. The Troop's email can come from the Troop's address and the Pack's from the Pack's, so a family can tell who wrote to them and a reply goes to the right place.",
+			"Set it in Site Settings, under Email (SMTP) Server, in the box headed with your unit's name. You can type just the address, or an address with a name that shows in the inbox, like Pack 47 <pack@example.org>. The mail server, port and login above it are shared by both units; only the From address is per unit.",
+			"Each unit's Admin sets their own, on their own site's Settings page — being an Admin of the Troop doesn't let you change the Pack's. The page says which address your unit's email goes out as right now. Leave the box blank and your unit uses the site-wide From address above it, which is what every unit did before this existed.",
+			"Your mail provider has to let the site send as the address you choose: most won't send as an address on a domain you haven't set up with them. With Fastmail's API it has to be one of the account's own addresses or an address on a domain it catches everything for. \"Send a test email to myself\" sends as your unit and tells you which address it used, and if the provider refuses it, it says why.",
+		},
+	},
+	{
 		ID:                 "roles-capabilities",
 		Title:              "Roles and what they can do",
 		Audience:           AudienceAdmin,

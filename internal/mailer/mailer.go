@@ -113,6 +113,10 @@ func New(cfg Config, pool *pgxpool.Pool) *Mailer {
 // real, usable credential a database dump/backup shouldn't hand out in
 // plaintext. See README.md/SECURITY_AUDIT.md.
 //
+// If ctx names a unit (see WithUnit), that unit's own From address — the one
+// piece of this that is per unit — is applied last and wins over both the
+// site-wide override and the environment.
+//
 // A failure to read the overrides (e.g. a transient DB hiccup) fails open
 // to cfg rather than erroring the whole send — a settings-table read
 // glitch shouldn't be the reason a password reset email doesn't go out
@@ -139,7 +143,28 @@ func (m *Mailer) effective(ctx context.Context) Config {
 	if v := overrides[settings.SMTPFrom]; v != "" {
 		eff.From = v
 	}
+	// The unit's own From wins over the site-wide one. Only the From is per
+	// unit: the server and login are shared, so a unit that sets nothing here
+	// keeps sending exactly as before.
+	if unitID, ok := UnitFromContext(ctx); ok {
+		v, err := settings.GetUnitText(ctx, m.pool, unitID, settings.MailFrom)
+		if err != nil {
+			// Fails open to the site-wide From, for the same reason the
+			// block above does: a read glitch should not be why mail stops.
+			log.Printf("mailer: loading unit %s From address (using the site-wide one): %v", unitID, err)
+		} else if v != "" {
+			eff.From = v
+		}
+	}
 	return eff
+}
+
+// From is the From address a send on this context would go out as — the
+// unit's own if ctx names one that has set it, else the site-wide one. "" if
+// neither is set. For showing an admin what will happen, so they are told
+// the address the same code would actually use.
+func (m *Mailer) From(ctx context.Context) string {
+	return m.effective(ctx).From
 }
 
 // Enabled reports whether enough configuration — environment, database

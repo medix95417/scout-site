@@ -23,6 +23,11 @@ type countingJMAPServer struct {
 	identityGet atomic.Int32 // Identity/get + Mailbox/query (route resolution)
 	submits     atomic.Int32 // Email/set + EmailSubmission/set (the actual send)
 
+	// submitted is each send's request as the server saw it, so a test can say
+	// which identity a message went out under, not just that one did.
+	mu        sync.Mutex
+	submitted []string
+
 	// rejectSubmits, while true, makes every submit fail with 401 — the
 	// "credentials rejected at the door" case.
 	rejectSubmits atomic.Bool
@@ -32,7 +37,9 @@ type countingJMAPServer struct {
 	rateLimitOnce   atomic.Bool
 }
 
-func newCountingJMAPServer(t *testing.T, identityEmail string) *countingJMAPServer {
+// newCountingJMAPServer's account has one sending identity per address given:
+// ident0, ident1, ... in the order passed.
+func newCountingJMAPServer(t *testing.T, identityEmails ...string) *countingJMAPServer {
 	t.Helper()
 	c := &countingJMAPServer{}
 
@@ -59,12 +66,21 @@ func newCountingJMAPServer(t *testing.T, identityEmail string) *countingJMAPServ
 			c.identityGet.Add(1)
 			// Call ids match what fetchIdentityAndDrafts asks for; a
 			// response keyed differently is a response it can't read.
+			var identities []string
+			for i, email := range identityEmails {
+				identities = append(identities, fmt.Sprintf(`{"id":"ident%d","email":%q}`, i, email))
+			}
 			fmt.Fprintf(w, `{"methodResponses":[
-				["Identity/get", {"list":[{"id":"ident1","email":%q}]}, "id"],
+				["Identity/get", {"list":[%s]}, "id"],
 				["Mailbox/query", {"ids":["drafts1"]}, "mb"]
-			]}`, identityEmail)
+			]}`, strings.Join(identities, ","))
 		case "Email/set":
 			c.submits.Add(1)
+			if raw, err := json.Marshal(req); err == nil {
+				c.mu.Lock()
+				c.submitted = append(c.submitted, string(raw))
+				c.mu.Unlock()
+			}
 			if c.rateLimitAlways.Load() || c.rateLimitOnce.CompareAndSwap(true, false) {
 				w.WriteHeader(http.StatusTooManyRequests)
 				fmt.Fprint(w, `{"type":"about:blank","status":429,"detail":"slow down"}`)
@@ -292,4 +308,51 @@ func TestConcurrentSendsShareOneRoute(t *testing.T) {
 // readJSON decodes a request body into v.
 func readJSON(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
+}
+
+// The From address is per unit, so two units alternate on one mailer: the
+// Troop's newsletter going out while a Pack password reset arrives. Each From
+// is its own cache key, so they coexist — resolved once each — rather than
+// every switch throwing the other's route out. And a message goes out under the
+// identity of the address it is from, never the other unit's.
+func TestTwoUnitsFromAddressesKeepTheirOwnRoutes(t *testing.T) {
+	srv := newCountingJMAPServer(t, "troop@example.com", "pack@example.com")
+	troop := testJMAPConfig()
+	troop.From = "Troop 47 <troop@example.com>"
+	pack := testJMAPConfig()
+	pack.From = "Pack 47 <pack@example.com>"
+	m := New(troop, nil)
+
+	const rounds = 4
+	for i := 0; i < rounds; i++ {
+		if err := m.sendViaFastmailJMAP(t.Context(), troop, "a@example.com", "S", "B", "text/html"); err != nil {
+			t.Fatalf("troop send %d: %v", i, err)
+		}
+		if err := m.sendViaFastmailJMAP(t.Context(), pack, "b@example.com", "S", "B", "text/html"); err != nil {
+			t.Fatalf("pack send %d: %v", i, err)
+		}
+	}
+
+	if got := int(srv.submits.Load()); got != rounds*2 {
+		t.Errorf("submits = %d, want %d", got, rounds*2)
+	}
+	if got := srv.identityGet.Load(); got != 2 {
+		t.Errorf("identity lookups = %d, want 2 — one per unit's address, not one per switch between them", got)
+	}
+	if got := srv.sessions.Load(); got != 2 {
+		t.Errorf("session fetches = %d, want 2", got)
+	}
+
+	// Each send used its own address's identity. troop@ is ident0, pack@ is ident1.
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	for i, req := range srv.submitted {
+		wantIdent, wantFrom, otherFrom := `"identityId":"ident0"`, "troop@example.com", "pack@example.com"
+		if i%2 == 1 {
+			wantIdent, wantFrom, otherFrom = `"identityId":"ident1"`, "pack@example.com", "troop@example.com"
+		}
+		if !strings.Contains(req, wantIdent) || !strings.Contains(req, wantFrom) || strings.Contains(req, otherFrom) {
+			t.Errorf("send %d was not sent as %s under %s:\n%s", i, wantFrom, wantIdent, req)
+		}
+	}
 }

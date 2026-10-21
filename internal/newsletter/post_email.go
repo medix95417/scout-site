@@ -65,7 +65,7 @@ type PostEmail struct {
 // It does none of the sending. Run SendNow on the result, detached from the
 // request, exactly as a newsletter is.
 func StartPostEmail(ctx context.Context, pool *pgxpool.Pool, m *mailer.Mailer, in PostEmail) (Newsletter, error) {
-	if !m.Enabled(ctx) {
+	if !m.Enabled(mailer.WithUnit(ctx, in.UnitID)) {
 		return Newsletter{}, fmt.Errorf("newsletter: mailer not configured — set SMTP_HOST etc. to enable email")
 	}
 
