@@ -27,6 +27,8 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+## [2.20.2] — 2026-10-24
+
 ### Fixed
 
 - **A photo marked private can be put in a photo album again.** The album
