@@ -50,7 +50,11 @@
       {{end}}
       {{if .Kind.HasImagePicker}}
         <p class="text-xs text-gray-500 mt-2 mb-1">Or click a photo/video from your library to add it to the list above (grouped by event — click one to expand it):</p>
-        {{template "eventAccordionPicker" (dict "Slug" "gallery-photos" "Groups" .PublicMediaGroups "Ungrouped" .PublicMediaUngrouped "Mode" "append" "AppendTarget" "body")}}
+        <p class="text-xs text-gray-500 mb-1">
+          Every photo is here, public or not. A photo marked <strong>Private</strong> goes in the album like any other:
+          signed-in members see it, and visitors who aren't signed in see the album without it.
+        </p>
+        {{template "eventAccordionPicker" (dict "Slug" "gallery-photos" "Groups" .LibraryMediaGroups "Ungrouped" .LibraryMediaUngrouped "Mode" "append" "AppendTarget" "body" "ShowPrivateBadge" true)}}
         {{if .EventPhotoGroups}}
           <details class="mt-3">
             <summary class="cursor-pointer select-none text-xs" style="color: var(--unit-color);">Or add all of an event's photos</summary>

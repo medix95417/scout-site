@@ -27,6 +27,20 @@ tagged commit with an accurate date.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A photo marked private can be put in a photo album again.** The album
+  editor's "choose from your library" list offered only the photos marked
+  public, so with ten photos uploaded and six marked public it showed six, and
+  the other four could not be put in an album at all. It now lists every photo
+  and video in the library, with the private ones badged "Private", and says
+  what that means. The album page was already right and is unchanged: a signed-in
+  member sees every photo in the album, and a visitor who isn't signed in sees
+  only the public ones. Only the album editor's list changed; the homepage and
+  leader-photo pickers still offer public photos only, since whatever they pick
+  appears on a public page. (The internal field names for that list said
+  "public" and were renamed so they don't mislead the next change.)
+
 ## [2.20.1] — 2026-10-21
 
 ### Added

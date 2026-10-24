@@ -32,10 +32,10 @@ func pickerGroups() []files.EventFileGroup {
 func albumForm(eventPhotos []files.EventFileGroup) contentFormData {
 	return contentFormData{
 		baseData: testBase("Photo Album"), Kind: galleryKind, IsEdit: true,
-		Post:              content.Post{ID: "g1", Title: "Summer Camp", Status: "draft", Visibility: "members"},
-		PublicMediaGroups: eventPhotos,
-		EventPhotoGroups:  eventPhotos,
-		Upload:            newGalleryUploadView(true),
+		Post:               content.Post{ID: "g1", Title: "Summer Camp", Status: "draft", Visibility: "members"},
+		LibraryMediaGroups: eventPhotos,
+		EventPhotoGroups:   eventPhotos,
+		Upload:             newGalleryUploadView(true),
 	}
 }
 
