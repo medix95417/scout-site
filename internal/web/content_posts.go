@@ -97,13 +97,15 @@ func keepViewableGalleryPhotos(photos []content.GalleryPhoto, publicIDs map[stri
 // drifts — as it did the moment the news editor grew a file picker.
 type contentFormData struct {
 	baseData
-	Kind                 contentKind
-	IsEdit               bool
-	Post                 content.Post
-	PhotoDateInput       string
-	PublicMediaGroups    []files.EventFileGroup
-	PublicMediaUngrouped []files.File
-	EventPhotoGroups     []files.EventFileGroup
+	Kind           contentKind
+	IsEdit         bool
+	Post           content.Post
+	PhotoDateInput string
+	// The whole media library for the album editor's "choose from your
+	// library" picker — public and private alike, with private ones badged.
+	LibraryMediaGroups    []files.EventFileGroup
+	LibraryMediaUngrouped []files.File
+	EventPhotoGroups      []files.EventFileGroup
 	// The file library, for the news editor's "attach something"
 	// chooser — documents only, see adminContentForm.
 	DocumentGroups     []files.EventFileGroup
@@ -520,14 +522,20 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 		}
 	}
 
-	var publicMediaGroups []files.EventFileGroup
-	var publicMediaUngrouped []files.File
+	var libraryMediaGroups []files.EventFileGroup
+	var libraryMediaUngrouped []files.File
 	var eventPhotoGroups []files.EventFileGroup
 	if kind.HasImagePicker {
 		var err error
-		publicMediaGroups, publicMediaUngrouped, err = files.ListMediaFilesGroupedByEvent(r.Context(), h.Pool, unit.ID, true)
+		// Every photo and video in the library, public or not — not just the
+		// public ones. An album is shown per viewer (see
+		// filterViewableGalleryPhotos): a signed-in member sees all of it and a
+		// signed-out visitor only what is public. Offering only the public files
+		// here meant a private photo could never be put in an album at all, so
+		// an album could not hold the members-only half of an event's pictures.
+		libraryMediaGroups, libraryMediaUngrouped, err = files.ListMediaFilesGroupedByEvent(r.Context(), h.Pool, unit.ID, false)
 		if err != nil {
-			log.Printf("web: loading public media: %v", err)
+			log.Printf("web: loading the media library for the album picker: %v", err)
 		}
 		eventPhotoGroups, err = files.ListEventPhotoGroupsForUnit(r.Context(), h.Pool, unit.ID)
 		if err != nil {
@@ -546,7 +554,7 @@ func (h *Handlers) adminContentForm(w http.ResponseWriter, r *http.Request, kind
 
 	data := contentFormData{
 		baseData: h.base(r, kind.Label), Kind: kind, IsEdit: isEdit, Post: post, PhotoDateInput: photoDateInput,
-		PublicMediaGroups: publicMediaGroups, PublicMediaUngrouped: publicMediaUngrouped, EventPhotoGroups: eventPhotoGroups,
+		LibraryMediaGroups: libraryMediaGroups, LibraryMediaUngrouped: libraryMediaUngrouped, EventPhotoGroups: eventPhotoGroups,
 		DocumentGroups: documentGroups, DocumentsUngrouped: documentsUngrouped,
 		Upload: newGalleryUploadView(h.Storage != nil),
 	}
